@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from .auth import authenticate, issue, revoke_apple, session_only
+from .auth import authenticate, issue, revoke_apple, session_only, trusted_origin
 from .auth import router as auth_router
 from .config import settings
 from .db import Credential, Project, SessionLocal, Task, get_db, now, uid
@@ -83,7 +83,7 @@ async def protect(request: Request, call_next):
     if request.url.path.startswith("/mcp"):
         if not request.headers.get("authorization", "").startswith("Bearer "):
             return JSONResponse({"detail": "Bearer token required"}, 401)
-        if request.headers.get("origin") and request.headers["origin"] != settings.public_url:
+        if request.headers.get("origin") and not trusted_origin(request):
             return JSONResponse({"detail": "Invalid request origin"}, 403)
         with SessionLocal() as db:
             try:

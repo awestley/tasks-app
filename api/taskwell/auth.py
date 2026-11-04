@@ -27,6 +27,14 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def trusted_origin(request):
+    """Accept the public URL, and in development also the API's own origin (the built app served on its port)."""
+    origin = request.headers.get("origin")
+    if origin == settings.public_url:
+        return True
+    return not settings.production and origin == str(request.base_url).rstrip("/")
+
+
 def cipher():
     return Fernet(base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode()).digest()))
 
@@ -43,7 +51,7 @@ def authenticate(
     if not token:
         raise HTTPException(401, "Sign in required")
     if not bearer and request.method not in {"GET", "HEAD", "OPTIONS"}:
-        if request.headers.get("origin") != settings.public_url:
+        if not trusted_origin(request):
             raise HTTPException(403, "Invalid request origin")
     credential = db.scalar(select(Credential).where(Credential.digest == digest(token), Credential.expires_at > now()))
     if not credential:
@@ -178,7 +186,7 @@ def config():
 def dev(response: Response, request: Request, db: Session = Depends(get_db)):
     if settings.production or not settings.dev_login:
         raise HTTPException(404)
-    if request.headers.get("origin") != settings.public_url:
+    if not trusted_origin(request):
         raise HTTPException(403, "Invalid request origin")
     user = db.scalar(select(User).where(User.apple_sub == "local-demo"))
     if not user:

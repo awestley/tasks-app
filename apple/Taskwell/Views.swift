@@ -30,12 +30,13 @@ struct LoginView: View {
     @State private var server = ""
     @State private var challenge: AppleChallenge?
     @State private var preparing = false
+    @Environment(\.colorScheme) private var colorScheme
     #if DEBUG
     @State private var developmentToken = ""
     #endif
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Image(systemName: "checkmark.square.fill").accessibilityHidden(true).font(.title2.bold()).foregroundStyle(Color(hex: "2563eb"))
+            Image(systemName: "checkmark.square.fill").accessibilityHidden(true).font(.title2.bold()).foregroundStyle(Glassive.mark)
             Text("Sign in").font(.title.bold())
             TextField("Your server URL", text: $server).textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
@@ -61,10 +62,10 @@ struct LoginView: View {
                         }
                         self.challenge = nil
                     }
-                }.frame(height: 46).signInWithAppleButtonStyle(.black).disabled(store.busy)
+                }.frame(height: 46).clipShape(Capsule()).signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black).disabled(store.busy)
             } else {
                 Button(preparing ? "Connecting..." : "Connect") { Task { await prepare() } }
-                    .buttonStyle(.borderedProminent).disabled(preparing)
+                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large).disabled(preparing)
             }
             #if DEBUG
             DisclosureGroup("Local development") {
@@ -80,6 +81,8 @@ struct LoginView: View {
             }.font(.caption)
             #endif
         }.padding(36).frame(maxWidth: 460)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Glassive.backgroundSecondary)
             .taskwellErrorAlert()
             .onAppear { server = store.server }
     }
@@ -157,7 +160,7 @@ struct WorkspaceView: View {
             }.navigationTitle("")
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        Image(systemName: "checkmark.square.fill").foregroundStyle(Color(hex: "2563eb")).accessibilityHidden(true)
+                        Image(systemName: "checkmark.square.fill").foregroundStyle(Glassive.mark).accessibilityHidden(true)
                     }
                     ToolbarItem { Button { showSettings = true } label: { Image(systemName: "gearshape") }.help("Settings").accessibilityLabel("Settings") }
                 }
@@ -176,16 +179,16 @@ struct WorkspaceView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 Button { Task { await store.toggle(task) } } label: {
                                     Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3).foregroundStyle(task.priority == 1 ? Color(hex: "c98277") : Color(hex: "6393d9"))
+                                        .font(.title3).foregroundStyle(task.completed ? Glassive.accent : Glassive.priority(task.priority))
                                 }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(task.completed ? "Restore \(task.title)" : "Complete \(task.title)")
                                 Button { editor = TaskEditorSelection(task: task) } label: {
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(task.title).strikethrough(task.completed).foregroundStyle(task.completed ? .secondary : .primary)
+                                        Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? .secondary : .primary)
                                         if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                                         HStack(spacing: 8) {
                                             if let due = task.due_date {
                                                 Label(DateOnly.date(due).formatted(date: .abbreviated, time: .omitted), systemImage: task.recurrence == nil ? "calendar" : "repeat")
-                                                    .foregroundStyle(due < today && !task.completed ? Color(hex: "c98277") : Color.secondary)
+                                                    .foregroundStyle(due < today && !task.completed ? Glassive.red : due == today ? Glassive.textAccent : Color.secondary)
                                             }
                                             if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(.secondary) }
                                             if task.reminder_minutes != nil { Image(systemName: "bell").accessibilityLabel("Reminder set") }
@@ -194,16 +197,20 @@ struct WorkspaceView: View {
                                                     .foregroundStyle(.secondary)
                                                     .accessibilityLabel("\(task.checklist.filter { $0.completed }.count) of \(task.checklist.count) checklist items completed")
                                             }
-                                            if !task.labels.isEmpty { Text(task.labels.map { "#" + $0 }.joined(separator: " ")).foregroundStyle(Color(hex: "5479a8")) }
-                                        }.font(.caption2)
+                                            if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(.secondary) }
+                                        }.font(.caption)
                                     }.frame(maxWidth: .infinity, alignment: .leading)
                                 }.buttonStyle(.plain)
-                            }.padding(.vertical, 9)
-                            .swipeActions { Button("Edit") { editor = TaskEditorSelection(task: task) }.tint(.blue) }
+                            }.padding(.vertical, 6)
+                            .listRowBackground(Glassive.backgroundPrimary)
+                            .listRowSeparatorTint(Glassive.border)
+                            .swipeActions { Button("Edit") { editor = TaskEditorSelection(task: task) }.tint(Glassive.accent) }
                         }
-                    }.listStyle(.plain).refreshable { await store.perform { try await store.refresh() } }
+                    }.listStyle(.plain).scrollContentBackground(.hidden).refreshable { await store.perform { try await store.refresh() } }
                 }
-            }.navigationTitle(search.isEmpty ? title : "Search results")
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Glassive.backgroundPrimary)
+                .navigationTitle(search.isEmpty ? title : "Search results")
                 .searchable(text: $search, prompt: "Search tasks")
                 .toolbar {
                     Button { Task { await store.perform { try await store.refresh() } } } label: { Image(systemName: "arrow.clockwise") }.disabled(store.busy).help("Refresh")

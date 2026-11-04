@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		107E6FF1B858BE3F62518946 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC922748A69D7D2C0182D07 /* Store.swift */; };
 		1F989F961F31B09E0D732DED /* TaskwellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161722AE826B5946D2C5EACA /* TaskwellApp.swift */; };
+		23890CAD76BBAB5001B9DE3E /* Glassive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE3FABC1290F825794D5131 /* Glassive.swift */; };
 		27C8E881D0CE71EE9A536C15 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0254C94402F74BD0B2F94FF /* API.swift */; };
 		37ACB286502D47A6EA5B4A17 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3871706FEBF317066EE4549 /* Models.swift */; };
 		3936859BCED6D7E61E2EC451 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0254C94402F74BD0B2F94FF /* API.swift */; };
@@ -19,6 +20,7 @@
 		8CBE3A81E9457A3B97D9CEE2 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE1C1DCE819054534FBEA0A /* Notifications.swift */; };
 		9917A10180FAC924AB3AA6CE /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC922748A69D7D2C0182D07 /* Store.swift */; };
 		AC72661D7DBF6DD8A654B871 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE88AD6DB9582169236F6520 /* Views.swift */; };
+		AE51DF6D99F63EB33A200370 /* Glassive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE3FABC1290F825794D5131 /* Glassive.swift */; };
 		CF1A858DBA763E2DDBE49266 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE1C1DCE819054534FBEA0A /* Notifications.swift */; };
 		D66E70CC025CB11B4ED5A560 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3871706FEBF317066EE4549 /* Models.swift */; };
 		F2230FD21CA318B99C7E8A29 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4FDB566A7386BC67932EE76A /* Assets.xcassets */; };
@@ -40,6 +42,7 @@
 		4FDB566A7386BC67932EE76A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5AC922748A69D7D2C0182D07 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		633FDF56BFA4232166EC588D /* Taskwell-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Taskwell-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6FE3FABC1290F825794D5131 /* Glassive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glassive.swift; sourceTree = "<group>"; };
 		A0254C94402F74BD0B2F94FF /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		BFE1C1DCE819054534FBEA0A /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
 		D10738125098136CE3FDF210 /* Taskwell-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Taskwell-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,6 +65,7 @@
 			children = (
 				A0254C94402F74BD0B2F94FF /* API.swift */,
 				4FDB566A7386BC67932EE76A /* Assets.xcassets */,
+				6FE3FABC1290F825794D5131 /* Glassive.swift */,
 				D3871706FEBF317066EE4549 /* Models.swift */,
 				BFE1C1DCE819054534FBEA0A /* Notifications.swift */,
 				5AC922748A69D7D2C0182D07 /* Store.swift */,
@@ -214,6 +218,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3936859BCED6D7E61E2EC451 /* API.swift in Sources */,
+				23890CAD76BBAB5001B9DE3E /* Glassive.swift in Sources */,
 				D66E70CC025CB11B4ED5A560 /* Models.swift in Sources */,
 				8CBE3A81E9457A3B97D9CEE2 /* Notifications.swift in Sources */,
 				9917A10180FAC924AB3AA6CE /* Store.swift in Sources */,
@@ -227,6 +232,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				27C8E881D0CE71EE9A536C15 /* API.swift in Sources */,
+				AE51DF6D99F63EB33A200370 /* Glassive.swift in Sources */,
 				37ACB286502D47A6EA5B4A17 /* Models.swift in Sources */,
 				CF1A858DBA763E2DDBE49266 /* Notifications.swift in Sources */,
 				107E6FF1B858BE3F62518946 /* Store.swift in Sources */,

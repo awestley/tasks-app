@@ -22,8 +22,8 @@ Source map:
 - `api/taskwell/main.py`: resource routes, ownership checks, atomic writes, recurrence, HTTP MCP mount, static files.
 - `api/taskwell/db.py`, `schemas.py`: persistence and validated contracts.
 - `api/taskwell/mcp_server.py`: official SDK tools and API adapter.
-- `web/src`: React app, API client, responsive styles.
-- `apple/Taskwell`: SwiftUI app, API client, observable store and Keychain storage.
+- `web/src`: React app, API client, responsive styles. `glassive.css` holds the Glassive design tokens (light and dark); `style.css` builds the interface from them.
+- `apple/Taskwell`: SwiftUI app, API client, observable store and Keychain storage. `Glassive.swift` mirrors the same color tokens for the native apps.
 - `api/migrations`: immutable deployment migrations.
 
 Known first-release limits are listed in the README. In particular, refresh polling is not real-time push; no offline write queue exists; PostgreSQL labels are stored as JSON and label filtering is currently performed after the user-scoped query, which should be moved to an indexed query if accounts grow very large.

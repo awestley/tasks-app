@@ -24,6 +24,11 @@ def test_auth_required_and_cookie_origin(client):
         client.post("/api/v1/tasks", json={"title": "Allowed"}, headers={"Origin": "http://localhost:5173"}).status_code
         == 201
     )
+    # Development also trusts the API's own origin, where it serves the built web app.
+    assert (
+        client.post("/api/v1/tasks", json={"title": "Same origin"}, headers={"Origin": "http://testserver"}).status_code
+        == 201
+    )
 
 
 def test_crud_persistence_and_conflicts(client):

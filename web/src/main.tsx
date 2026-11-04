@@ -35,6 +35,7 @@ import {
   KeyRound,
   Apple,
   CheckCircle2,
+  CircleAlert,
 } from "lucide-react";
 import {
   api,
@@ -48,6 +49,7 @@ import {
   type Token,
   type ParsedTask,
 } from "./api";
+import "./glassive.css";
 import "./style.css";
 import { PushSettings, disableBrowserPush } from "./PushSettings";
 import { ChecklistEditor } from "./ChecklistEditor";
@@ -312,7 +314,8 @@ function App() {
             )}
             {error && (
               <div className="error" role="alert">
-                {error}
+                <CircleAlert className="error-icon" size={16} />
+                <span>{error}</span>
               </div>
             )}
           </div>
@@ -381,7 +384,7 @@ function App() {
           style={{
             color:
               projects.find((p) => p.id === task.project_id)?.color ||
-              "#9b99a5",
+              "var(--text-muted)",
           }}
         >
           #
@@ -640,7 +643,8 @@ function App() {
             </div>
             {error && (
               <div className="error" role="alert">
-                {error}
+                <CircleAlert className="error-icon" size={16} />
+                <span>{error}</span>
                 <button
                   className="icon-button"
                   aria-label="Dismiss error"
@@ -715,12 +719,13 @@ function App() {
       )}
       {error && (editor || projectEditor || settings) && (
         <div className="error floating-error" role="alert">
-          {error}
+          <CircleAlert className="error-icon" size={16} />
+          <span>{error}</span>
           <button
             aria-label="Dismiss error notification"
             onClick={() => setError("")}
           >
-            <X size={16} />
+            <X size={14} />
           </button>
         </div>
       )}
@@ -992,14 +997,14 @@ function TaskEditor({
         }}
       >
         <div className="modal-heading">
-          <span>{task ? "Edit task" : "Add task"}</span>
+          <h2>{task ? "Edit task" : "Add task"}</h2>
           <button
             type="button"
             className="icon-button"
             onClick={close}
             aria-label="Close editor"
           >
-            <X size={19} />
+            <X />
           </button>
         </div>
         <input
@@ -1238,7 +1243,7 @@ function TaskEditor({
           {remove && (
             <button
               type="button"
-              className="danger-button"
+              className={`danger-button ${confirm ? "mod-cta" : ""}`}
               disabled={busy}
               onClick={() => (confirm ? remove() : setConfirm(true))}
             >
@@ -1328,7 +1333,7 @@ function ProjectEditor({
           {remove && (
             <button
               type="button"
-              className="danger-button"
+              className={`danger-button ${confirm ? "mod-cta" : ""}`}
               disabled={busy}
               onClick={() => (confirm ? remove() : setConfirm(true))}
             >
@@ -1401,88 +1406,93 @@ function SettingsPanel({
         </button>
       </div>
       <PushSettings />
-      <div className="settings-title">
-        <KeyRound size={19} />
-        <div>
-          <h3>API & MCP access</h3>
-          <p>Connect your tools with a personal access token.</p>
-        </div>
-      </div>
-      <form
-        className="token-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          perform(async () => {
-            const result = await api<{ token: string }>("/tokens", "POST", {
-              name,
-            });
-            setCreated(result.token);
-            setName("");
-            await load();
-          });
-        }}
-      >
-        <input
-          aria-label="Token name"
-          placeholder="Token name, e.g. Desktop AI"
-          required
-          maxLength={100}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button className="primary" disabled={busy}>
-          Create token
-        </button>
-      </form>
-      {created && (
-        <div className="token-created">
-          <strong>Copy this token now. It is shown only once.</strong>
-          <code>{created}</code>
-          <button
-            className="secondary"
-            onClick={() =>
-              navigator.clipboard
-                .writeText(created)
-                .catch(() => setError("Select and copy the token above."))
-            }
-          >
-            <Copy size={13} /> Copy token
-          </button>
-        </div>
-      )}
-      {tokens.map((t) => (
-        <div className="token-row" key={t.id}>
+      <section className="token-group">
+        <div className="settings-title">
+          <KeyRound size={18} />
           <div>
-            <strong>{t.name}</strong>
-            <small>Expires {new Date(t.expires_at).toLocaleDateString()}</small>
+            <h3>API & MCP access</h3>
+            <p>Connect your tools with a personal access token.</p>
           </div>
-          <button
-            className="danger-button"
-            disabled={busy}
-            onClick={() =>
-              perform(async () => {
-                await api(`/tokens/${t.id}`, "DELETE");
-                await load();
-              })
-            }
-          >
-            Revoke
-          </button>
         </div>
-      ))}
+        <form
+          className="token-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            perform(async () => {
+              const result = await api<{ token: string }>("/tokens", "POST", {
+                name,
+              });
+              setCreated(result.token);
+              setName("");
+              await load();
+            });
+          }}
+        >
+          <input
+            aria-label="Token name"
+            placeholder="Token name, e.g. Desktop AI"
+            required
+            maxLength={100}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <button className="primary" disabled={busy}>
+            Create token
+          </button>
+        </form>
+        {created && (
+          <div className="token-created">
+            <strong>Copy this token now. It is shown only once.</strong>
+            <code>{created}</code>
+            <button
+              className="secondary"
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(created)
+                  .catch(() => setError("Select and copy the token above."))
+              }
+            >
+              <Copy size={13} /> Copy token
+            </button>
+          </div>
+        )}
+        {tokens.map((t) => (
+          <div className="token-row" key={t.id}>
+            <div>
+              <strong>{t.name}</strong>
+              <small>
+                Expires {new Date(t.expires_at).toLocaleDateString()}
+              </small>
+            </div>
+            <button
+              className="danger-button"
+              disabled={busy}
+              onClick={() =>
+                perform(async () => {
+                  await api(`/tokens/${t.id}`, "DELETE");
+                  await load();
+                })
+              }
+            >
+              Revoke
+            </button>
+          </div>
+        ))}
+      </section>
       <div className="integration-note">
         <strong>Connection details</strong>
         <p>
           REST API: <code>{location.origin}/api/v1</code>
           <br />
-          Use the included MCP adapter with your server URL and a
-          token. Tokens expire after 90 days and can be revoked here.
+          Use the included MCP adapter with your server URL and a token. Tokens
+          expire after 90 days and can be revoked here.
         </p>
       </div>
       {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+        <div className="error" role="alert">
+          <CircleAlert className="error-icon" size={16} />
+          <span>{error}</span>
+        </div>
       )}
       <details className="account-delete">
         <summary>Delete account</summary>
@@ -1496,7 +1506,7 @@ function SettingsPanel({
           onChange={(e) => setConfirm(e.target.value)}
         />
         <button
-          className="danger-button"
+          className="danger-button mod-cta"
           disabled={confirm !== "DELETE"}
           onClick={deleteAccount}
         >

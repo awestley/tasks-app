@@ -1,0 +1,360 @@
+/* Glassive design tokens, from the Glassive design system (tokens.json).
+   Light values apply by default; dark values follow the system appearance. */
+:root {
+  color-scheme: light dark;
+  --background-primary: var(--color-base-00);
+  --background-primary-alt: rgb(0 0 0 / 3%);
+  --background-secondary: var(--color-base-20);
+  --card-background: var(--background-primary);
+  --background-glass: rgb(246 246 246 / 50%);
+  --background-glass-subtle: rgb(255 255 255 / 60%);
+  --text-normal: var(--color-base-100);
+  --text-muted: rgb(0 0 0 / 55%);
+  --text-faint: rgb(0 0 0 / 25%);
+  --text-on-accent: #ffffff;
+  --text-muted-on-accent: rgb(255 255 255 / 75%);
+  --text-accent: var(--color-accent);
+  --text-accent-hover: var(--color-accent-2);
+  --text-error: var(--color-red);
+  --text-warning: var(--color-orange);
+  --text-success: var(--color-green);
+  --color-accent: var(--accent-blue);
+  --color-accent-1: oklch(0.6468 0.1937 254.09);
+  --color-accent-2: oklch(0.6688 0.1816 254.09);
+  --interactive-accent: var(--color-accent-1);
+  --interactive-accent-hover: var(--color-accent-2);
+  --interactive-normal: var(--color-base-00);
+  --interactive-hover: var(--color-base-10);
+  --background-modifier-form-field: var(--color-base-00);
+  --background-modifier-hover-exsubtle: rgb(0 0 0 / 3.5%);
+  --background-modifier-hover-subtle: rgb(0 0 0 / 5%);
+  --background-modifier-hover: rgb(0 0 0 / 7.5%);
+  --background-modifier-hover-strong: rgb(0 0 0 / 12%);
+  --background-modifier-active-hover: hsl(208 100% 50% / 10%);
+  --background-modifier-border: rgb(200 200 200 / 30%);
+  --background-modifier-border-subtle: rgb(0 0 0 / 8%);
+  --background-modifier-seperator: rgb(0 0 0 / 12%);
+  --background-modifier-border-focus: hsl(208 100% 50% / 60%);
+  --background-modifier-error: var(--color-red);
+  --background-modifier-success: var(--color-green);
+  --text-selection: hsl(208 100% 50% / 20%);
+  --text-highlight-bg: rgb(255 208 0 / 40%);
+  --nav-item-background-selected: hsl(208 100% 50% / 15%);
+  --table-text-color: rgb(34 34 34 / 70%);
+  --table-selection: hsl(208 100% 50% / 10%);
+  --top-header-bg: rgb(252 252 252);
+  --accent-red: hsl(359 100% 61%);
+  --accent-orange: hsl(28 100% 58%);
+  --accent-yellow: hsl(48 100% 50%);
+  --accent-green: hsl(135 59% 49%);
+  --accent-mint: hsl(174 100% 39%);
+  --accent-teal: hsl(184 100% 41%);
+  --accent-cyan: hsl(190 100% 45%);
+  --accent-blue: hsl(208 100% 50%);
+  --accent-indigo: hsl(245 89% 65%);
+  --accent-purple: hsl(293 74% 53%);
+  --accent-pink: hsl(349 100% 59%);
+  --accent-brown: hsl(25 32% 52%);
+  --accent-obsidian: hsl(258 88% 66%);
+  --color-red: #e93147;
+  --color-orange: #ec7500;
+  --color-yellow: #e0ac00;
+  --color-green: #08b94e;
+  --color-cyan: #00bfbc;
+  --color-blue: #086ddd;
+  --color-purple: #7852ee;
+  --color-pink: #d53984;
+  --color-base-00: #ffffff;
+  --color-base-05: #fcfcfc;
+  --color-base-10: #fafafa;
+  --color-base-20: #f6f6f6;
+  --color-base-25: #efefef;
+  --color-base-30: #e4e4e4;
+  --color-base-35: #dadada;
+  --color-base-40: #bdbdbd;
+  --color-base-50: #ababab;
+  --color-base-60: #707070;
+  --color-base-70: #5c5c5c;
+  --color-base-100: #222222;
+  --mono-0: #ffffff;
+  --mono-100: #000000;
+  --shadow-card:
+    0px 8px 20px rgb(0 0 0 / 10%), 0px 14px 42px rgb(0 0 0 / 6%),
+    0px 20px 85px rgb(0 0 0 / 3.4%);
+  --shadow-card-mini:
+    0px 2px 22px rgb(0 0 0 / 8.5%), 0px 6px 45px rgb(0 0 0 / 3.4%);
+  --shadow-raised-control-item:
+    0 2px 12px rgb(0 0 0 / 5.5%), 0 6px 23px rgb(0 0 0 / 3.4%);
+  --shadow-raised-xl:
+    0 1.8px 7.3px rgb(0 0 0 / 5.1%), 0 8px 35.7px rgb(0 0 0 / 14.2%),
+    0 20px 60px rgb(0 0 0 / 20%);
+  --menu-shadow:
+    inset 20px 0 10px -10px rgb(0 0 0 / 1.5%),
+    inset -20px 0 10px -10px rgb(0 0 0 / 1.5%), 0px 1px 2px rgb(0 0 0 / 2.8%),
+    0px 3.4px 6.7px rgb(0 0 0 / 8.2%), 0px 15px 30px rgb(0 0 0 / 11%);
+  --liquid-sidebar-shadow:
+    0px 0px 8px rgb(0 0 0 / 4%), 0px 0px 40px rgb(0 0 0 / 12%);
+  --glass-shadow-inset-for-control:
+    inset 0 1px 1px rgb(200 200 200 / 25%),
+    inset 1px 0 1px rgb(200 200 200 / 15%),
+    inset -1px 0 1px rgb(200 200 200 / 15%);
+  --glass-shadow-inset-s:
+    inset 0 0px 0px rgb(235 235 235 / 25%),
+    inset 0 -3px 3px rgb(235 235 235 / 50%),
+    inset 3px 0 3px rgb(235 235 235 / 15%),
+    inset -3px 0 3px rgb(235 235 235 / 15%);
+  --glass-shadow-inset-l:
+    inset 0 6px 6px rgb(0 0 0 / 3%), inset 0 -3px 3px rgb(0 0 0 / 1%),
+    inset 8px 0 5px rgb(0 0 0 / 1%), inset -8px 0 5px rgb(0 0 0 / 1%);
+  --glass-shadow-inset-edge:
+    inset 0 2px 2px rgb(255 255 255 / 100%),
+    inset 0 -4px 4px rgb(255 255 255 / 40%), inset 10px 0 10px rgb(0 0 0 / 4%),
+    inset -10px 0 10px rgb(0 0 0 / 6%);
+  --shadow-glass-border:
+    inset 0 1px 1px rgb(255 255 255 / 80%),
+    inset 0 2px 2px rgb(255 255 255 / 60%),
+    inset 0 -2px 2px rgb(255 255 255 / 50%),
+    inset 0.5px 0 0.5px rgb(0 0 0 / 25%), inset -0.5px 0 0.5px rgb(0 0 0 / 25%),
+    inset 1px 0 1px rgb(0 0 0 / 20%), inset -1px 0 1px rgb(0 0 0 / 20%);
+  --shadow-glass-border-tilted:
+    inset 0.5px 0 0.5px rgb(255 255 255 / 70%),
+    inset -0.5px 0 0.5px rgb(255 255 255 / 70%),
+    inset 1px 0 1px rgb(0 0 0 / 10%), inset -1px 0 1px rgb(255 255 255 / 50%),
+    inset 0 0.5px 0.5px rgb(0 0 0 / 8%), inset 0 -0.5px 0.5px rgb(0 0 0 / 8%),
+    inset 0 1px 1px rgb(0 0 0 / 3%), inset 0 -1px 1px rgb(0 0 0 / 3%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-primary: var(--color-base-20);
+    --background-primary-alt: rgb(255 255 255 / 3%);
+    --background-secondary: var(--color-base-00);
+    --card-background: var(--color-base-35);
+    --background-glass: rgb(40 40 40 / 60%);
+    --background-glass-subtle: rgb(60 60 60 / 40%);
+    --text-normal: var(--color-base-100);
+    --text-muted: rgb(255 255 255 / 55%);
+    --text-faint: rgb(255 255 255 / 25%);
+    --text-on-accent: #ffffff;
+    --text-muted-on-accent: rgb(255 255 255 / 75%);
+    --text-accent: var(--color-accent);
+    --text-accent-hover: var(--color-accent-2);
+    --text-error: var(--color-red);
+    --text-warning: var(--color-orange);
+    --text-success: var(--color-green);
+    --color-accent: var(--accent-blue);
+    --color-accent-1: oklch(0.6644 0.1848 251.63);
+    --color-accent-2: oklch(0.6853 0.1733 251.63);
+    --interactive-accent: var(--color-accent-1);
+    --interactive-accent-hover: var(--color-accent-2);
+    --interactive-normal: var(--color-base-00);
+    --interactive-hover: var(--color-base-10);
+    --background-modifier-form-field: var(--color-base-00);
+    --background-modifier-hover-exsubtle: rgb(255 255 255 / 3.5%);
+    --background-modifier-hover-subtle: rgb(255 255 255 / 5%);
+    --background-modifier-hover: rgb(255 255 255 / 7.5%);
+    --background-modifier-hover-strong: rgb(255 255 255 / 12%);
+    --background-modifier-active-hover: hsl(206 100% 50% / 10%);
+    --background-modifier-border: rgb(220 220 240 / 15%);
+    --background-modifier-border-subtle: rgb(255 255 255 / 8%);
+    --background-modifier-seperator: rgb(255 255 255 / 12%);
+    --background-modifier-border-focus: hsl(206 100% 50% / 60%);
+    --background-modifier-error: var(--color-red);
+    --background-modifier-success: var(--color-green);
+    --text-selection: hsl(206 100% 50% / 20%);
+    --text-highlight-bg: rgb(255 208 0 / 40%);
+    --nav-item-background-selected: hsl(206 100% 50% / 15%);
+    --table-text-color: rgb(218 218 218 / 70%);
+    --table-selection: hsl(206 100% 50% / 10%);
+    --top-header-bg: var(--background-primary);
+    --accent-red: hsl(359 100% 63%);
+    --accent-orange: hsl(28 100% 59%);
+    --accent-yellow: hsl(50 100% 50%);
+    --accent-green: hsl(135 64% 50%);
+    --accent-mint: hsl(174 100% 43%);
+    --accent-teal: hsl(184 100% 44%);
+    --accent-cyan: hsl(193 99% 62%);
+    --accent-blue: hsl(206 100% 50%);
+    --accent-indigo: hsl(234 100% 71%);
+    --accent-purple: hsl(293 88% 58%);
+    --accent-pink: hsl(348 100% 61%);
+    --accent-brown: hsl(27 36% 56%);
+    --accent-obsidian: hsl(258 88% 66%);
+    --color-red: #fb464c;
+    --color-orange: #e9973f;
+    --color-yellow: #e0de71;
+    --color-green: #44cf6e;
+    --color-cyan: #53dfdd;
+    --color-blue: #027aff;
+    --color-purple: #a882ff;
+    --color-pink: #fa99cd;
+    --color-base-00: #1c1c1c;
+    --color-base-05: #212121;
+    --color-base-10: #232323;
+    --color-base-20: #282828;
+    --color-base-25: #2e2e2e;
+    --color-base-30: #333333;
+    --color-base-35: #3f3f3f;
+    --color-base-40: #555555;
+    --color-base-50: #666666;
+    --color-base-60: #999999;
+    --color-base-70: #b3b3b3;
+    --color-base-100: #dadada;
+    --mono-0: #000000;
+    --mono-100: #ffffff;
+    --glass-shadow-inset-for-control:
+      inset 0 1px 1px rgb(120 120 120 / 25%),
+      inset 0 -1px 1px rgb(120 120 120 / 50%),
+      inset 1px 0 1px rgb(120 120 120 / 15%),
+      inset -1px 0 1px rgb(120 120 120 / 15%);
+    --glass-shadow-inset-s:
+      inset 0 1px 1px rgb(120 120 120 / 25%),
+      inset 0 -1px 1px rgb(120 120 120 / 50%),
+      inset 1px 0 1px rgb(120 120 120 / 15%),
+      inset -1px 0 1px rgb(120 120 120 / 15%);
+    --glass-shadow-inset-l:
+      inset 0 0px 0px rgb(120 120 120 / 25%),
+      inset 0 -1px 1px rgb(120 120 120 / 50%),
+      inset 1px 0 1px rgb(120 120 120 / 15%),
+      inset -1px 0 1px rgb(120 120 120 / 15%);
+    --glass-shadow-inset-edge:
+      inset 0 1px 1px rgb(255 255 255 / 25%),
+      inset 0 -1px 1px rgb(255 255 255 / 10%),
+      inset 1px 0 1px rgb(255 255 255 / 0%),
+      inset -1px 0 1px rgb(255 255 255 / 0%);
+    --shadow-glass-border:
+      inset 0.5px 0 0.5px rgb(0 0 0 / 35%),
+      inset -0.5px 0 0.5px rgb(0 0 0 / 35%), inset 1px 0 1px rgb(0 0 0 / 20%),
+      inset -1px 0 1px rgb(0 0 0 / 20%),
+      inset 0 0.5px 0.5px rgb(255 255 255 / 35%),
+      inset 0 -0.5px 0.5px rgb(255 255 255 / 35%),
+      inset 0 1px 1px rgb(255 255 255 / 25%),
+      inset 0 -1px 1px rgb(255 255 255 / 25%);
+    --shadow-glass-border-tilted:
+      inset 0.5px 0 0.5px rgb(0 0 0 / 35%),
+      inset -0.5px 0 0.5px rgb(0 0 0 / 35%),
+      inset 1px 0 1px rgb(255 255 255 / 15%), inset -1px 0 1px rgb(0 0 0 / 20%),
+      inset 0 0.5px 0.5px rgb(255 255 255 / 35%),
+      inset 0 -0.5px 0.5px rgb(255 255 255 / 5%),
+      inset 0 1px 1px rgb(255 255 255 / 15%),
+      inset 0 -1px 1px rgb(255 255 255 / 2%);
+  }
+}
+:root {
+  --control-height-xs: 20px;
+  --control-height-s: 24px;
+  --control-height-m: 28px;
+  --control-height-l: 32px;
+  --control-height-xl: 36px;
+  --liquid-toolbar-padding: 4px;
+  --menu-group-gap: 6px;
+  --modal-padding: 16px;
+  --toolbar-progressive-blur-area: 12px;
+  --toolbar-height: 48px;
+  --sidebar-tab-padding: 3px;
+  --form-group-padding: 6px;
+  --form-row-padding: 7px;
+  --form-row-height: 42px;
+  --setting-items-padding-x: 16px;
+  --setting-items-padding-y: 8px;
+  --setting-heading-gap: 32px;
+  --nav-header-height: 40px;
+  --nav-item-padding-start: 24px;
+  --table-cell-padding: 8px;
+  --table-button-height: 30px;
+  --toggle-s-width: 36px;
+  --toggle-s-thumb-width: 21px;
+  --toggle-s-thumb-height: 13px;
+  --slider-track-height: 6px;
+  --slider-thumb-width: 20px;
+  --slider-thumb-height: 16px;
+  --popover-width: 450px;
+  --popover-height: 550px;
+  --radius-s: 6px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+  --menu-radius: 20px;
+  --input-radius: 24px;
+  --tooltip-radius: 24px;
+  --sidebar-radius: 30px;
+  --notice-radius: 32px;
+  --suggestion-radius: 32px;
+  --modal-radius: 40px;
+  --callout-radius: 40px;
+  --setting-items-radius: 40px;
+  --radius-pill: 99px;
+  --backdrop-filter-glass-light: blur(10px) saturate(140%) brightness(1.06);
+  --backdrop-filter-glass-dark: blur(10px) saturate(180%) brightness(1.8);
+  --backdrop-filter-glass-subtle-light: blur(4px) saturate(190%)
+    brightness(1.03);
+  --backdrop-filter-glass-subtle-dark: blur(6px) saturate(190%) brightness(1.4);
+  --glassive-control-backdrop-filter-light: blur(2px) brightness(1.08);
+  --glassive-control-backdrop-filter-dark: blur(2px) brightness(1.03);
+  --backdrop-filter-tooltip: blur(4px) brightness(1.1);
+  --backdrop-filter-toolbar: blur(2px) saturate(160%);
+  --font-interface: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-text: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-monospace: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Liquid control fill (focused window), copied from the system's component stylesheet. */
+:root {
+  --gl-control-bg:
+    linear-gradient(rgb(255 255 255 / 40%), rgb(255 255 255 / 20%)),
+    rgb(255 255 255 / 20%);
+  --gl-control-filter: var(--glassive-control-backdrop-filter-light);
+  --gl-control-hover: var(--color-base-30);
+  --gl-glass-filter: var(--backdrop-filter-glass-light);
+  --gl-glass-subtle-filter: var(--backdrop-filter-glass-subtle-light);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gl-control-bg:
+      linear-gradient(
+        color-mix(in oklch, var(--color-accent) 5%, transparent),
+        color-mix(in oklch, var(--color-accent) 5%, transparent)
+      ),
+      rgb(255 255 255 / 10%);
+    --gl-control-filter: var(--glassive-control-backdrop-filter-dark);
+    --gl-control-hover: color-mix(
+      in oklch,
+      rgb(80 80 80) 95%,
+      var(--interactive-accent)
+    );
+    --gl-glass-filter: var(--backdrop-filter-glass-dark);
+    --gl-glass-subtle-filter: var(--backdrop-filter-glass-subtle-dark);
+  }
+}
+
+/* Entrances: modals pop in subtly, notices and popovers pop in with an overshoot. */
+@keyframes gl-pop-in-subtle {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes gl-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes gl-fade-in {
+  from {
+    opacity: 0;
+  }
+}
