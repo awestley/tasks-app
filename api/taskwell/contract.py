@@ -4,6 +4,8 @@ link, embed and search tasks and projects."""
 
 import asyncio
 import re
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -74,6 +76,15 @@ def manifest(user=Depends(authenticate)):
                 {"id": "new-task", "label": "New task", "shortcut": "Mod+Shift+T"},
                 {"id": "settings", "label": "Tasks settings"},
             ],
+            # docs/companion.md in westley-app: the compact view kept beside the workspace.
+            "companion": {
+                "url": f"{b}/companion.html#today",
+                "label": "Tasks",
+                "minWidth": 260,
+                "defaultWidth": 320,
+                "quickAdd": "new-task",
+                "badge": f"{b}/api/v1/companion/badge",
+            },
         },
         headers={"Cache-Control": "no-cache"},
     )
@@ -202,6 +213,24 @@ def references(target: str = Query(max_length=500), user=Depends(authenticate), 
         if pattern.search(task.description or "") and task_ref(task.id) != target
     ]
     return {"items": items}
+
+
+def local_today(zone):
+    try:
+        return datetime.now(ZoneInfo(zone or "UTC")).date()
+    except (ZoneInfoNotFoundError, ValueError):
+        return datetime.now(timezone.utc).date()
+
+
+@api.get("/companion/badge")
+def companion_badge(user=Depends(authenticate), db: Session = Depends(get_db)):
+    """The count on the companion's collapsed strip: open tasks due today or overdue, in each task's zone."""
+    query = select(Task.due_date, Task.time_zone).where(
+        Task.user_id == user.id, Task.completed.is_(False), Task.due_date.is_not(None)
+    )
+    count = sum(1 for due, zone in db.execute(query) if due <= local_today(zone))
+    label = f"{count} due today" if count else ""
+    return JSONResponse({"count": count, "label": label}, headers={"Cache-Control": "no-store"})
 
 
 @api.get("/events")

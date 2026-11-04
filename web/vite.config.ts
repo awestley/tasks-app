@@ -8,7 +8,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       // embed.js is loaded by other apps (through <pc-embed>), so it keeps a fixed name.
-      input: { index: "index.html", embed: "src/embed.ts" },
+      input: {
+        index: "index.html",
+        // The compact view the shell keeps beside the workspace (westley-app docs/companion.md).
+        companion: "companion.html",
+        embed: "src/embed.ts",
+      },
       output: {
         entryFileNames: (chunk) =>
           chunk.name === "embed" ? "embed.js" : "assets/[name]-[hash].js",

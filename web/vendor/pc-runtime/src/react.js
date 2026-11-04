@@ -1,6 +1,6 @@
 // React bindings for the runtime, for apps built with React (Tasks, Notebook).
 //
-//   import { PcProvider, usePaneTitle, useCommands, useTheme, PcEmbed } from '@awestley/pc-runtime/react';
+//   import { PcProvider, usePaneTitle, useCommands, useTheme, useSurface, PcEmbed } from '@awestley/pc-runtime/react';
 //   import { applyTheme } from '@awestley/glassive';
 //
 //   <PcProvider app="tasks" applyTheme={applyTheme}>
@@ -47,6 +47,14 @@ export function useHosted() {
   const [hosted, setHosted] = useState(false);
   useEffect(() => { let live = true; pc.ready.then((h) => { if (live) setHosted(h); }); return () => { live = false; }; }, [pc]);
   return hosted;
+}
+
+/** Where this view is shown ({ kind, width, height, detent? }), updated when it moves or resizes. */
+export function useSurface() {
+  const pc = usePc();
+  const [surface, setSurface] = useState(() => pc.surface());
+  useEffect(() => { setSurface(pc.surface()); return pc.on('surface', setSurface); }, [pc]);
+  return surface;
 }
 
 /** Name the tab. Call it in every page, so the shell also records where the pane is. */

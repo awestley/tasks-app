@@ -10,17 +10,20 @@ export const TO_SHELL = Object.freeze({
   NOTIFY: 'notify',               // { text, kind }
   REGISTER_COMMANDS: 'commands',  // { commands: [{ id, label, shortcut? }] }
   TITLE: 'title',                 // { title }  the tab's title; send after navigating so the shell saves where the pane is
-  SHORTCUT: 'shortcut',           // { key }  a shell shortcut pressed while the pane had focus ('palette')
+  SHORTCUT: 'shortcut',           // { key }  a shell shortcut pressed while the pane had focus ('palette', 'companion')
+  COMPANION: 'companion',         // { action: 'show' | 'hide' }  open or close the companion slot (docs/companion.md)
 });
 
 /** Shell -> app */
 export const TO_APP = Object.freeze({
-  WELCOME: 'welcome',             // { theme, paneId }
+  WELCOME: 'welcome',             // { theme, paneId, surface }
   THEME: 'theme',                 // { theme }
   COMMAND: 'command',             // { id }
+  SURFACE: 'surface',             // { surface }  where the view is shown: { kind, width, height, detent? }
 });
 
-export const PLACEMENTS = Object.freeze(['new-column', 'replace', 'split', 'tab']);
+export const PLACEMENTS = Object.freeze(['new-column', 'replace', 'split', 'tab', 'companion']);
+export const SURFACES = Object.freeze(['pane', 'docked', 'floating', 'sheet', 'window']);
 export const NOTICE_KINDS = Object.freeze(['info', 'success', 'warning', 'error']);
 
 export function message(type, fields = {}) {

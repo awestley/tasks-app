@@ -169,6 +169,9 @@ def test_base_path_frames_and_manifest(shell):
     assert manifest["api"] == "/apps/tasks/api/v1" and manifest["embedModule"] == "/apps/tasks/embed.js"
     assert all(p["url"].startswith("/apps/tasks/#/") for p in manifest["panes"])
     assert {e["embed"] for e in manifest["entities"]} == {"tasks-task", "tasks-project"}
+    companion = manifest["companion"]
+    assert companion["url"] == "/apps/tasks/companion.html#today" and companion["badge"] == "/apps/tasks/api/v1/companion/badge"
+    assert companion["quickAdd"] in {c["id"] for c in manifest["commands"]}
     assert client.get("/apps/tasks/manifest.json").status_code == 401
     openapi = client.get("/apps/tasks/openapi.json").json()
     assert "/api/v1/resolve" in openapi["paths"] and openapi["servers"][0]["url"] == "/apps/tasks"
@@ -199,6 +202,17 @@ def test_read_one_and_client_chosen_ids(workspace):
     assert client.get(f"/api/v1/tasks/{task_id}").json()["title"] == "Write something worthwhile"
     assert client.get(f"/api/v1/projects/{project_id}").json()["name"] == "Home"
     assert client.get(f"/api/v1/tasks/{task_id}", headers=other).status_code == 404
+
+
+def test_companion_badge_counts_open_tasks_due_today_or_overdue(workspace):
+    client = workspace[0]
+    assert client.get("/api/v1/companion/badge").json() == {"count": 0, "label": ""}
+    create(client, title="Overdue", due_date="2020-01-01")
+    create(client, title="Far away", due_date="2999-01-01")
+    create(client, title="Someday")
+    done = create(client, title="Done", due_date="2020-01-02")
+    client.patch(f"/api/v1/tasks/{done['id']}", json={"version": done["version"], "completed": True})
+    assert client.get("/api/v1/companion/badge").json() == {"count": 1, "label": "1 due today"}
 
 
 def test_resolve(workspace):
