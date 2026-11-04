@@ -77,33 +77,28 @@ const loadProjects = () => {
   return projects;
 };
 
+// Embeds read as part of the host's text, like an embedded note in Glassive: the host's font and size,
+// task lines like a Markdown task list, and a card set off by the same 2px accent rule as a quote.
 const SHEET = `
-  :host { display: block; font-family: var(--font-interface); color: var(--text-normal); font-size: 15px; }
-  :host([size="inline"]) { display: inline-block; vertical-align: middle; }
-  .card { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: var(--callout-radius);
-    border: 1px solid var(--background-modifier-hover);
-    background: color-mix(in oklch, var(--color-accent) 5%, transparent);
-    box-shadow: var(--shadow-glass-border), var(--glass-shadow-inset-l); }
-  :host([size="inline"]) .card { padding: 2px 8px; border-radius: 6px; align-items: center; gap: 6px; }
-  .main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  :host { display: block; font: inherit; color: var(--text-normal); }
+  :host([size="inline"]) { display: inline; }
+  .card { display: flex; gap: 0.5em; align-items: flex-start; margin: 0.2em 0 0.8em;
+    padding-inline-start: 20px; border-inline-start: 2px solid var(--color-accent); }
+  :host([size="inline"]) .card { display: inline-flex; align-items: baseline; gap: 0.35em; margin: 0; padding: 0; border: 0; }
+  .main { flex: 1; min-width: 0; display: grid; gap: 0.1em; }
   .title { all: unset; cursor: pointer; overflow-wrap: anywhere; }
-  .title:hover, .title:focus-visible { color: var(--text-accent); }
-  .done .title { color: var(--text-muted); text-decoration: line-through; }
-  .meta { color: var(--text-muted); font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .title:hover { color: var(--text-accent-hover); text-decoration: underline; }
+  .title:focus-visible { outline: 2px solid var(--background-modifier-border-focus); outline-offset: 2px; border-radius: 4px; }
+  .done .title, li.done .title { color: var(--text-muted); text-decoration: line-through; }
+  .meta { color: var(--text-muted); font-size: 0.8em; display: flex; gap: 0.75em; flex-wrap: wrap; }
   :host([size="inline"]) .meta { display: none; }
   .overdue { color: var(--text-error); }
-  .check { appearance: none; flex: none; width: 18px; height: 18px; margin: 1px 0 0; border-radius: 50%; cursor: pointer;
-    border: 1.5px solid var(--check-color, var(--text-faint)); background: transparent; display: grid; place-items: center; }
-  :host([size="inline"]) .check { width: 14px; height: 14px; margin: 0; }
-  .check:checked { background: var(--interactive-accent); border-color: var(--interactive-accent); }
-  .check:checked::after { content: ""; width: 5px; height: 9px; margin-top: -2px; border: solid var(--text-on-accent);
-    border-width: 0 2px 2px 0; transform: rotate(45deg); }
-  :host([size="inline"]) .check:checked::after { width: 3px; height: 7px; }
-  .check:focus-visible { outline: 2px solid var(--background-modifier-border-focus); outline-offset: 2px; }
-  .p1 { --check-color: var(--color-red); } .p2 { --check-color: var(--color-orange); } .p3 { --check-color: var(--color-blue); }
+  /* Centred on the first line of text, whatever the host's font size. */
+  .check { flex: none; width: 0.8em; height: 0.8em; margin: calc((1lh - 0.8em) / 2) 0 0; accent-color: var(--interactive-accent); cursor: pointer; }
+  :host([size="inline"]) .check { margin: 0; align-self: center; }
   .hash { font-weight: 600; }
-  ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
-  li { display: flex; gap: 8px; align-items: center; }
+  ul { list-style: none; margin: 0.3em 0 0; padding: 0; display: grid; gap: 0.15em; }
+  li { display: flex; gap: 0.5em; align-items: flex-start; }
   .muted { color: var(--text-muted); }
 `;
 
@@ -199,7 +194,7 @@ abstract class Embed extends HTMLElement {
   protected checkbox(task: Task, done: (next: Task) => void) {
     const check = el<HTMLInputElement>("input", {
       type: "checkbox",
-      className: `check p${task.priority}`,
+      className: "check",
       checked: task.completed,
       title: task.completed ? "Mark as not done" : "Complete",
     });

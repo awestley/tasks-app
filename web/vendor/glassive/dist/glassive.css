@@ -255,6 +255,11 @@
   --font-text-size: 17px;
 }
 
+/* Native controls (checkboxes, scrollbars, date pickers) follow the theme the shell sets, not only the
+   system appearance. color-scheme inherits, including into shadow DOM, so embeds pick it up too. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
 /* Glassive — static renditions of the theme's glass controls.
    Hand-written from flyingfolder/obsidian-glassive@57eaca9 (main1/**.scss); every value is a token from tokens.json
    except the liquid control fills, which the source writes as gradients (copied verbatim below). */

@@ -12,3 +12,8 @@
   --table-selection: color-mix(in oklch, var(--color-accent) 10%, transparent);
   --font-text-size: 17px;
 }
+
+/* Native controls (checkboxes, scrollbars, date pickers) follow the theme the shell sets, not only the
+   system appearance. color-scheme inherits, including into shadow DOM, so embeds pick it up too. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

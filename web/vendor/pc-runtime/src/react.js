@@ -1,4 +1,4 @@
-// React bindings for the runtime, for apps built with React (Taskwell, Notebook).
+// React bindings for the runtime, for apps built with React (Tasks, Notebook).
 //
 //   import { PcProvider, usePaneTitle, useCommands, useTheme, PcEmbed } from '@awestley/pc-runtime/react';
 //   import { applyTheme } from '@awestley/glassive';

@@ -1,6 +1,6 @@
 // <pc-embed ref="pc://tasks/task/123" size="inline|card">: shows another app's item inside this one.
 // It reads the owning app's manifest, loads that app's embed module, and puts the app's own element
-// (e.g. <taskwell-task>) in its shadow root. If anything fails it shows a plain link instead.
+// (e.g. <tasks-task>) in its shadow root. If anything fails it shows a plain link instead.
 //
 //   import { connect } from '@awestley/pc-runtime';
 //   import { defineEmbed } from '@awestley/pc-runtime/embed';
