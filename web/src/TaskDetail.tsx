@@ -55,7 +55,11 @@ export function TaskDetail({
   patch: (changes: TaskChanges) => void;
   remove: () => void;
   close: () => void;
-  openMenu: (e: React.MouseEvent, entries?: MenuEntry[], title?: string) => void;
+  openMenu: (
+    e: React.MouseEvent,
+    entries?: MenuEntry[],
+    title?: string,
+  ) => void;
   projectMenu: () => MenuEntry[];
   priorityMenu: () => MenuEntry[];
   openInColumn?: () => void;
@@ -113,7 +117,10 @@ export function TaskDetail({
       const clean = d.title.replace(/\s+/g, " ").trim();
       if (clean && clean !== t.title) changes.title = clean;
       if (d.description !== t.description) changes.description = d.description;
-      if (!d.checklist.some((i) => !i.title.trim()) && JSON.stringify(d.checklist) !== JSON.stringify(t.checklist))
+      if (
+        !d.checklist.some((i) => !i.title.trim()) &&
+        JSON.stringify(d.checklist) !== JSON.stringify(t.checklist)
+      )
         changes.checklist = d.checklist;
       if (Object.keys(changes).length) patchRef.current(changes);
     },
@@ -125,12 +132,16 @@ export function TaskDetail({
   const [showZone, setShowZone] = useState(task.time_zone !== deviceZone);
   const addLabel = (raw: string) => {
     const label = raw.trim().replace(/^@/, "").toLowerCase();
-    if (!label || task.labels.includes(label) || task.labels.length >= 20) return;
+    if (!label || task.labels.includes(label) || task.labels.length >= 20)
+      return;
     patch({ labels: [...task.labels, label] });
     setLabelText("");
   };
-  const menuButton = (e: React.MouseEvent, entries: MenuEntry[], label: string) =>
-    openMenu(e, entries, label);
+  const menuButton = (
+    e: React.MouseEvent,
+    entries: MenuEntry[],
+    label: string,
+  ) => openMenu(e, entries, label);
 
   return (
     <aside
@@ -227,7 +238,8 @@ export function TaskDetail({
               const value = e.target.value;
               clearTimeout(timer.current);
               timer.current = setTimeout(() => {
-                if (value !== latest.current.description) save({ description: value });
+                if (value !== latest.current.description)
+                  save({ description: value });
               }, 700);
             }}
             onBlur={() => {
@@ -253,10 +265,13 @@ export function TaskDetail({
                 setChecklist(items);
                 const structural =
                   items.length !== checklist.length ||
-                  items.some((item, i) => item.completed !== checklist[i]?.completed);
+                  items.some(
+                    (item, i) => item.completed !== checklist[i]?.completed,
+                  );
                 clearTimeout(timer.current);
                 if (structural) saveChecklist(items);
-                else timer.current = setTimeout(() => saveChecklist(items), 700);
+                else
+                  timer.current = setTimeout(() => saveChecklist(items), 700);
               }}
             />
           </div>
@@ -280,12 +295,21 @@ export function TaskDetail({
             <button
               className={dueTone(task.due_date, task.completed)}
               aria-label="Due date"
-              onClick={(e) => setPicker((e.currentTarget as HTMLElement).getBoundingClientRect())}
+              onClick={(e) =>
+                setPicker(
+                  (e.currentTarget as HTMLElement).getBoundingClientRect(),
+                )
+              }
             >
               <CalendarDays size={15} />
-              {task.due_date ? dueLabel(task.due_date, task.due_time) : "No date"}
+              {task.due_date
+                ? dueLabel(task.due_date, task.due_time)
+                : "No date"}
               {task.recurrence && (
-                <Repeat2 size={13} aria-label={recurrenceLabel[task.recurrence]} />
+                <Repeat2
+                  size={13}
+                  aria-label={recurrenceLabel[task.recurrence]}
+                />
               )}
             </button>
           </div>
@@ -303,11 +327,14 @@ export function TaskDetail({
               <select
                 aria-label="Reminder"
                 disabled={!task.due_time}
-                title={task.due_time ? "" : "Give the task a time to set a reminder"}
+                title={
+                  task.due_time ? "" : "Give the task a time to set a reminder"
+                }
                 value={task.reminder_minutes ?? ""}
                 onChange={(e) =>
                   patch({
-                    reminder_minutes: e.target.value === "" ? null : Number(e.target.value),
+                    reminder_minutes:
+                      e.target.value === "" ? null : Number(e.target.value),
                   })
                 }
               >
@@ -318,7 +345,9 @@ export function TaskDetail({
                   </option>
                 ))}
                 {task.reminder_minutes !== null &&
-                  !reminderChoices.some(([m]) => m === task.reminder_minutes) && (
+                  !reminderChoices.some(
+                    ([m]) => m === task.reminder_minutes,
+                  ) && (
                     <option value={task.reminder_minutes}>
                       {task.reminder_minutes} minutes before
                     </option>
@@ -335,7 +364,9 @@ export function TaskDetail({
                   {l}
                   <button
                     aria-label={`Remove label ${l}`}
-                    onClick={() => patch({ labels: task.labels.filter((x) => x !== l) })}
+                    onClick={() =>
+                      patch({ labels: task.labels.filter((x) => x !== l) })
+                    }
                   >
                     <X size={11} />
                   </button>
@@ -375,7 +406,8 @@ export function TaskDetail({
                   key={task.time_zone}
                   onBlur={(e) => {
                     const zone = e.target.value.trim();
-                    if (zone && zone !== task.time_zone) patch({ time_zone: zone });
+                    if (zone && zone !== task.time_zone)
+                      patch({ time_zone: zone });
                   }}
                 />
               </label>
@@ -389,7 +421,10 @@ export function TaskDetail({
       </div>
       <footer className="detail-foot">
         <small>
-          Added {new Date(task.created_at + (task.created_at.endsWith("Z") ? "" : "Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          Added{" "}
+          {new Date(
+            task.created_at + (task.created_at.endsWith("Z") ? "" : "Z"),
+          ).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           {task.completed && task.completed_at
             ? ` · Completed ${new Date(task.completed_at + (task.completed_at.endsWith("Z") ? "" : "Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
             : ""}
@@ -411,7 +446,9 @@ export function TaskDetail({
             patch({
               due_date: next.due_date,
               due_time: next.due_date ? next.due_time : null,
-              recurrence: next.due_date ? (next.recurrence as Task["recurrence"]) : null,
+              recurrence: next.due_date
+                ? (next.recurrence as Task["recurrence"])
+                : null,
               // A time added now gets the automatic reminder, as in quick add.
               reminder_minutes:
                 next.due_date && next.due_time

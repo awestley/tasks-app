@@ -20,7 +20,11 @@ import {
   type Task,
 } from "./api";
 
-export type Config = { apple_enabled: boolean; dev_login: boolean; shell?: boolean };
+export type Config = {
+  apple_enabled: boolean;
+  dev_login: boolean;
+  shell?: boolean;
+};
 type TaskFields = Omit<
   Task,
   "id" | "completed" | "completed_at" | "created_at" | "updated_at" | "version"
@@ -35,10 +39,19 @@ type Op = { op: string; at: number } & (
   | { kind: "patch"; id: string; changes: TaskChanges }
   | { kind: "delete"; id: string }
   | { kind: "project-create"; project: Project }
-  | { kind: "project-patch"; id: string; changes: { name: string; color: string } }
+  | {
+      kind: "project-patch";
+      id: string;
+      changes: { name: string; color: string };
+    }
   | { kind: "project-delete"; id: string }
 );
-type Replica = { user: Profile; tasks: Task[]; projects: Project[]; saved: number };
+type Replica = {
+  user: Profile;
+  tasks: Task[];
+  projects: Project[];
+  saved: number;
+};
 export type Phase = "loading" | "signed-out" | "ready";
 export type State = {
   phase: Phase;
@@ -58,7 +71,7 @@ export type State = {
 
 const REPLICA = "tasks.replica.v1";
 const OUTBOX = "tasks.outbox.v1";
-const read = <T,>(key: string): T | null => {
+const read = <T>(key: string): T | null => {
   try {
     return JSON.parse(localStorage.getItem(key) || "null");
   } catch {
@@ -75,7 +88,8 @@ const storageWorks = (() => {
   }
 })();
 /** The outbox as every view in this browser sees it. */
-const storedQueue = (): Op[] => (storageWorks ? read<Op[]>(OUTBOX) || [] : queue);
+const storedQueue = (): Op[] =>
+  storageWorks ? read<Op[]>(OUTBOX) || [] : queue;
 const write = (key: string, value: unknown) => {
   try {
     if (value === null) localStorage.removeItem(key);
@@ -85,7 +99,10 @@ const write = (key: string, value: unknown) => {
   }
 };
 
-let server: { tasks: Task[]; projects: Project[] } = { tasks: [], projects: [] };
+let server: { tasks: Task[]; projects: Project[] } = {
+  tasks: [],
+  projects: [],
+};
 let queue: Op[] = read<Op[]>(OUTBOX) || [];
 let state: State = {
   phase: "loading",
@@ -246,16 +263,26 @@ export async function boot() {
         emit({
           phase: "signed-out",
           online: false,
-          bootError: "Can’t reach the server. Check your connection and try again.",
+          bootError:
+            "Can’t reach the server. Check your connection and try again.",
         });
     } else if ((e as APIError).status === 401) {
-      if (replica?.user && (state.config.shell || location.pathname.startsWith("/apps/")))
+      if (
+        replica?.user &&
+        (state.config.shell || location.pathname.startsWith("/apps/"))
+      )
         emit({ expired: true });
       else signedOut();
-    } else emit({ phase: state.user ? "ready" : "signed-out", bootError: (e as Error).message });
+    } else
+      emit({
+        phase: state.user ? "ready" : "signed-out",
+        bootError: (e as Error).message,
+      });
   }
   if (new URLSearchParams(location.search).has("auth_error"))
-    emit({ bootError: "Apple sign-in was interrupted or expired. Please try again." });
+    emit({
+      bootError: "Apple sign-in was interrupted or expired. Please try again.",
+    });
 }
 
 export async function signedIn() {
@@ -356,7 +383,8 @@ function coalesce() {
       queue.pop();
       return;
     }
-    if (("id" in op && op.id === last.id) || op.kind.startsWith("project")) break;
+    if (("id" in op && op.id === last.id) || op.kind.startsWith("project"))
+      break;
   }
 }
 
@@ -418,9 +446,13 @@ const upsert = <T extends { id: string }>(list: T[], item: T) =>
   list.some((x) => x.id === item.id)
     ? list.map((x) => (x.id === item.id ? item : x))
     : [...list, item];
-const serverVersion = (id: string) => server.tasks.find((t) => t.id === id)?.version;
+const serverVersion = (id: string) =>
+  server.tasks.find((t) => t.id === id)?.version;
 
-async function mergeOn409<T>(id: string, write: (version: number) => Promise<T>): Promise<T> {
+async function mergeOn409<T>(
+  id: string,
+  write: (version: number) => Promise<T>,
+): Promise<T> {
   const base = serverVersion(id);
   if (base === undefined) throw new APIError(404, "");
   try {
@@ -436,8 +468,17 @@ async function mergeOn409<T>(id: string, write: (version: number) => Promise<T>)
 
 async function send(op: Op) {
   if (op.kind === "create") {
-    const { id, title, description, project_id, due_date, due_time, time_zone } = op.task;
-    const { reminder_minutes, priority, labels, checklist, recurrence } = op.task;
+    const {
+      id,
+      title,
+      description,
+      project_id,
+      due_date,
+      due_time,
+      time_zone,
+    } = op.task;
+    const { reminder_minutes, priority, labels, checklist, recurrence } =
+      op.task;
     const task = await api<Task>("/tasks", "POST", {
       id,
       title,
@@ -464,20 +505,28 @@ async function send(op: Op) {
     if (op.changes.completed !== undefined && task.recurrence) refreshSoon(300);
   } else if (op.kind === "delete") {
     if (serverVersion(op.id) !== undefined)
-      await mergeOn409(op.id, (version) => api(`/tasks/${op.id}?version=${version}`, "DELETE"));
+      await mergeOn409(op.id, (version) =>
+        api(`/tasks/${op.id}?version=${version}`, "DELETE"),
+      );
     server = { ...server, tasks: server.tasks.filter((t) => t.id !== op.id) };
   } else if (op.kind === "project-create") {
     const project = await api<Project>("/projects", "POST", op.project);
     server = { ...server, projects: upsert(server.projects, project) };
   } else if (op.kind === "project-patch") {
-    const project = await api<Project>(`/projects/${op.id}`, "PATCH", op.changes);
+    const project = await api<Project>(
+      `/projects/${op.id}`,
+      "PATCH",
+      op.changes,
+    );
     server = { ...server, projects: upsert(server.projects, project) };
   } else if (op.kind === "project-delete") {
     await api(`/projects/${op.id}`, "DELETE").catch((e) => {
       if ((e as APIError).status !== 404) throw e;
     });
     server = {
-      tasks: server.tasks.map((t) => (t.project_id === op.id ? { ...t, project_id: null } : t)),
+      tasks: server.tasks.map((t) =>
+        t.project_id === op.id ? { ...t, project_id: null } : t,
+      ),
       projects: server.projects.filter((p) => p.id !== op.id),
     };
     refreshSoon(300);
@@ -500,7 +549,9 @@ export const blankTask = (): TaskFields => ({
   recurrence: null,
 });
 
-export function createTask(fields: Partial<TaskFields> & { id?: string }): Task {
+export function createTask(
+  fields: Partial<TaskFields> & { id?: string },
+): Task {
   const stamp = nowIso();
   const task: Task = {
     ...blankTask(),
@@ -526,7 +577,10 @@ export function createProject(name: string, color: string): Project {
   enqueue({ op: opId(), at: Date.now(), kind: "project-create", project });
   return project;
 }
-export function patchProject(id: string, changes: { name: string; color: string }) {
+export function patchProject(
+  id: string,
+  changes: { name: string; color: string },
+) {
   enqueue({ op: opId(), at: Date.now(), kind: "project-patch", id, changes });
 }
 export function deleteProject(id: string) {

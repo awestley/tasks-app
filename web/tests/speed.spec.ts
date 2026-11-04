@@ -39,7 +39,9 @@ test("adding many tasks quickly, # suggestions and keyboard control", async ({
   await page.getByLabel("Search tasks").fill(`Rapid ${stamp}`);
   const rows = page.locator(".task-row");
   await expect(rows).toHaveCount(4);
-  await expect(rows.filter({ hasText: new RegExp(`${stamp} 4`) })).toContainText(`P${stamp}`);
+  await expect(
+    rows.filter({ hasText: new RegExp(`${stamp} 4`) }),
+  ).toContainText(`P${stamp}`);
 
   // Keyboard: move with J/K, set priority with 1-4, complete with C and undo with Cmd/Ctrl+Z.
   await page.getByLabel("Search tasks").press("Enter");

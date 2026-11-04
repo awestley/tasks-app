@@ -535,7 +535,6 @@ input[type="checkbox"] {
   height: var(--control-height-l);
 }
 
-
 .list-toolbar {
   display: flex;
   align-items: center;
@@ -942,14 +941,6 @@ input[type="checkbox"] {
   min-height: 88px;
   margin: 12px 0 16px;
 }
-
-
-
-
-
-
-
-
 
 .field-label {
   display: flex;

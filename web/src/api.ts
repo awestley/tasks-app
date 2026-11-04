@@ -36,7 +36,8 @@ export class APIError extends Error {
 }
 /** Network failures and an unreachable app behind the proxy: the request may be retried later. */
 export const isOffline = (e: unknown) =>
-  e instanceof TypeError || [0, 502, 503, 504].includes((e as APIError)?.status);
+  e instanceof TypeError ||
+  [0, 502, 503, 504].includes((e as APIError)?.status);
 let refreshing: Promise<boolean> | null = null;
 /** Inside Personal Command the shell's access token is short-lived; renew it once on a 401. */
 function renewShellSession() {

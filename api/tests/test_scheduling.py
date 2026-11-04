@@ -150,7 +150,9 @@ def quick_add_cases():
     return [(case, data["zone"], projects, instant) for case in data["cases"]]
 
 
-@pytest.mark.parametrize("case,zone,projects,instant", quick_add_cases(), ids=lambda v: v["text"] if isinstance(v, dict) else "")
+@pytest.mark.parametrize(
+    "case,zone,projects,instant", quick_add_cases(), ids=lambda v: v["text"] if isinstance(v, dict) else ""
+)
 def test_shared_quick_add_cases(case, zone, projects, instant):
     # The web app runs the same cases against web/src/parse.ts (web/tests/unit/parse.test.ts).
     result = parse_task(case["text"], zone, projects=projects, instant=instant)

@@ -69,7 +69,7 @@ def weekday_index(word):
 
 
 def month_index(word):
-    return next(i for i, pattern in enumerate(MONTHS) if re.fullmatch(pattern, word, re.I))
+    return next(i for i, pattern in enumerate(MONTHS) if re.fullmatch(pattern, word, re.IGNORECASE))
 
 
 def add_months(day, months):
@@ -144,7 +144,13 @@ def parse_task(text, zone, projects=(), instant=None):
         if match:
             word = match[1].lower()
             due = today + timedelta(
-                days=2 if word == "day after tomorrow" else 1 if word in ("tomorrow", "tmrw", "tmr") else -1 if word == "yesterday" else 0
+                days=2
+                if word == "day after tomorrow"
+                else 1
+                if word in ("tomorrow", "tmrw", "tmr")
+                else -1
+                if word == "yesterday"
+                else 0
             )
             if word == "tonight":
                 result.due_time = "19:00"
@@ -152,7 +158,11 @@ def parse_task(text, zone, projects=(), instant=None):
         match = take(r"\bin (\d{1,3}) (days?|weeks?|months?)\b")
         if match:
             n, unit = int(match[1]), match[2].lower()
-            due = add_months(today, n) if unit.startswith("month") else today + timedelta(days=n * (7 if unit.startswith("week") else 1))
+            due = (
+                add_months(today, n)
+                if unit.startswith("month")
+                else today + timedelta(days=n * (7 if unit.startswith("week") else 1))
+            )
     if due is None:
         match = take(r"\b(next week|next month|next weekend|this weekend|weekend)\b")
         if match:
@@ -162,7 +172,9 @@ def parse_task(text, zone, projects=(), instant=None):
             elif word == "next month":
                 due = add_months(today.replace(day=1), 1)
             else:
-                due = today + timedelta(days=(0 if today.weekday() == 6 else 5 - today.weekday()) + (7 if word == "next weekend" else 0))
+                due = today + timedelta(
+                    days=(0 if today.weekday() == 6 else 5 - today.weekday()) + (7 if word == "next weekend" else 0)
+                )
     if due is None:
         match = take(rf"\b(?:on\s+)?({MONTH})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(\d{{4}}))?\b")
         parts = (match[1], match[2], match[3]) if match else None

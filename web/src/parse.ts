@@ -11,7 +11,12 @@ export type TokenKind =
   | "project"
   | "label"
   | "reminder";
-export type Token = { kind: TokenKind; start: number; end: number; text: string };
+export type Token = {
+  kind: TokenKind;
+  start: number;
+  end: number;
+  text: string;
+};
 export type Recurrence = "daily" | "weekly" | "monthly";
 export type Parsed = {
   title: string;
@@ -131,8 +136,10 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   let recurringDay: number | null = null;
   // "every friday" wins over a bare "weekly" elsewhere in the text ("Write weekly review every friday").
   match =
-    take(new RegExp(`\\b(?:every|ev)\\s+(day|week|month|${WEEKDAY})\\b`, "i"), "recurrence") ||
-    take(/\b(daily|weekly|monthly)\b/i, "recurrence");
+    take(
+      new RegExp(`\\b(?:every|ev)\\s+(day|week|month|${WEEKDAY})\\b`, "i"),
+      "recurrence",
+    ) || take(/\b(daily|weekly|monthly)\b/i, "recurrence");
   if (match) {
     const word = match[1].toLowerCase();
     if (word === "day" || word === "daily") result.recurrence = "daily";
@@ -207,7 +214,10 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
     }
   }
   if (!due) {
-    match = take(/\b(next week|next month|next weekend|this weekend|weekend)\b/i, "date");
+    match = take(
+      /\b(next week|next month|next weekend|this weekend|weekend)\b/i,
+      "date",
+    );
     if (match) {
       const word = match[1].toLowerCase();
       due =
@@ -254,7 +264,8 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
         // "Feb 31": not a date. Give the text back.
         result.tokens.pop();
       } else {
-        if (!year && d < today) d = new Date(d.getFullYear() + 1, month, day, 12);
+        if (!year && d < today)
+          d = new Date(d.getFullYear() + 1, month, day, 12);
         due = d;
       }
     }
@@ -267,9 +278,7 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
     if (match) {
       const target = weekdayIndex(match[2]);
       const current = mondayIndex(today);
-      const days = match[1]
-        ? 7 - current + target
-        : (target - current + 7) % 7;
+      const days = match[1] ? 7 - current + target : (target - current + 7) % 7;
       due = addDays(today, days);
     }
   }
@@ -354,7 +363,9 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
     title += text.slice(at, span.start) + " ";
     at = span.end;
   }
-  title = (title + text.slice(at)).replace(/\s+/g, " ").replace(/^[\s,]+|[\s,]+$/g, "");
+  title = (title + text.slice(at))
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,]+|[\s,]+$/g, "");
   if (!title || result.labels.length > 20) return empty;
   result.title = title;
   result.tokens = spans;

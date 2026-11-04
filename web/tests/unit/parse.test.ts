@@ -6,7 +6,10 @@ import { readFileSync } from "node:fs";
 import { parseQuick, stripTokens } from "../../src/parse.ts";
 
 const data = JSON.parse(
-  readFileSync(new URL("../../../api/tests/quick_add_cases.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../api/tests/quick_add_cases.json", import.meta.url),
+    "utf8",
+  ),
 );
 const now = new Date(data.now);
 

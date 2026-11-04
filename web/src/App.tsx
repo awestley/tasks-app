@@ -4,7 +4,13 @@
 // Wide: sidebar (views, projects, labels), the list, and the open task beside it.
 // Narrow: the sidebar becomes a drawer and the task opens over the list.
 // Companion: quick add at the top, a view picker, and a compact list.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowDownWideNarrow,
   Bell,
@@ -64,7 +70,12 @@ import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
 import { disableBrowserPush } from "./PushSettings";
 import { QuickAdd, type NewTask, type QuickDefaults } from "./QuickAdd";
 import { TaskDetail } from "./TaskDetail";
-import { Modal, ProjectEditor, SettingsPanel, ShortcutsDialog } from "./dialogs";
+import {
+  Modal,
+  ProjectEditor,
+  SettingsPanel,
+  ShortcutsDialog,
+} from "./dialogs";
 import { isoDate, nextWeekDate, weekendDate } from "./parse";
 import {
   autoReminder,
@@ -108,7 +119,13 @@ const viewNames: Record<string, string> = {
   all: "All tasks",
   completed: "Completed",
 };
-const viewIcons = { today: Sun, inbox: Inbox, upcoming: CalendarDays, all: Layers, completed: CheckCheck };
+const viewIcons = {
+  today: Sun,
+  inbox: Inbox,
+  upcoming: CalendarDays,
+  all: Layers,
+  completed: CheckCheck,
+};
 
 // Routes: #/today, #/inbox, #/upcoming, #/all, #/completed, #/project/<id>, #/label/<name>, each
 // optionally followed by /task/<id>; #/task/<id> alone opens the task in its own list.
@@ -132,7 +149,8 @@ function readRoute(): { view: View | null; taskId: string | null } {
   if (legacy) taskId = legacy;
   if (kind === "project" && arg) return { view: `project:${arg}`, taskId };
   if (kind === "label" && arg) return { view: `label:${arg}`, taskId };
-  if ((LISTS as readonly string[]).includes(kind)) return { view: kind as View, taskId };
+  if ((LISTS as readonly string[]).includes(kind))
+    return { view: kind as View, taskId };
   return { view: null, taskId };
 }
 function hashFor(view: View, taskId?: string | null) {
@@ -189,7 +207,16 @@ export function App({ companion = false }: { companion?: boolean }) {
       </div>
     );
   if (phase === "signed-out") return <SignIn hosted={hosted} />;
-  return <Workspace companion={companion} hosted={hosted} width={surface.width} surfaceKind={surface.kind} detent={surface.detent} pc={pc} />;
+  return (
+    <Workspace
+      companion={companion}
+      hosted={hosted}
+      width={surface.width}
+      surfaceKind={surface.kind}
+      detent={surface.detent}
+      pc={pc}
+    />
+  );
 }
 
 function Logo() {
@@ -218,7 +245,10 @@ function SignIn({ hosted }: { hosted: boolean }) {
             <a
               className="primary"
               target="_top"
-              href={"/login?next=" + encodeURIComponent(location.pathname + location.hash)}
+              href={
+                "/login?next=" +
+                encodeURIComponent(location.pathname + location.hash)
+              }
             >
               Sign in
             </a>
@@ -295,23 +325,32 @@ function Workspace({
 
   const initial = readRoute();
   const [view, setView] = useState<View>(
-    () => initial.view || (companion ? ((read("tasks.companionView") as View) || "today") : "today"),
+    () =>
+      initial.view ||
+      (companion ? (read("tasks.companionView") as View) || "today" : "today"),
   );
   const [openId, setOpenId] = useState<string | null>(initial.taskId);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState(read("tasks.sort") || "smart");
   const [priorityFilter, setPriorityFilter] = useState(false);
-  const [sidebarPref, setSidebarPref] = useState(read("tasks.sidebar") !== "hidden");
+  const [sidebarPref, setSidebarPref] = useState(
+    read("tasks.sidebar") !== "hidden",
+  );
   const [drawer, setDrawer] = useState(false);
   const [quick, setQuick] = useState<QuickDefaults | null>(null);
   const [inlineAdd, setInlineAdd] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
-  const [picker, setPicker] = useState<{ task: Task; anchor: DOMRect | { x: number; y: number } } | null>(null);
+  const [picker, setPicker] = useState<{
+    task: Task;
+    anchor: DOMRect | { x: number; y: number };
+  } | null>(null);
   const [bell, setBell] = useState<DOMRect | null>(null);
   const [settings, setSettings] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
-  const [projectEditor, setProjectEditor] = useState<Project | "new" | null>(null);
+  const [projectEditor, setProjectEditor] = useState<Project | "new" | null>(
+    null,
+  );
   const [toast, setToast] = useState<Toast | null>(null);
   const [finishing, setFinishing] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState(0);
@@ -336,7 +375,8 @@ function Workspace({
   /* ---------- notices ---------- */
 
   const notify = useCallback(
-    (text: string, undo?: () => void) => setToast({ id: Date.now(), text, undo }),
+    (text: string, undo?: () => void) =>
+      setToast({ id: Date.now(), text, undo }),
     [],
   );
   useEffect(() => {
@@ -378,7 +418,14 @@ function Workspace({
   useEffect(() => {
     if (initial.view || !initial.taskId) return;
     const t = tasks.find((x) => x.id === initial.taskId);
-    if (t) setView(t.completed ? "completed" : t.project_id ? `project:${t.project_id}` : "inbox");
+    if (t)
+      setView(
+        t.completed
+          ? "completed"
+          : t.project_id
+            ? `project:${t.project_id}`
+            : "inbox",
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.length > 0]);
   useEffect(() => {
@@ -413,16 +460,22 @@ function Workspace({
     : null;
   const title = search
     ? "Search"
-    : selectedProject?.name || viewNames[view] || (view.startsWith("label:") ? "@" + view.slice(6) : "Tasks");
+    : selectedProject?.name ||
+      viewNames[view] ||
+      (view.startsWith("label:") ? "@" + view.slice(6) : "Tasks");
   const openTask = openId ? tasks.find((t) => t.id === openId) || null : null;
-  usePaneTitle(openTask && !detailBeside ? openTask.title : companion ? null : title);
+  usePaneTitle(
+    openTask && !detailBeside ? openTask.title : companion ? null : title,
+  );
 
   const visible = (t: Task) => !t.completed || finishing.has(t.id);
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = tasks.filter((t) => {
       if (q)
-        return (t.title + " " + t.description + " " + t.labels.join(" ")).toLowerCase().includes(q);
+        return (t.title + " " + t.description + " " + t.labels.join(" "))
+          .toLowerCase()
+          .includes(q);
       if (view === "completed") return t.completed;
       if (!visible(t)) return false;
       if (view === "today") return !!t.due_date && t.due_date <= today;
@@ -452,19 +505,30 @@ function Workspace({
   }, [tasks, view, search, sort, priorityFilter, today, finishing]);
   const overdue = shown.filter((t) => isOverdue(t) && !search);
 
-  type Group = { key: string; title: React.ReactNode; tasks: Task[]; add?: QuickDefaults; overdue?: boolean };
+  type Group = {
+    key: string;
+    title: React.ReactNode;
+    tasks: Task[];
+    add?: QuickDefaults;
+    overdue?: boolean;
+  };
   const groups: Group[] = useMemo(() => {
     const defaultsFor = (): QuickDefaults => ({
       project_id: selectedProject?.id ?? null,
       due_date: view === "today" ? today : null,
       labels: view.startsWith("label:") ? [view.slice(6)] : [],
     });
-    if (search) return [{ key: "search", title: `${shown.length} found`, tasks: shown }];
+    if (search)
+      return [{ key: "search", title: `${shown.length} found`, tasks: shown }];
     if (view === "completed") {
       const out = new Map<string, Task[]>();
       for (const t of shown) {
         const day = t.completed_at
-          ? localDate(new Date(t.completed_at + (t.completed_at.endsWith("Z") ? "" : "Z")))
+          ? localDate(
+              new Date(
+                t.completed_at + (t.completed_at.endsWith("Z") ? "" : "Z"),
+              ),
+            )
           : "";
         out.set(day, [...(out.get(day) || []), t]);
       }
@@ -486,8 +550,15 @@ function Workspace({
           key: d,
           title: (
             <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-              <span className="group-sub"> · {i === 0 ? "Today" : i === 1 ? "Tomorrow" : weekday(d, "long")}</span>
+              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+              <span className="group-sub">
+                {" "}
+                ·{" "}
+                {i === 0 ? "Today" : i === 1 ? "Tomorrow" : weekday(d, "long")}
+              </span>
             </>
           ),
           tasks: rest.filter((t) => t.due_date === d),
@@ -503,7 +574,10 @@ function Workspace({
           key: d,
           title: (
             <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
               <span className="group-sub"> · {weekday(d, "long")}</span>
             </>
           ),
@@ -522,7 +596,11 @@ function Workspace({
               Today
               <span className="group-sub">
                 {" · "}
-                {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                {new Date().toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
               </span>
             </>
           ) : null,
@@ -536,14 +614,23 @@ function Workspace({
 
   /* ---------- actions ---------- */
 
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name || "Inbox";
+  const projectName = (id: string | null) =>
+    projects.find((p) => p.id === id)?.name || "Inbox";
   function addTask(fields: NewTask) {
     const task = S.createTask(fields);
-    const where = [projectName(task.project_id), task.due_date && dueLabel(task.due_date, task.due_time)]
+    const where = [
+      projectName(task.project_id),
+      task.due_date && dueLabel(task.due_date, task.due_time),
+    ]
       .filter(Boolean)
       .join(" · ");
     notify(`Added to ${where}`, () => S.deleteTask(task.id));
-    if (task.due_time && task.reminder_minutes !== null && permission === "default" && !read("tasks.askedNotify")) {
+    if (
+      task.due_time &&
+      task.reminder_minutes !== null &&
+      permission === "default" &&
+      !read("tasks.askedNotify")
+    ) {
       store("tasks.askedNotify", "1");
       setTimeout(() => setBell(bellAnchor()), 400);
     }
@@ -586,11 +673,20 @@ function Workspace({
       task,
       due
         ? { due_date: due }
-        : { due_date: null, due_time: null, reminder_minutes: null, recurrence: null },
+        : {
+            due_date: null,
+            due_time: null,
+            reminder_minutes: null,
+            recurrence: null,
+          },
       due ? `Scheduled for ${dueLabel(due)}` : "Date removed",
     );
   const setPriority = (task: Task, p: number) =>
-    patch(task, { priority: p }, `Priority set to ${priorityNames[p].toLowerCase()}`);
+    patch(
+      task,
+      { priority: p },
+      `Priority set to ${priorityNames[p].toLowerCase()}`,
+    );
   const duplicate = (task: Task) => {
     const copy = S.createTask({
       title: task.title,
@@ -634,14 +730,21 @@ function Workspace({
   const copy = (text: string, message: string) =>
     navigator.clipboard.writeText(text).then(
       () => notify(message),
-      () => setToast({ id: Date.now(), text: "Copying is not available in this browser.", error: true }),
+      () =>
+        setToast({
+          id: Date.now(),
+          text: "Copying is not available in this browser.",
+          error: true,
+        }),
     );
   const goToProject = (task: Task) =>
     navigate(task.project_id ? `project:${task.project_id}` : "inbox");
   const rescheduleOverdue = () => {
     const moved = overdue.map((t) => ({ id: t.id, due: t.due_date }));
     for (const t of overdue) S.patchTask(t.id, { due_date: today });
-    notify(`${moved.length} moved to today`, () => moved.forEach((m) => S.patchTask(m.id, { due_date: m.due })));
+    notify(`${moved.length} moved to today`, () =>
+      moved.forEach((m) => S.patchTask(m.id, { due_date: m.due })),
+    );
   };
   const openDetail = (task: Task) => {
     setSelected(task.id);
@@ -650,7 +753,9 @@ function Workspace({
   const openInColumn = (task: Task) =>
     pc.open(`pc://tasks/task/${task.id}`, { placement: "new-column" });
   const openFull = () =>
-    pc.open(location.pathname.replace(/companion\.html$/, "") + hashFor(view), { placement: "new-column" });
+    pc.open(location.pathname.replace(/companion\.html$/, "") + hashFor(view), {
+      placement: "new-column",
+    });
   const openQuick = (defaults?: QuickDefaults) => {
     if (companion) {
       setFocusKey(Date.now());
@@ -665,12 +770,24 @@ function Workspace({
     );
   };
   const newProject = (name: string) => {
-    const colors = ["#db4035", "#ff9933", "#7ecc49", "#14aaf5", "#884dff", "#e05194", "#299438"];
-    return S.createProject(name.slice(0, 100), colors[projects.length % colors.length]);
+    const colors = [
+      "#db4035",
+      "#ff9933",
+      "#7ecc49",
+      "#14aaf5",
+      "#884dff",
+      "#e05194",
+      "#299438",
+    ];
+    return S.createProject(
+      name.slice(0, 100),
+      colors[projects.length % colors.length],
+    );
   };
   const bellAnchor = () =>
-    (document.querySelector(".bell-button") as HTMLElement | null)?.getBoundingClientRect() ||
-    new DOMRect(innerWidth - 40, 40, 0, 0);
+    (
+      document.querySelector(".bell-button") as HTMLElement | null
+    )?.getBoundingClientRect() || new DOMRect(innerWidth - 40, 40, 0, 0);
 
   /* ---------- menus ---------- */
 
@@ -686,9 +803,21 @@ function Workspace({
           <b>{now.getDate()}</b>
         </span>,
       ],
-      [daysFromNow(1), `Tomorrow · ${weekday(daysFromNow(1))}`, <Sunrise size={20} className="tone-orange" />],
-      [isoDate(weekendDate(now)), `This weekend · ${weekday(isoDate(weekendDate(now)))}`, <Sofa size={20} className="tone-blue" />],
-      [isoDate(nextWeekDate(now)), `Next week · ${weekday(isoDate(nextWeekDate(now)))}`, <ArrowRightToLine size={20} className="tone-purple" />],
+      [
+        daysFromNow(1),
+        `Tomorrow · ${weekday(daysFromNow(1))}`,
+        <Sunrise size={20} className="tone-orange" />,
+      ],
+      [
+        isoDate(weekendDate(now)),
+        `This weekend · ${weekday(isoDate(weekendDate(now)))}`,
+        <Sofa size={20} className="tone-blue" />,
+      ],
+      [
+        isoDate(nextWeekDate(now)),
+        `Next week · ${weekday(isoDate(nextWeekDate(now)))}`,
+        <ArrowRightToLine size={20} className="tone-purple" />,
+      ],
     ];
     return [
       ...dates
@@ -708,7 +837,11 @@ function Workspace({
       {
         label: "More dates",
         icon: <Ellipsis size={20} />,
-        action: () => setPicker({ task, anchor: { x: menu?.x ?? innerWidth / 2, y: menu?.y ?? 120 } }),
+        action: () =>
+          setPicker({
+            task,
+            anchor: { x: menu?.x ?? innerWidth / 2, y: menu?.y ?? 120 },
+          }),
       },
     ];
   };
@@ -739,13 +872,30 @@ function Workspace({
     }));
   function taskMenu(task: Task): MenuEntry[] {
     return [
-      { label: "Edit", icon: <Pencil size={16} />, shortcut: "E", key: "e", action: () => openDetail(task) },
+      {
+        label: "Edit",
+        icon: <Pencil size={16} />,
+        shortcut: "E",
+        key: "e",
+        action: () => openDetail(task),
+      },
       ...(hosted && !companion
         ? []
         : hosted
-          ? [{ label: "Open in a column", icon: <ExternalLink size={16} />, action: () => openInColumn(task) }]
+          ? [
+              {
+                label: "Open in a column",
+                icon: <ExternalLink size={16} />,
+                action: () => openInColumn(task),
+              },
+            ]
           : []),
-      { label: "Go to project", icon: <ListTree size={16} />, shortcut: "⇧G", action: () => goToProject(task) },
+      {
+        label: "Go to project",
+        icon: <ListTree size={16} />,
+        shortcut: "⇧G",
+        action: () => goToProject(task),
+      },
       {
         label: task.completed ? "Restore" : "Complete",
         icon: <CheckCircle2 size={16} />,
@@ -775,20 +925,38 @@ function Workspace({
                 {
                   label: "None",
                   checked: task.reminder_minutes === null,
-                  action: () => patch(task, { reminder_minutes: null }, "Reminder removed"),
+                  action: () =>
+                    patch(task, { reminder_minutes: null }, "Reminder removed"),
                 },
                 ...reminderChoices.map(([minutes, label]) => ({
                   label,
                   checked: task.reminder_minutes === minutes,
-                  action: () => patch(task, { reminder_minutes: minutes }, "Reminder set"),
+                  action: () =>
+                    patch(task, { reminder_minutes: minutes }, "Reminder set"),
                 })),
               ],
             } as MenuEntry,
           ]
         : []),
-      { label: "Move to", icon: <FolderInput size={16} />, shortcut: "V", key: "v", items: moveMenu(task) },
-      { label: "Duplicate", icon: <CopyPlus size={16} />, shortcut: "D", key: "d", action: () => duplicate(task) },
-      { label: "Copy link to task", icon: <Link size={16} />, action: () => copy(taskLink(task), "Link copied") },
+      {
+        label: "Move to",
+        icon: <FolderInput size={16} />,
+        shortcut: "V",
+        key: "v",
+        items: moveMenu(task),
+      },
+      {
+        label: "Duplicate",
+        icon: <CopyPlus size={16} />,
+        shortcut: "D",
+        key: "d",
+        action: () => duplicate(task),
+      },
+      {
+        label: "Copy link to task",
+        icon: <Link size={16} />,
+        action: () => copy(taskLink(task), "Link copied"),
+      },
       "separator",
       {
         label: "Delete task",
@@ -816,7 +984,11 @@ function Workspace({
   ];
   const projectMenu = (project: Project): MenuEntry[] => [
     ...addTaskIn(`project:${project.id}`),
-    { label: "Edit project", icon: <Pencil size={16} />, action: () => setProjectEditor(project) },
+    {
+      label: "Edit project",
+      icon: <Pencil size={16} />,
+      action: () => setProjectEditor(project),
+    },
     "separator",
     {
       label: "Delete project",
@@ -831,7 +1003,13 @@ function Workspace({
     },
   ];
   const listMenu = (): MenuEntry[] => [
-    { label: "Add task", icon: <Plus size={16} />, shortcut: "Q", key: "q", action: () => openQuick() },
+    {
+      label: "Add task",
+      icon: <Plus size={16} />,
+      shortcut: "Q",
+      key: "q",
+      action: () => openQuick(),
+    },
     "separator",
     {
       label: "Sort by",
@@ -856,13 +1034,27 @@ function Workspace({
       action: () => setPriorityFilter(!priorityFilter),
     },
     ...(overdue.length
-      ? [{ label: "Move overdue to today", icon: <CalendarDays size={16} />, action: rescheduleOverdue }]
+      ? [
+          {
+            label: "Move overdue to today",
+            icon: <CalendarDays size={16} />,
+            action: rescheduleOverdue,
+          },
+        ]
       : []),
     "separator",
-    { label: "Refresh", icon: <RefreshCw size={16} />, action: () => S.refresh() },
+    {
+      label: "Refresh",
+      icon: <RefreshCw size={16} />,
+      action: () => S.refresh(),
+    },
   ];
   // Right-click opens a menu at the pointer; a touch long-press opens it as a sheet.
-  const menuFor = (entries: () => MenuEntry[], title?: string, target?: string) => ({
+  const menuFor = (
+    entries: () => MenuEntry[],
+    title?: string,
+    target?: string,
+  ) => ({
     onContextMenu: (e: React.MouseEvent) => {
       if ((e.target as Element).closest(editable)) return;
       e.preventDefault();
@@ -881,7 +1073,8 @@ function Workspace({
     },
     onPointerDown: (e: React.PointerEvent) => {
       pointerType.current = e.pointerType;
-      if (e.pointerType !== "touch" || claimed.current === e.nativeEvent) return;
+      if (e.pointerType !== "touch" || claimed.current === e.nativeEvent)
+        return;
       claimed.current = e.nativeEvent;
       clearTimeout(press.current.timer);
       press.current.x = e.clientX;
@@ -890,17 +1083,38 @@ function Workspace({
         press.current.active = true;
         navigator.vibrate?.(10);
         getSelection()?.removeAllRanges();
-        setMenu({ x: press.current.x, y: press.current.y, entries: entries(), title, target, sheet: true });
+        setMenu({
+          x: press.current.x,
+          y: press.current.y,
+          entries: entries(),
+          title,
+          target,
+          sheet: true,
+        });
       }, 450);
     },
     onPointerMove: (e: React.PointerEvent) => {
-      if (Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8)
+      if (
+        Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8
+      )
         clearTimeout(press.current.timer);
     },
   });
-  const openMenuAt = (e: React.MouseEvent, entries: MenuEntry[], title?: string, target?: string) => {
+  const openMenuAt = (
+    e: React.MouseEvent,
+    entries: MenuEntry[],
+    title?: string,
+    target?: string,
+  ) => {
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setMenu({ x: box.right, y: box.bottom + 4, entries, title, target, sheet: sheet() });
+    setMenu({
+      x: box.right,
+      y: box.bottom + 4,
+      entries,
+      title,
+      target,
+      sheet: sheet(),
+    });
   };
 
   /* ---------- page behaviour ---------- */
@@ -909,7 +1123,8 @@ function Workspace({
     // Behave like an app: no browser context menu outside text and links.
     const native = (e: MouseEvent) => {
       const target = e.target as Element;
-      if (!target.closest?.(editable) && !getSelection()?.toString()) e.preventDefault();
+      if (!target.closest?.(editable) && !getSelection()?.toString())
+        e.preventDefault();
     };
     const released = () => {
       clearTimeout(press.current.timer);
@@ -953,11 +1168,22 @@ function Workspace({
     },
   );
 
-  const target = () => flat.find((t) => t.id === (selected || hovered.current)) || null;
-  const modalOpen = !!(quick || settings || shortcuts || projectEditor || menu || picker || bell);
+  const target = () =>
+    flat.find((t) => t.id === (selected || hovered.current)) || null;
+  const modalOpen = !!(
+    quick ||
+    settings ||
+    shortcuts ||
+    projectEditor ||
+    menu ||
+    picker ||
+    bell
+  );
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
-    const typing = (e.target as HTMLElement).matches?.("input,textarea,select,[contenteditable]");
+    const typing = (e.target as HTMLElement).matches?.(
+      "input,textarea,select,[contenteditable]",
+    );
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "z" && !typing && toast?.undo) {
       e.preventDefault();
@@ -997,7 +1223,13 @@ function Workspace({
     const key = e.key;
     if (Date.now() - gPending.current < 900) {
       gPending.current = 0;
-      const go = { t: "today", i: "inbox", u: "upcoming", c: "completed", a: "all" }[key.toLowerCase()];
+      const go = {
+        t: "today",
+        i: "inbox",
+        u: "upcoming",
+        c: "completed",
+        a: "all",
+      }[key.toLowerCase()];
       if (go) {
         e.preventDefault();
         navigate(go as View);
@@ -1032,15 +1264,33 @@ function Workspace({
       } else setDrawer(!drawer);
       return;
     }
-    if (key === "j" || key === "k" || key === "ArrowDown" || key === "ArrowUp") {
+    if (
+      key === "j" ||
+      key === "k" ||
+      key === "ArrowDown" ||
+      key === "ArrowUp"
+    ) {
       e.preventDefault();
       const i = flat.findIndex((t) => t.id === selected);
-      const next = flat[Math.max(0, Math.min(flat.length - 1, i + (key === "j" || key === "ArrowDown" ? 1 : -1)))];
+      const next =
+        flat[
+          Math.max(
+            0,
+            Math.min(
+              flat.length - 1,
+              i + (key === "j" || key === "ArrowDown" ? 1 : -1),
+            ),
+          )
+        ];
       if (next) {
         setSelected(next.id);
         if (openId && detailBeside) setOpenId(next.id);
         requestAnimationFrame(() =>
-          (listRef.current?.querySelector(`[data-id="${CSS.escape(next.id)}"]`) as HTMLElement | null)?.focus(),
+          (
+            listRef.current?.querySelector(
+              `[data-id="${CSS.escape(next.id)}"]`,
+            ) as HTMLElement | null
+          )?.focus(),
         );
       }
       return;
@@ -1052,14 +1302,28 @@ function Workspace({
     else if (key === "d") duplicate(t);
     else if (key === "G") goToProject(t);
     else if (key === "t") {
-      const row = listRef.current?.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+      const row = listRef.current?.querySelector(
+        `[data-id="${CSS.escape(t.id)}"]`,
+      );
       const box = row?.getBoundingClientRect();
-      setPicker({ task: t, anchor: box ? { x: box.left + 40, y: box.bottom } : { x: 100, y: 100 } });
+      setPicker({
+        task: t,
+        anchor: box ? { x: box.left + 40, y: box.bottom } : { x: 100, y: 100 },
+      });
     } else if (key === "T") schedule(t, null);
     else if (key === "v") {
-      const row = listRef.current?.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+      const row = listRef.current?.querySelector(
+        `[data-id="${CSS.escape(t.id)}"]`,
+      );
       const box = row?.getBoundingClientRect() || new DOMRect(100, 100, 0, 0);
-      setMenu({ x: box.left + 40, y: box.bottom, entries: moveMenu(t), title: "Move to", target: t.id, sheet: false });
+      setMenu({
+        x: box.left + 40,
+        y: box.bottom,
+        entries: moveMenu(t),
+        title: "Move to",
+        target: t.id,
+        sheet: false,
+      });
     } else if (["1", "2", "3", "4"].includes(key)) setPriority(t, Number(key));
     else return;
     e.preventDefault();
@@ -1076,7 +1340,15 @@ function Workspace({
     const project = projects.find((p) => p.id === task.project_id);
     const done = task.completed;
     const checklistDone = task.checklist.filter((i) => i.completed).length;
-    const showDate = task.due_date && !(view === "today" && task.due_date === today && !task.due_time && inGroup !== "search") && !(view === "upcoming" && inGroup === task.due_date && !task.due_time);
+    const showDate =
+      task.due_date &&
+      !(
+        view === "today" &&
+        task.due_date === today &&
+        !task.due_time &&
+        inGroup !== "search"
+      ) &&
+      !(view === "upcoming" && inGroup === task.due_date && !task.due_time);
     const meta = (
       <span className="task-meta">
         {showDate && (
@@ -1087,7 +1359,12 @@ function Workspace({
               : view === "today" && task.due_date === today && task.due_time
                 ? formatTime(task.due_time)
                 : dueLabel(task.due_date, task.due_time)}
-            {task.recurrence && <Repeat2 size={12} aria-label={recurrenceLabel[task.recurrence]} />}
+            {task.recurrence && (
+              <Repeat2
+                size={12}
+                aria-label={recurrenceLabel[task.recurrence]}
+              />
+            )}
           </span>
         )}
         {!showDate && task.recurrence && (
@@ -1096,7 +1373,10 @@ function Workspace({
           </span>
         )}
         {task.reminder_minutes !== null && task.due_time && !done && (
-          <span className="has-reminder" title={reminderLabel(task.reminder_minutes)}>
+          <span
+            className="has-reminder"
+            title={reminderLabel(task.reminder_minutes)}
+          >
             <Bell size={11} />
           </span>
         )}
@@ -1115,19 +1395,27 @@ function Workspace({
             {l}
           </span>
         ))}
-        {companion && view !== `project:${task.project_id}` && (project || view !== "inbox") && (
-          <span className="row-project">
-            <span style={{ color: project?.color || "var(--text-faint)" }}>#</span>
-            {project?.name || "Inbox"}
-          </span>
-        )}
+        {companion &&
+          view !== `project:${task.project_id}` &&
+          (project || view !== "inbox") && (
+            <span className="row-project">
+              <span style={{ color: project?.color || "var(--text-faint)" }}>
+                #
+              </span>
+              {project?.name || "Inbox"}
+            </span>
+          )}
       </span>
     );
     return (
       <div
         key={task.id}
         data-id={task.id}
-        tabIndex={selected === task.id || (!selected && flat[0]?.id === task.id) ? 0 : -1}
+        tabIndex={
+          selected === task.id || (!selected && flat[0]?.id === task.id)
+            ? 0
+            : -1
+        }
         className={`task-row ${done ? "is-complete" : ""} ${finishing.has(task.id) ? "is-finishing" : ""} ${menu?.target === task.id ? "menu-target" : ""} ${selected === task.id ? "is-selected" : ""} ${openId === task.id ? "is-open" : ""}`}
         onMouseEnter={() => (hovered.current = task.id)}
         onMouseLeave={() => (hovered.current = null)}
@@ -1144,9 +1432,15 @@ function Workspace({
         >
           <Check size={12} strokeWidth={3} />
         </button>
-        <button className="task-body" tabIndex={-1} onClick={() => openDetail(task)}>
+        <button
+          className="task-body"
+          tabIndex={-1}
+          onClick={() => openDetail(task)}
+        >
           <span className="task-title">{task.title}</span>
-          {task.description && !companion && <span className="task-description">{task.description}</span>}
+          {task.description && !companion && (
+            <span className="task-description">{task.description}</span>
+          )}
           {meta}
         </button>
         {!companion && (
@@ -1165,16 +1459,29 @@ function Workspace({
               tabIndex={-1}
               aria-label={`Set date for ${task.title}`}
               title="Date"
-              onClick={(e) => setPicker({ task, anchor: (e.currentTarget as HTMLElement).getBoundingClientRect() })}
+              onClick={(e) =>
+                setPicker({
+                  task,
+                  anchor: (
+                    e.currentTarget as HTMLElement
+                  ).getBoundingClientRect(),
+                })
+              }
             >
               <CalendarDays size={15} />
             </button>
           </div>
         )}
         {!companion && !view.startsWith("project:") && (
-          <button className="task-project" tabIndex={-1} onClick={() => goToProject(task)}>
+          <button
+            className="task-project"
+            tabIndex={-1}
+            onClick={() => goToProject(task)}
+          >
             {project?.name || "Inbox"}
-            <span style={{ color: project?.color || "var(--text-muted)" }}>#</span>
+            <span style={{ color: project?.color || "var(--text-muted)" }}>
+              #
+            </span>
           </button>
         )}
         <button
@@ -1194,13 +1501,25 @@ function Workspace({
     <div className="task-groups" ref={listRef} role="list">
       {groups.map((g) => {
         const isUpcomingDay = view === "upcoming" && !g.overdue && !!g.add;
-        if (!g.tasks.length && !isUpcomingDay && g.key !== "main" && g.key !== "search") return null;
+        if (
+          !g.tasks.length &&
+          !isUpcomingDay &&
+          g.key !== "main" &&
+          g.key !== "search"
+        )
+          return null;
         return (
-          <section className={`task-section ${g.overdue ? "is-overdue" : ""}`} key={g.key} data-group={g.key}>
+          <section
+            className={`task-section ${g.overdue ? "is-overdue" : ""}`}
+            key={g.key}
+            data-group={g.key}
+          >
             {g.title && (
               <h3 className={g.overdue ? "overdue" : ""}>
                 <span className="group-title">{g.title}</span>
-                {g.key !== "main" && <span className="group-count">{g.tasks.length || ""}</span>}
+                {g.key !== "main" && (
+                  <span className="group-count">{g.tasks.length || ""}</span>
+                )}
                 {g.overdue && (
                   <button onClick={rescheduleOverdue} title="Move all to today">
                     Reschedule
@@ -1209,7 +1528,9 @@ function Workspace({
               </h3>
             )}
             {g.tasks.map((t) => taskRow(t, g.key))}
-            {g.add && view !== "completed" && !search &&
+            {g.add &&
+              view !== "completed" &&
+              !search &&
               (inlineAdd === g.key ? (
                 <QuickAdd
                   variant="inline"
@@ -1223,7 +1544,10 @@ function Workspace({
                 />
               ) : (
                 !companion && (
-                  <button className="add-task-row" onClick={() => setInlineAdd(g.key)}>
+                  <button
+                    className="add-task-row"
+                    onClick={() => setInlineAdd(g.key)}
+                  >
                     <Plus size={18} /> Add task
                     {g.key === "main" && (
                       <span>
@@ -1268,8 +1592,12 @@ function Workspace({
     <button
       className={`icon-button bell-button ${permission === "granted" ? "is-on" : ""}`}
       aria-label="Reminders"
-      title={permission === "granted" ? "Reminders are on" : "Turn on reminders"}
-      onClick={(e) => setBell((e.currentTarget as HTMLElement).getBoundingClientRect())}
+      title={
+        permission === "granted" ? "Reminders are on" : "Turn on reminders"
+      }
+      onClick={(e) =>
+        setBell((e.currentTarget as HTMLElement).getBoundingClientRect())
+      }
     >
       {permission === "granted" ? <Bell size={17} /> : <BellOff size={17} />}
       {permission === "default" && <span className="dot" />}
@@ -1278,8 +1606,15 @@ function Workspace({
 
   const status =
     !online || pending ? (
-      <div className={`sync-status ${online ? "" : "is-offline"}`} role="status">
-        {online ? <RefreshCw size={12} className="spin" /> : <CloudOff size={12} />}
+      <div
+        className={`sync-status ${online ? "" : "is-offline"}`}
+        role="status"
+      >
+        {online ? (
+          <RefreshCw size={12} className="spin" />
+        ) : (
+          <CloudOff size={12} />
+        )}
         {online
           ? "Saving…"
           : pending
@@ -1296,7 +1631,8 @@ function Workspace({
         target="_top"
         href={
           hosted || location.pathname.startsWith("/apps/")
-            ? "/login?next=" + encodeURIComponent(location.pathname + location.hash)
+            ? "/login?next=" +
+              encodeURIComponent(location.pathname + location.hash)
             : "./"
         }
       >
@@ -1314,7 +1650,10 @@ function Workspace({
   };
 
   const sidebar = !companion && (
-    <aside className={`sidebar ${drawer ? "open" : ""}`} aria-label="Navigation">
+    <aside
+      className={`sidebar ${drawer ? "open" : ""}`}
+      aria-label="Navigation"
+    >
       <div className="sidebar-top">
         {!hosted ? <Logo /> : <span />}
         {wide && (
@@ -1345,25 +1684,31 @@ function Workspace({
         <Plus size={18} /> Add task <kbd>Q</kbd>
       </button>
       <nav>
-        {(["inbox", "today", "upcoming", "all", "completed"] as const).map((item) => {
-          const Icon = viewIcons[item];
-          return (
-            <button
-              className={view === item && !search ? "active" : ""}
-              onClick={() => navigate(item)}
-              key={item}
-              {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
-            >
-              <Icon size={18} className={`nav-${item}`} />
-              <span>{viewNames[item]}</span>
-              <small>{counts[item] || ""}</small>
-            </button>
-          );
-        })}
+        {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
+          (item) => {
+            const Icon = viewIcons[item];
+            return (
+              <button
+                className={view === item && !search ? "active" : ""}
+                onClick={() => navigate(item)}
+                key={item}
+                {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
+              >
+                <Icon size={18} className={`nav-${item}`} />
+                <span>{viewNames[item]}</span>
+                <small>{counts[item] || ""}</small>
+              </button>
+            );
+          },
+        )}
       </nav>
       <div className="sidebar-heading">
         My projects
-        <button className="icon-button" aria-label="Add project" onClick={() => setProjectEditor("new")}>
+        <button
+          className="icon-button"
+          aria-label="Add project"
+          onClick={() => setProjectEditor("new")}
+        >
           <Plus size={16} />
         </button>
       </div>
@@ -1379,10 +1724,16 @@ function Workspace({
               #
             </span>
             <span>{p.name}</span>
-            <small>{active.filter((t) => t.project_id === p.id).length || ""}</small>
+            <small>
+              {active.filter((t) => t.project_id === p.id).length || ""}
+            </small>
           </button>
         ))}
-        {!projects.length && <p className="sidebar-hint">Add one with +, or type #Name in quick add</p>}
+        {!projects.length && (
+          <p className="sidebar-hint">
+            Add one with +, or type #Name in quick add
+          </p>
+        )}
       </nav>
       <div className="sidebar-heading">
         Labels
@@ -1390,13 +1741,21 @@ function Workspace({
       </div>
       <nav>
         {labels.map((l) => (
-          <button key={l} className={view === `label:${l}` ? "active" : ""} onClick={() => navigate(`label:${l}`)}>
+          <button
+            key={l}
+            className={view === `label:${l}` ? "active" : ""}
+            onClick={() => navigate(`label:${l}`)}
+          >
             <span className="label-dot" />
             <span>{l}</span>
-            <small>{active.filter((t) => t.labels.includes(l)).length || ""}</small>
+            <small>
+              {active.filter((t) => t.labels.includes(l)).length || ""}
+            </small>
           </button>
         ))}
-        {!labels.length && <p className="sidebar-hint">Type @label in quick add</p>}
+        {!labels.length && (
+          <p className="sidebar-hint">Type @label in quick add</p>
+        )}
       </nav>
       <div className="sidebar-bottom">
         {status}
@@ -1419,11 +1778,20 @@ function Workspace({
       remove={() => removeTask(openTask)}
       close={() => setOpenId(null)}
       openMenu={(e, entries, title) =>
-        openMenuAt(e, entries || taskMenu(openTask), title || openTask.title, openTask.id)
+        openMenuAt(
+          e,
+          entries || taskMenu(openTask),
+          title || openTask.title,
+          openTask.id,
+        )
       }
       projectMenu={() => moveMenu(openTask)}
       priorityMenu={() => priorityMenu(openTask)}
-      openInColumn={hosted && (companion || detailBeside) ? () => openInColumn(openTask) : undefined}
+      openInColumn={
+        hosted && (companion || detailBeside)
+          ? () => openInColumn(openTask)
+          : undefined
+      }
       linked={<Linked text={openTask.description} />}
     />
   );
@@ -1434,15 +1802,25 @@ function Workspace({
     ["upcoming", "Upcoming", null],
     ["all", "All tasks", null],
     ["completed", "Completed", null],
-    ...projects.map((p): [View, string, React.ReactNode] => [`project:${p.id}`, "# " + p.name, null]),
-    ...labels.map((l): [View, string, React.ReactNode] => [`label:${l}`, "@" + l, null]),
+    ...projects.map((p): [View, string, React.ReactNode] => [
+      `project:${p.id}`,
+      "# " + p.name,
+      null,
+    ]),
+    ...labels.map((l): [View, string, React.ReactNode] => [
+      `label:${l}`,
+      "@" + l,
+      null,
+    ]),
   ];
 
   /* ---------- companion ---------- */
 
   if (companion)
     return (
-      <div className={`companion is-${surfaceKind}${peek ? " is-peek" : ""}${floating ? " is-floating" : ""}`}>
+      <div
+        className={`companion is-${surfaceKind}${peek ? " is-peek" : ""}${floating ? " is-floating" : ""}`}
+      >
         {!peek && (
           <header className="companion-head">
             <select
@@ -1457,12 +1835,19 @@ function Workspace({
                 </option>
               ))}
             </select>
-            <span className="companion-count">{flat.filter((t) => !t.completed).length || ""}</span>
+            <span className="companion-count">
+              {flat.filter((t) => !t.completed).length || ""}
+            </span>
             <span className="spacer" />
             {status}
             {bellButton}
             {hosted && (
-              <button className="icon-button" title="Open in a column" aria-label="Open in a column" onClick={openFull}>
+              <button
+                className="icon-button"
+                title="Open in a column"
+                aria-label="Open in a column"
+                onClick={openFull}
+              >
                 <ExternalLink size={15} />
               </button>
             )}
@@ -1481,11 +1866,15 @@ function Workspace({
           add={addTask}
           createProject={newProject}
           focusKey={focusKey}
-          placeholder={view === "today" ? "Add a task for today" : `Add to ${title}`}
+          placeholder={
+            view === "today" ? "Add a task for today" : `Add to ${title}`
+          }
         />
         {!peek && <div className="companion-list">{sections}</div>}
         {openTask && <div className="companion-detail">{detail}</div>}
-        {toast && <ToastView toast={toast} close={() => setToast(null)} compact />}
+        {toast && (
+          <ToastView toast={toast} close={() => setToast(null)} compact />
+        )}
         {menu && <ContextMenu request={menu} close={() => setMenu(null)} />}
         {picker && (
           <DatePicker
@@ -1495,22 +1884,44 @@ function Workspace({
             change={(next) => patchDue(picker.task, next)}
           />
         )}
-        {bell && <BellPanel anchor={bell} close={() => setBell(null)} tasks={tasks} hosted={hosted} />}
+        {bell && (
+          <BellPanel
+            anchor={bell}
+            close={() => setBell(null)}
+            tasks={tasks}
+            hosted={hosted}
+          />
+        )}
         {shortcuts && <ShortcutsDialog close={() => setShortcuts(false)} />}
       </div>
     );
 
-  function patchDue(task: Task, next: { due_date: string | null; due_time: string | null; recurrence: string | null }) {
+  function patchDue(
+    task: Task,
+    next: {
+      due_date: string | null;
+      due_time: string | null;
+      recurrence: string | null;
+    },
+  ) {
     patch(
       task,
       {
         due_date: next.due_date,
         due_time: next.due_date ? next.due_time : null,
-        recurrence: next.due_date ? (next.recurrence as Task["recurrence"]) : null,
+        recurrence: next.due_date
+          ? (next.recurrence as Task["recurrence"])
+          : null,
         reminder_minutes:
-          next.due_date && next.due_time ? (task.due_time ? task.reminder_minutes : autoReminder()) : null,
+          next.due_date && next.due_time
+            ? task.due_time
+              ? task.reminder_minutes
+              : autoReminder()
+            : null,
       },
-      next.due_date ? `Scheduled for ${dueLabel(next.due_date, next.due_time)}` : "Date removed",
+      next.due_date
+        ? `Scheduled for ${dueLabel(next.due_date, next.due_time)}`
+        : "Date removed",
     );
   }
 
@@ -1522,7 +1933,11 @@ function Workspace({
     >
       {sidebar}
       {drawer && !sidebarDocked && (
-        <button className="mobile-shade" aria-label="Close navigation" onClick={() => setDrawer(false)} />
+        <button
+          className="mobile-shade"
+          aria-label="Close navigation"
+          onClick={() => setDrawer(false)}
+        />
       )}
       <div className="main-shell">
         <header className="topbar">
@@ -1543,7 +1958,8 @@ function Workspace({
           )}
           {!hosted && (
             <div className="breadcrumb">
-              My workspace <span className="crumb-sep">/</span> <span>{title}</span>
+              My workspace <span className="crumb-sep">/</span>{" "}
+              <span>{title}</span>
             </div>
           )}
           <span className="spacer" />
@@ -1564,7 +1980,11 @@ function Workspace({
                   const first = flat[0];
                   if (first) {
                     setSelected(first.id);
-                    (listRef.current?.querySelector(`[data-id="${CSS.escape(first.id)}"]`) as HTMLElement | null)?.focus();
+                    (
+                      listRef.current?.querySelector(
+                        `[data-id="${CSS.escape(first.id)}"]`,
+                      ) as HTMLElement | null
+                    )?.focus();
                   }
                 }
               }}
@@ -1579,7 +1999,11 @@ function Workspace({
           </div>
           {bellButton}
           {!hosted && (
-            <button className="top-avatar" aria-label="Open settings" onClick={() => setSettings(true)}>
+            <button
+              className="top-avatar"
+              aria-label="Open settings"
+              onClick={() => setSettings(true)}
+            >
               {user.name.slice(0, 1)}
             </button>
           )}
@@ -1590,7 +2014,10 @@ function Workspace({
             <div className="page-title">
               <h1>
                 {selectedProject && (
-                  <span className="project-hash" style={{ color: selectedProject.color }}>
+                  <span
+                    className="project-hash"
+                    style={{ color: selectedProject.color }}
+                  >
                     #
                   </span>
                 )}
@@ -1679,9 +2106,20 @@ function Workspace({
           change={(next) => patchDue(picker.task, next)}
         />
       )}
-      {bell && <BellPanel anchor={bell} close={() => setBell(null)} tasks={tasks} hosted={hosted} />}
+      {bell && (
+        <BellPanel
+          anchor={bell}
+          close={() => setBell(null)}
+          tasks={tasks}
+          hosted={hosted}
+        />
+      )}
       {quick && (
-        <Modal close={() => setQuick(null)} label="Add task" className="is-quick">
+        <Modal
+          close={() => setQuick(null)}
+          label="Add task"
+          className="is-quick"
+        >
           <QuickAdd
             variant="modal"
             projects={projects}
@@ -1729,7 +2167,10 @@ function Workspace({
             S.signOut(async () => {
               await disableBrowserPush().catch(() => {});
               await api("/auth/logout", "POST");
-            }).then(() => setSettings(false), (e) => setToast({ id: Date.now(), text: e.message, error: true }))
+            }).then(
+              () => setSettings(false),
+              (e) => setToast({ id: Date.now(), text: e.message, error: true }),
+            )
           }
           deleteAccount={() =>
             S.signOut(() => api("/me", "DELETE")).then(
@@ -1744,9 +2185,21 @@ function Workspace({
   );
 }
 
-function ToastView({ toast, close, compact }: { toast: Toast; close: () => void; compact?: boolean }) {
+function ToastView({
+  toast,
+  close,
+  compact,
+}: {
+  toast: Toast;
+  close: () => void;
+  compact?: boolean;
+}) {
   return (
-    <div className={`toast ${toast.error ? "is-error" : ""} ${compact ? "is-compact" : ""}`} role="status" key={toast.id}>
+    <div
+      className={`toast ${toast.error ? "is-error" : ""} ${compact ? "is-compact" : ""}`}
+      role="status"
+      key={toast.id}
+    >
       {toast.error ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}
       <span>{toast.text}</span>
       {toast.undo && (
@@ -1767,14 +2220,24 @@ function ToastView({ toast, close, compact }: { toast: Toast; close: () => void;
   );
 }
 
-function WeekStrip({ tasks, jump }: { tasks: Task[]; jump: (date: string) => void }) {
+function WeekStrip({
+  tasks,
+  jump,
+}: {
+  tasks: Task[];
+  jump: (date: string) => void;
+}) {
   const days = Array.from({ length: 7 }, (_, i) => daysFromNow(i));
   return (
     <div className="week-strip" role="navigation" aria-label="This week">
       {days.map((d, i) => {
         const n = tasks.filter((t) => t.due_date === d).length;
         return (
-          <button key={d} className={i === 0 ? "is-today" : ""} onClick={() => jump(d)}>
+          <button
+            key={d}
+            className={i === 0 ? "is-today" : ""}
+            onClick={() => jump(d)}
+          >
             <small>{weekday(d)}</small>
             <strong>{Number(d.slice(8))}</strong>
             <span className="week-dots" aria-label={`${n} tasks`}>
@@ -1811,14 +2274,20 @@ function BellPanel({
   }, []);
   const upcoming = tasks
     .map((t) => ({ t, at: reminderAt(t) }))
-    .filter((r): r is { t: Task; at: number } => r.at !== null && r.at > Date.now())
+    .filter(
+      (r): r is { t: Task; at: number } => r.at !== null && r.at > Date.now(),
+    )
     .sort((a, b) => a.at - b.at)
     .slice(0, 4);
   return (
     <Popover anchor={anchor} close={close} label="Reminders" width={320}>
       <div className="bell-panel">
         <div className="bell-head">
-          {permission === "granted" ? <BellRing size={18} className="tone-green" /> : <BellOff size={18} />}
+          {permission === "granted" ? (
+            <BellRing size={18} className="tone-green" />
+          ) : (
+            <BellOff size={18} />
+          )}
           <div>
             <strong>Reminders</strong>
             <p>
@@ -1871,7 +2340,11 @@ function BellPanel({
               <div key={t.id}>
                 <span>{t.title}</span>
                 <time>
-                  {new Date(at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                  {new Date(at).toLocaleString(undefined, {
+                    weekday: "short",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
                 </time>
               </div>
             ))}
@@ -1889,7 +2362,11 @@ function BellPanel({
             className="secondary"
             onClick={() =>
               showReminder(
-                { ...(upcoming[0]?.t || ({ id: "test", title: "Test reminder" } as Task)), title: upcoming[0]?.t.title || "Test reminder" },
+                {
+                  ...(upcoming[0]?.t ||
+                    ({ id: "test", title: "Test reminder" } as Task)),
+                  title: upcoming[0]?.t.title || "Test reminder",
+                },
                 "test-" + Date.now(),
                 "This is how reminders look.",
               )
@@ -1917,7 +2394,11 @@ function Linked({ text }: { text: string }) {
             {r.label || r.ref}
           </PcEmbed>
         ) : (
-          <button key={i} className="linked-link" onClick={() => pc.open(r.ref, { placement: "new-column" })}>
+          <button
+            key={i}
+            className="linked-link"
+            onClick={() => pc.open(r.ref, { placement: "new-column" })}
+          >
             {r.label || r.ref.replace(/^pc:\/\/[^/]+\//, "")}
           </button>
         ),

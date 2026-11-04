@@ -14,7 +14,13 @@ import {
   Sunrise,
 } from "lucide-react";
 import { localDate, type Task } from "./api";
-import { isoDate, nextWeekDate, parseQuick, weekendDate, type Recurrence } from "./parse";
+import {
+  isoDate,
+  nextWeekDate,
+  parseQuick,
+  weekendDate,
+  type Recurrence,
+} from "./parse";
 
 export const priorityNames: Record<number, string> = {
   1: "Urgent",
@@ -54,7 +60,9 @@ export const weekday = (value: string, style: "short" | "long" = "short") =>
 export function dueLabel(date: string | null, time?: string | null) {
   if (!date) return "";
   const today = localDate();
-  const diff = Math.round((at12(date).getTime() - at12(today).getTime()) / 86400000);
+  const diff = Math.round(
+    (at12(date).getTime() - at12(today).getTime()) / 86400000,
+  );
   let text: string;
   if (diff === 0) text = "Today";
   else if (diff === 1) text = "Tomorrow";
@@ -64,14 +72,19 @@ export function dueLabel(date: string | null, time?: string | null) {
     text = at12(date).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
-      ...(at12(date).getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
+      ...(at12(date).getFullYear() !== new Date().getFullYear()
+        ? { year: "numeric" }
+        : {}),
     });
   return time ? `${text} ${formatTime(time)}` : text;
 }
 export function formatTime(time: string) {
   const [h, m] = time.split(":").map(Number);
   const d = new Date(2000, 0, 1, h, m);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 /** Colour family for a due date, as Todoist does: overdue red, today green, tomorrow orange, this week purple. */
 export function dueTone(date: string | null, completed = false) {
@@ -86,7 +99,13 @@ export function dueTone(date: string | null, completed = false) {
 export const isOverdue = (t: Pick<Task, "due_date" | "completed">) =>
   !!t.due_date && !t.completed && t.due_date < localDate();
 
-export function PriorityFlag({ priority, size = 16 }: { priority: number; size?: number }) {
+export function PriorityFlag({
+  priority,
+  size = 16,
+}: {
+  priority: number;
+  size?: number;
+}) {
   return (
     <Flag
       size={size}
@@ -133,18 +152,25 @@ export function Popover({
     let left = Math.min(a.left, innerWidth - box.width - 8);
     left = Math.max(8, left);
     let top = a.bottom + 6;
-    if (top + box.height > innerHeight - 8) top = Math.max(8, a.top - box.height - 6);
+    if (top + box.height > innerHeight - 8)
+      top = Math.max(8, a.top - box.height - 6);
     setPos({ left, top });
   }, [anchor, sheet]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const outside = (e: PointerEvent) => {
       const target = e.target as Element;
-      if (!ref.current?.contains(target) && !target.closest?.(".context-menu, .menu-sheet"))
+      if (
+        !ref.current?.contains(target) &&
+        !target.closest?.(".context-menu, .menu-sheet")
+      )
         closeRef.current();
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(".context-menu, .menu-sheet")) {
+      if (
+        e.key === "Escape" &&
+        !document.querySelector(".context-menu, .menu-sheet")
+      ) {
         e.stopPropagation();
         e.preventDefault();
         closeRef.current();
@@ -174,7 +200,10 @@ export function Popover({
     </div>
   );
   return sheet ? (
-    <div className="popover-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
+    <div
+      className="popover-backdrop"
+      onPointerDown={(e) => e.target === e.currentTarget && close()}
+    >
       {body}
     </div>
   ) : (
@@ -184,7 +213,11 @@ export function Popover({
 
 /* ---------- date picker ---------- */
 
-export type Due = { due_date: string | null; due_time: string | null; recurrence: string | null };
+export type Due = {
+  due_date: string | null;
+  due_time: string | null;
+  recurrence: string | null;
+};
 export function DatePicker({
   value,
   change,
@@ -202,9 +235,7 @@ export function DatePicker({
     return new Date(d.getFullYear(), d.getMonth(), 1, 12);
   });
   const [typed, setTyped] = useState("");
-  const typedResult = typed.trim()
-    ? parseQuick("x " + typed, {})
-    : null;
+  const typedResult = typed.trim() ? parseQuick("x " + typed, {}) : null;
   const typedDue =
     typedResult && typedResult.tokens.length && typedResult.title === "x"
       ? typedResult
@@ -221,8 +252,18 @@ export function DatePicker({
   const quick: [string | null, string, React.ReactNode, string][] = [
     [today, "Today", <Calendar size={18} />, "tone-green"],
     [daysFromNow(1), "Tomorrow", <Sunrise size={18} />, "tone-orange"],
-    [isoDate(weekendDate(now)), "This weekend", <Sofa size={18} />, "tone-blue"],
-    [isoDate(nextWeekDate(now)), "Next week", <ArrowRightToLine size={18} />, "tone-purple"],
+    [
+      isoDate(weekendDate(now)),
+      "This weekend",
+      <Sofa size={18} />,
+      "tone-blue",
+    ],
+    [
+      isoDate(nextWeekDate(now)),
+      "Next week",
+      <ArrowRightToLine size={18} />,
+      "tone-purple",
+    ],
     [null, "No date", <CircleSlash size={18} />, "tone-muted"],
   ];
   const seen = new Set<string | null>();
@@ -288,13 +329,20 @@ export function DatePicker({
         <div className="date-month">
           <div className="date-month-head">
             <strong>
-              {month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+              {month.toLocaleDateString(undefined, {
+                month: "long",
+                year: "numeric",
+              })}
             </strong>
             <button
               type="button"
               className="icon-button"
               aria-label="Previous month"
-              onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1, 12))}
+              onClick={() =>
+                setMonth(
+                  new Date(month.getFullYear(), month.getMonth() - 1, 1, 12),
+                )
+              }
             >
               <ChevronLeft size={16} />
             </button>
@@ -302,7 +350,11 @@ export function DatePicker({
               type="button"
               className="icon-button"
               aria-label="Next month"
-              onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1, 12))}
+              onClick={() =>
+                setMonth(
+                  new Date(month.getFullYear(), month.getMonth() + 1, 1, 12),
+                )
+              }
             >
               <ChevronRight size={16} />
             </button>
@@ -342,7 +394,9 @@ export function DatePicker({
               aria-label="Due time"
               value={value.due_time || ""}
               disabled={!value.due_date}
-              onChange={(e) => change({ ...value, due_time: e.target.value || null })}
+              onChange={(e) =>
+                change({ ...value, due_time: e.target.value || null })
+              }
             />
           </label>
           <label>
@@ -352,7 +406,10 @@ export function DatePicker({
               value={value.recurrence || ""}
               disabled={!value.due_date}
               onChange={(e) =>
-                change({ ...value, recurrence: (e.target.value || null) as Recurrence | null })
+                change({
+                  ...value,
+                  recurrence: (e.target.value || null) as Recurrence | null,
+                })
               }
             >
               <option value="">Does not repeat</option>
@@ -369,7 +426,9 @@ export function DatePicker({
 
 /** A textarea that grows with its content. */
 export function AutoText(
-  props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { minRows?: number },
+  props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+    minRows?: number;
+  },
 ) {
   const { minRows = 1, ...rest } = props;
   const ref = useRef<HTMLTextAreaElement>(null);

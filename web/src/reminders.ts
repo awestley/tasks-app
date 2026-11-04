@@ -49,7 +49,13 @@ export function zonedInstant(date: string, time: string, zone: string) {
           .map((p) => [p.type, p.value]),
       );
       return (
-        Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute) - t
+        Date.UTC(
+          +parts.year,
+          +parts.month - 1,
+          +parts.day,
+          +parts.hour,
+          +parts.minute,
+        ) - t
       );
     } catch {
       return -new Date(t).getTimezoneOffset() * 60000;
@@ -60,14 +66,20 @@ export function zonedInstant(date: string, time: string, zone: string) {
   return Math.min(first, second);
 }
 export function reminderAt(task: Task): number | null {
-  if (task.completed || task.reminder_minutes === null || !task.due_date || !task.due_time)
+  if (
+    task.completed ||
+    task.reminder_minutes === null ||
+    !task.due_date ||
+    !task.due_time
+  )
     return null;
   return (
     zonedInstant(task.due_date, task.due_time, task.time_zone) -
     task.reminder_minutes * 60000
   );
 }
-export const reminderTag = (task: Task, at: number) => `reminder-${task.id}-${at}`;
+export const reminderTag = (task: Task, at: number) =>
+  `reminder-${task.id}-${at}`;
 
 /* ---------- permission ---------- */
 
@@ -123,12 +135,16 @@ export async function subscribePush() {
   if (!reg) return false;
   await navigator.serviceWorker.ready;
   const key = config.vapid_public_key.replace(/-/g, "+").replace(/_/g, "/");
-  const bytes = Uint8Array.from(atob(key.padEnd(Math.ceil(key.length / 4) * 4, "=")), (c) =>
-    c.charCodeAt(0),
+  const bytes = Uint8Array.from(
+    atob(key.padEnd(Math.ceil(key.length / 4) * 4, "=")),
+    (c) => c.charCodeAt(0),
   );
   const subscription =
     (await reg.pushManager.getSubscription()) ||
-    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes }));
+    (await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: bytes,
+    }));
   const data = subscription.toJSON();
   const device = await api<{ id: string }>("/push/subscriptions", "POST", {
     kind: "web",
@@ -161,7 +177,9 @@ export async function enableNotifications(): Promise<Permission> {
 export async function showReminder(task: Task, tag: string, body?: string) {
   if (currentPermission() !== "granted") return false;
   const title = task.title.slice(0, 160);
-  const options: NotificationOptions & { actions?: { action: string; title: string }[] } = {
+  const options: NotificationOptions & {
+    actions?: { action: string; title: string }[];
+  } = {
     body: body || reminderBody(task),
     tag,
     icon: new URL("icon-192.png", location.href).href,
@@ -185,14 +203,21 @@ function reminderBody(task: Task) {
   if (!task.due_time) return "Task reminder";
   if (task.reminder_minutes === 0) return `Due now · ${task.due_time}`;
   const m = task.reminder_minutes || 0;
-  const lead = m >= 1440 ? `${Math.round(m / 1440)} day` : m >= 60 ? `${Math.round(m / 60)} h` : `${m} min`;
+  const lead =
+    m >= 1440
+      ? `${Math.round(m / 1440)} day`
+      : m >= 60
+        ? `${Math.round(m / 60)} h`
+        : `${m} min`;
   return `Due in ${lead} · ${task.due_time}`;
 }
 
 /** Claim a reminder for this browser, so only one open view announces it. */
 function claim(tag: string) {
   try {
-    const fired: Record<string, number> = JSON.parse(localStorage.getItem(FIRED) || "{}");
+    const fired: Record<string, number> = JSON.parse(
+      localStorage.getItem(FIRED) || "{}",
+    );
     if (fired[tag]) return false;
     const cutoff = Date.now() - 3 * 86400000;
     for (const k of Object.keys(fired)) if (fired[k] < cutoff) delete fired[k];
@@ -215,7 +240,10 @@ export function scheduleReminders(
   const now = Date.now();
   const upcoming = tasks
     .map((task) => ({ task, at: reminderAt(task) }))
-    .filter((r): r is { task: Task; at: number } => r.at !== null && r.at > now - MISSED_GRACE)
+    .filter(
+      (r): r is { task: Task; at: number } =>
+        r.at !== null && r.at > now - MISSED_GRACE,
+    )
     .sort((a, b) => a.at - b.at);
   const fire = () => {
     const t = Date.now();

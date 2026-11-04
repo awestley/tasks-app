@@ -2,7 +2,13 @@
 // "every …", p1–p4, #Project, @label and "!30m before" highlight at once, without waiting on the
 // server, so it works offline too. # and @ suggest projects and labels. Enter adds the task and
 // keeps the field open for the next one. Click a highlighted word to keep it as plain text.
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Bell,
   CalendarDays,
@@ -16,7 +22,13 @@ import {
 } from "lucide-react";
 import type { Project, Task } from "./api";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
-import { parseQuick, stripTokens, tokenKey, type Token, type TokenKind } from "./parse";
+import {
+  parseQuick,
+  stripTokens,
+  tokenKey,
+  type Token,
+  type TokenKind,
+} from "./parse";
 import { autoReminder } from "./reminders";
 import {
   DatePicker,
@@ -119,7 +131,11 @@ export function QuickAdd({
       ? over.project_id
       : (parsed.project_id ?? defaults.project_id ?? null);
   const taskLabels = [
-    ...new Set([...(defaults.labels || []), ...parsed.labels, ...(over.labels || [])]),
+    ...new Set([
+      ...(defaults.labels || []),
+      ...parsed.labels,
+      ...(over.labels || []),
+    ]),
   ];
   const reminder =
     over.reminder !== undefined
@@ -163,8 +179,13 @@ export function QuickAdd({
   // Suggestions for #project and @label at the caret.
   function updateSuggest(value: string, caret: number) {
     let i = caret - 1;
-    while (i >= 0 && value[i] !== "#" && value[i] !== "@" && caret - i <= 40) i--;
-    if (i < 0 || (value[i] !== "#" && value[i] !== "@") || (i > 0 && !/\s/.test(value[i - 1]))) {
+    while (i >= 0 && value[i] !== "#" && value[i] !== "@" && caret - i <= 40)
+      i--;
+    if (
+      i < 0 ||
+      (value[i] !== "#" && value[i] !== "@") ||
+      (i > 0 && !/\s/.test(value[i - 1]))
+    ) {
       setSuggest(null);
       return;
     }
@@ -176,18 +197,30 @@ export function QuickAdd({
     if (trigger === "#") {
       items = projects
         .filter((p) => p.name.toLowerCase().includes(q))
-        .sort((a, b) => +!a.name.toLowerCase().startsWith(q) - +!b.name.toLowerCase().startsWith(q))
+        .sort(
+          (a, b) =>
+            +!a.name.toLowerCase().startsWith(q) -
+            +!b.name.toLowerCase().startsWith(q),
+        )
         .slice(0, 6)
         .map((p) => ({ label: p.name, insert: "#" + p.name, color: p.color }));
       if (!items.length && /\s$/.test(query)) return setSuggest(null);
-      if (query.trim() && !projects.some((p) => p.name.toLowerCase() === q.trim()))
-        items.push({ label: `Create project “${query.trim()}”`, insert: query.trim(), create: true });
+      if (
+        query.trim() &&
+        !projects.some((p) => p.name.toLowerCase() === q.trim())
+      )
+        items.push({
+          label: `Create project “${query.trim()}”`,
+          insert: query.trim(),
+          create: true,
+        });
     } else {
       items = labels
         .filter((l) => l.includes(q))
         .slice(0, 6)
         .map((l) => ({ label: l, insert: "@" + l }));
-      if (q && !labels.includes(q)) items.push({ label: `New label “${q}”`, insert: "@" + q });
+      if (q && !labels.includes(q))
+        items.push({ label: `New label “${q}”`, insert: "@" + q });
     }
     if (!items.length) return setSuggest(null);
     setSuggest({ trigger, start: i, end: caret, items, index: 0 });
@@ -196,7 +229,11 @@ export function QuickAdd({
     if (!suggest) return;
     let insert = item.insert;
     if (item.create) insert = "#" + createProject(item.insert).name;
-    const next = text.slice(0, suggest.start) + insert + " " + text.slice(suggest.end).replace(/^\s+/, "");
+    const next =
+      text.slice(0, suggest.start) +
+      insert +
+      " " +
+      text.slice(suggest.end).replace(/^\s+/, "");
     setText(next);
     setSuggest(null);
     const caret = suggest.start + insert.length + 1;
@@ -208,7 +245,8 @@ export function QuickAdd({
 
   // Keep the highlights lined up with the field while it scrolls sideways.
   useLayoutEffect(() => {
-    if (backdrop.current && input.current) backdrop.current.scrollLeft = input.current.scrollLeft;
+    if (backdrop.current && input.current)
+      backdrop.current.scrollLeft = input.current.scrollLeft;
   });
 
   const segments: React.ReactNode[] = [];
@@ -297,12 +335,23 @@ export function QuickAdd({
               const current = new Set(o.labels || []);
               if (taskLabels.includes(l)) {
                 current.delete(l);
-                if (parsed.labels.includes(l)) setIgnore(new Set([...ignore, tokenKey({ kind: "label", text: "@" + l })]));
+                if (parsed.labels.includes(l))
+                  setIgnore(
+                    new Set([
+                      ...ignore,
+                      tokenKey({ kind: "label", text: "@" + l }),
+                    ]),
+                  );
               } else current.add(l);
               return { ...o, labels: [...current] };
             }),
         }))
-      : [{ label: "Type @ and a name to add a label", action: () => input.current?.focus() }];
+      : [
+          {
+            label: "Type @ and a name to add a label",
+            action: () => input.current?.focus(),
+          },
+        ];
 
   const showChips = variant !== "bar" || focused || text.length > 0;
   const chips = showChips && (
@@ -312,12 +361,16 @@ export function QuickAdd({
           type="button"
           className={`qa-chip ${due.due_date ? "is-set " + dueTone(due.due_date) : ""}`}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => setPicker((e.currentTarget as HTMLElement).getBoundingClientRect())}
+          onClick={(e) =>
+            setPicker((e.currentTarget as HTMLElement).getBoundingClientRect())
+          }
           aria-label="Date"
         >
           <CalendarDays size={14} />
           {due.due_date ? dueLabel(due.due_date, due.due_time) : "Date"}
-          {due.recurrence && <Repeat2 size={12} aria-label={recurrenceLabel[due.recurrence]} />}
+          {due.recurrence && (
+            <Repeat2 size={12} aria-label={recurrenceLabel[due.recurrence]} />
+          )}
         </button>
         {due.due_date && (
           <button
@@ -327,7 +380,10 @@ export function QuickAdd({
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               replaceTokens(["date", "time", "recurrence"]);
-              setOver((o) => ({ ...o, due: { due_date: null, due_time: null, recurrence: null } }));
+              setOver((o) => ({
+                ...o,
+                due: { due_date: null, due_time: null, recurrence: null },
+              }));
             }}
           >
             <X size={12} />
@@ -354,7 +410,11 @@ export function QuickAdd({
           title={reminderLabel(reminder)}
         >
           <Bell size={14} />
-          {reminder === null ? "Reminder" : reminder === 0 ? "At time" : reminderLabel(reminder).replace(" before", "")}
+          {reminder === null
+            ? "Reminder"
+            : reminder === 0
+              ? "At time"
+              : reminderLabel(reminder).replace(" before", "")}
         </button>
       )}
       <button
@@ -401,7 +461,9 @@ export function QuickAdd({
           aria-label="Task name"
           placeholder={
             placeholder ||
-            (variant === "bar" ? "Add a task" : "Task name, e.g. Call mom tomorrow 5pm p1 #Home")
+            (variant === "bar"
+              ? "Add a task"
+              : "Task name, e.g. Call mom tomorrow 5pm p1 #Home")
           }
           maxLength={500}
           autoFocus={autoFocus}
@@ -416,18 +478,25 @@ export function QuickAdd({
           onClick={(e) => {
             // Clicking a highlighted word keeps it as plain text, as in Todoist.
             const el = e.currentTarget;
-            if (!pointerDown.current || el.selectionStart !== el.selectionEnd) return;
+            if (!pointerDown.current || el.selectionStart !== el.selectionEnd)
+              return;
             pointerDown.current = false;
             const caret = el.selectionStart ?? 0;
-            const hit = parsed.tokens.find((t: Token) => caret > t.start && caret < t.end);
+            const hit = parsed.tokens.find(
+              (t: Token) => caret > t.start && caret < t.end,
+            );
             if (hit) setIgnore(new Set([...ignore, tokenKey(hit)]));
           }}
           onScroll={(e) => {
-            if (backdrop.current) backdrop.current.scrollLeft = e.currentTarget.scrollLeft;
+            if (backdrop.current)
+              backdrop.current.scrollLeft = e.currentTarget.scrollLeft;
           }}
           onChange={(e) => {
             setText(e.target.value);
-            updateSuggest(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            updateSuggest(
+              e.target.value,
+              e.target.selectionStart ?? e.target.value.length,
+            );
           }}
           onKeyDown={(e) => {
             if (suggest) {
@@ -436,14 +505,18 @@ export function QuickAdd({
                 const n = suggest.items.length;
                 setSuggest({
                   ...suggest,
-                  index: (suggest.index + (e.key === "ArrowDown" ? 1 : n - 1)) % n,
+                  index:
+                    (suggest.index + (e.key === "ArrowDown" ? 1 : n - 1)) % n,
                 });
                 return;
               }
               const item = suggest.items[suggest.index];
-              const typed = text.slice(suggest.start, suggest.end).toLowerCase();
+              const typed = text
+                .slice(suggest.start, suggest.end)
+                .toLowerCase();
               // When picking would not change the text (a whole project name, or a new label), Enter adds the task.
-              const finished = !item.create && item.insert.toLowerCase() === typed;
+              const finished =
+                !item.create && item.insert.toLowerCase() === typed;
               if (e.key === "Tab" || (e.key === "Enter" && !finished)) {
                 e.preventDefault();
                 choose(item);
@@ -468,7 +541,9 @@ export function QuickAdd({
               } else close?.();
             } else if (e.key === "ArrowDown" && variant === "bar" && !text) {
               e.preventDefault();
-              (document.querySelector(".task-row") as HTMLElement | null)?.focus();
+              (
+                document.querySelector(".task-row") as HTMLElement | null
+              )?.focus();
             }
           }}
         />
@@ -485,7 +560,11 @@ export function QuickAdd({
         </button>
       )}
       {suggest && (
-        <div className="qa-suggest gl-glass" role="listbox" aria-label="Suggestions">
+        <div
+          className="qa-suggest gl-glass"
+          role="listbox"
+          aria-label="Suggestions"
+        >
           {suggest.items.map((item, i) => (
             <button
               key={item.label}

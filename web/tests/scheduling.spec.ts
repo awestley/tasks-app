@@ -22,9 +22,9 @@ test("quick add parses as you type, corrections, reminders and notification sett
   await expect(dialog.locator(".qa-backdrop .tok-time")).toHaveText(
     "Afternoon",
   );
-  await expect(dialog.getByRole("button", { name: "Date", exact: true })).toContainText(
-    "3:00 PM",
-  );
+  await expect(
+    dialog.getByRole("button", { name: "Date", exact: true }),
+  ).toContainText("3:00 PM");
   await expect(
     dialog.getByRole("button", { name: "Reminder", exact: true }),
   ).toContainText("At time");
@@ -68,15 +68,15 @@ test("quick add parses as you type, corrections, reminders and notification sett
   const word = (await dialog.locator(".qa-backdrop .tok-date").boundingBox())!;
   await page.mouse.click(word.x + word.width / 2, word.y + word.height / 2);
   await expect(dialog.locator(".qa-backdrop .tok-date")).toHaveCount(0);
-  await expect(dialog.getByRole("button", { name: "Date", exact: true })).toContainText(
-    "10:00 AM",
-  );
+  await expect(
+    dialog.getByRole("button", { name: "Date", exact: true }),
+  ).toContainText("10:00 AM");
   await dialog.getByRole("button", { name: "Date", exact: true }).click();
   await page.getByLabel("Due time", { exact: true }).fill("11:30");
   await page.keyboard.press("Escape");
-  await expect(dialog.getByRole("button", { name: "Date", exact: true })).toContainText(
-    "11:30 AM",
-  );
+  await expect(
+    dialog.getByRole("button", { name: "Date", exact: true }),
+  ).toContainText("11:30 AM");
   await expect(input).toHaveValue(/^Call tomorrow\s*$/);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -108,8 +108,7 @@ test("service worker shows reminders, opens the task and completes from the noti
   const { runInNewContext } = await import("node:vm");
   const handlers: Record<string, (event: unknown) => void> = {};
   let notification:
-    | { title: string; options: Record<string, unknown> }
-    | undefined;
+    { title: string; options: Record<string, unknown> } | undefined;
   let opened = "";
   const sent: { url: string; method: string; body?: string }[] = [];
   const posted: unknown[] = [];
@@ -144,7 +143,10 @@ test("service worker shows reminders, opens the task and completes from the noti
     },
     clients: {
       matchAll: async () => [
-        { url: "https://elsewhere.example.com/", postMessage: (m: unknown) => posted.push(m) },
+        {
+          url: "https://elsewhere.example.com/",
+          postMessage: (m: unknown) => posted.push(m),
+        },
       ],
       openWindow: async (url: string) => {
         opened = url;

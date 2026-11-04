@@ -1,6 +1,14 @@
 // Dialogs: the modal frame, the project editor, keyboard shortcuts, and Settings & integrations.
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, Copy, KeyRound, Keyboard, LogOut, X, CircleAlert } from "lucide-react";
+import {
+  Bell,
+  Copy,
+  KeyRound,
+  Keyboard,
+  LogOut,
+  X,
+  CircleAlert,
+} from "lucide-react";
 import { api, type Profile, type Token } from "./api";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
@@ -51,7 +59,13 @@ export function Modal({
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={label} ref={ref}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        ref={ref}
+      >
         {children}
       </div>
     </div>
@@ -95,7 +109,12 @@ export function ProjectEditor({
       >
         <div className="modal-heading">
           <h2>{project ? "Edit project" : "New project"}</h2>
-          <button type="button" className="icon-button" onClick={close} aria-label="Close project editor">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={close}
+            aria-label="Close project editor"
+          >
             <X />
           </button>
         </div>
@@ -130,7 +149,9 @@ export function ProjectEditor({
             />
           </div>
         </div>
-        {confirm && <p className="muted">Tasks in this project will move to Inbox.</p>}
+        {confirm && (
+          <p className="muted">Tasks in this project will move to Inbox.</p>
+        )}
         <div className="modal-actions">
           {remove && (
             <button
@@ -179,13 +200,18 @@ export function ShortcutsDialog({ close }: { close: () => void }) {
     <Modal close={close} label="Keyboard shortcuts">
       <div className="modal-heading">
         <h2>Keyboard shortcuts</h2>
-        <button className="icon-button" onClick={close} aria-label="Close shortcuts">
+        <button
+          className="icon-button"
+          onClick={close}
+          aria-label="Close shortcuts"
+        >
           <X />
         </button>
       </div>
       <p className="muted">
-        In quick add: dates like <code>tomorrow 5pm</code>, <code>every monday</code>, <code>Nov 12</code>;{" "}
-        <code>p1</code>–<code>p4</code>; <code>#Project</code>; <code>@label</code>;{" "}
+        In quick add: dates like <code>tomorrow 5pm</code>,{" "}
+        <code>every monday</code>, <code>Nov 12</code>; <code>p1</code>–
+        <code>p4</code>; <code>#Project</code>; <code>@label</code>;{" "}
         <code>!30m before</code>. Click a highlighted word to keep it as text.
       </p>
       <dl className="shortcut-list">
@@ -244,7 +270,11 @@ export function SettingsPanel({
     <Modal close={close} label="Settings and integrations">
       <div className="modal-heading">
         <h2>Your workspace</h2>
-        <button className="icon-button" onClick={close} aria-label="Close settings">
+        <button
+          className="icon-button"
+          onClick={close}
+          aria-label="Close settings"
+        >
           <X />
         </button>
       </div>
@@ -299,7 +329,9 @@ export function SettingsPanel({
           onSubmit={(e) => {
             e.preventDefault();
             perform(async () => {
-              const result = await api<{ token: string }>("/tokens", "POST", { name });
+              const result = await api<{ token: string }>("/tokens", "POST", {
+                name,
+              });
               setCreated(result.token);
               setName("");
               await load();
@@ -325,7 +357,9 @@ export function SettingsPanel({
             <button
               className="secondary"
               onClick={() =>
-                navigator.clipboard.writeText(created).catch(() => setError("Select and copy the token above."))
+                navigator.clipboard
+                  .writeText(created)
+                  .catch(() => setError("Select and copy the token above."))
               }
             >
               <Copy size={13} /> Copy token
@@ -336,7 +370,9 @@ export function SettingsPanel({
           <div className="token-row" key={t.id}>
             <div>
               <strong>{t.name}</strong>
-              <small>Expires {new Date(t.expires_at).toLocaleDateString()}</small>
+              <small>
+                Expires {new Date(t.expires_at).toLocaleDateString()}
+              </small>
             </div>
             <button
               className="danger-button"
@@ -358,8 +394,8 @@ export function SettingsPanel({
         <p>
           REST API: <code>{new URL("api/v1", location.href).href}</code>
           <br />
-          Use the included MCP adapter with your server URL and a token. Tokens expire after 90 days and can
-          be revoked here.
+          Use the included MCP adapter with your server URL and a token. Tokens
+          expire after 90 days and can be revoked here.
         </p>
       </div>
       <button className="subtle-button shortcuts-link" onClick={openShortcuts}>
@@ -372,18 +408,23 @@ export function SettingsPanel({
         </div>
       )}
       <details className="account-delete">
-          <summary>Delete account</summary>
-          <p>
-            Permanently remove your tasks, projects, tokens, and Apple authorization. Type DELETE to confirm.
-          </p>
-          <input
-            aria-label="Confirm account deletion"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-          <button className="danger-button mod-cta" disabled={confirm !== "DELETE"} onClick={deleteAccount}>
-            Permanently delete my account
-          </button>
+        <summary>Delete account</summary>
+        <p>
+          Permanently remove your tasks, projects, tokens, and Apple
+          authorization. Type DELETE to confirm.
+        </p>
+        <input
+          aria-label="Confirm account deletion"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+        />
+        <button
+          className="danger-button mod-cta"
+          disabled={confirm !== "DELETE"}
+          onClick={deleteAccount}
+        >
+          Permanently delete my account
+        </button>
       </details>
     </Modal>
   );
