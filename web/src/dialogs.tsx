@@ -49,7 +49,9 @@ export function Modal({
     document.addEventListener("keydown", trap);
     return () => {
       document.removeEventListener("keydown", trap);
-      previous?.focus?.({ preventScroll: true });
+      // The hidden field that held the phone keyboard open is not worth returning to.
+      if (previous?.id !== "focus-proxy")
+        previous?.focus?.({ preventScroll: true });
     };
   }, []);
   return (

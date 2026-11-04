@@ -50,7 +50,8 @@ test("task context menu and long-press sheet", async ({ page }) => {
   }
 
   await page.getByLabel("Search tasks").fill("");
-  await page.setViewportSize({ width: 390, height: 844 });
+  // A narrow window that is not a phone: the sidebar is a drawer.
+  await page.setViewportSize({ width: 620, height: 844 });
   const project = page
     .locator(".sidebar nav button")
     .filter({ hasText: "Inbox" });

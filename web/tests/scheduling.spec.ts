@@ -89,8 +89,12 @@ test("quick add parses as you type, corrections, reminders and notification sett
     path: "../docs/screenshots/reminder-mobile.png",
     fullPage: true,
   });
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByLabel("Open navigation").click();
+  // At phone size the dialog becomes a sheet with a round add button.
+  await expect(page.locator(".modal-backdrop.is-sheet")).toBeVisible();
+  await expect(dialog.locator(".qa-send")).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.locator(".tabbar").getByRole("button", { name: "Browse" }).click();
   await page
     .getByRole("button", { name: "Settings & integrations", exact: true })
     .click();

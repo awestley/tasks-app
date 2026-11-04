@@ -6,6 +6,7 @@ import "@awestley/glassive/accent.css";
 import "@awestley/glassive/glassive.css";
 import "./glassive-app.css";
 import "./style.css";
+import "./phone.css";
 import { applyTheme } from "@awestley/glassive";
 import { PcProvider } from "@awestley/pc-runtime/react";
 import { App } from "./App";

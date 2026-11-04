@@ -155,7 +155,7 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
   ).toBe(401);
   await page.getByLabel("Close settings").click();
 
-  // Phone width: the sidebar becomes a drawer and nothing scrolls sideways.
+  // Phone width: tabs at the bottom, a + button, and nothing scrolls sideways.
   await page
     .locator(".sidebar nav")
     .getByRole("button", { name: /Today/ })
@@ -172,13 +172,15 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBeTruthy();
-  await page.getByLabel("Open navigation").click();
   await page
-    .locator(".sidebar nav")
-    .getByRole("button", { name: /Upcoming/ })
+    .locator(".tabbar")
+    .getByRole("button", { name: "Upcoming" })
     .click();
   await expect(
     page.getByRole("heading", { name: "Upcoming", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator(".tabbar").getByRole("button", { name: "Upcoming" }),
+  ).toHaveAttribute("aria-current", "page");
   expect(errors).toEqual([]);
 });

@@ -10,6 +10,7 @@ import React, {
   useState,
 } from "react";
 import {
+  ArrowUp,
   Bell,
   CalendarDays,
   CornerDownLeft,
@@ -85,6 +86,7 @@ export function QuickAdd({
   focusKey,
   autoFocus = false,
   placeholder,
+  sheet = false,
 }: {
   /** modal: the Q dialog. inline: in a list. bar: the companion's field at the top. */
   variant: "modal" | "inline" | "bar";
@@ -98,6 +100,8 @@ export function QuickAdd({
   focusKey?: number;
   autoFocus?: boolean;
   placeholder?: string;
+  /** On a phone: a sheet on the keyboard, with a round add button. */
+  sheet?: boolean;
 }) {
   const [text, setText] = useState("");
   const [description, setDescription] = useState("");
@@ -107,7 +111,7 @@ export function QuickAdd({
   const [picker, setPicker] = useState<DOMRect | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [focused, setFocused] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const pointerDown = useRef(false);
 
@@ -448,6 +452,101 @@ export function QuickAdd({
     </div>
   );
 
+  type Field = HTMLInputElement | HTMLTextAreaElement;
+  const fieldProps = {
+    className: "qa-input",
+    "aria-label": "Task name",
+    placeholder:
+      placeholder ||
+      (variant === "bar"
+        ? "Add a task"
+        : sheet
+          ? "e.g. Call mom tomorrow 5pm p1"
+          : "Task name, e.g. Call mom tomorrow 5pm p1 #Home"),
+    maxLength: 500,
+    autoFocus,
+    spellCheck: true,
+    value: text,
+    onFocus: () => setFocused(true),
+    onBlur: () => {
+      setFocused(false);
+      setTimeout(() => setSuggest(null), 150);
+    },
+    onPointerDown: () => (pointerDown.current = true),
+    onClick: (e: React.MouseEvent<Field>) => {
+      // Clicking a highlighted word keeps it as plain text, as in Todoist.
+      const el = e.currentTarget;
+      if (!pointerDown.current || el.selectionStart !== el.selectionEnd) return;
+      pointerDown.current = false;
+      const caret = el.selectionStart ?? 0;
+      const hit = parsed.tokens.find(
+        (t: Token) => caret > t.start && caret < t.end,
+      );
+      if (hit) setIgnore(new Set([...ignore, tokenKey(hit)]));
+    },
+    onScroll: (e: React.UIEvent<Field>) => {
+      if (backdrop.current) {
+        backdrop.current.scrollLeft = e.currentTarget.scrollLeft;
+        backdrop.current.scrollTop = e.currentTarget.scrollTop;
+      }
+    },
+    onChange: (e: React.ChangeEvent<Field>) => {
+      // A pasted line break would end the name: keep it on one logical line.
+      const value = e.target.value.replace(/\r?\n/g, " ");
+      setText(value);
+      updateSuggest(value, e.target.selectionStart ?? value.length);
+    },
+    onKeyDown: (e: React.KeyboardEvent<Field>) => {
+      if (suggest) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          const n = suggest.items.length;
+          setSuggest({
+            ...suggest,
+            index: (suggest.index + (e.key === "ArrowDown" ? 1 : n - 1)) % n,
+          });
+          return;
+        }
+        const item = suggest.items[suggest.index];
+        const typed = text.slice(suggest.start, suggest.end).toLowerCase();
+        // When picking would not change the text (a whole project name, or a new label), Enter adds the task.
+        const finished = !item.create && item.insert.toLowerCase() === typed;
+        if (e.key === "Tab" || (e.key === "Enter" && !finished)) {
+          e.preventDefault();
+          choose(item);
+          return;
+        }
+        if (e.key === "Enter") setSuggest(null);
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          setSuggest(null);
+          return;
+        }
+      }
+      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        submit(e.metaKey || e.ctrlKey);
+      } else if (e.key === "Escape") {
+        e.stopPropagation();
+        if (variant === "bar") {
+          if (text) reset();
+          else input.current?.blur();
+        } else close?.();
+      } else if (e.key === "ArrowDown" && variant === "bar" && !text) {
+        e.preventDefault();
+        (document.querySelector(".task-row") as HTMLElement | null)?.focus();
+      }
+    },
+  };
+  // The phone's wrapping field grows with its text.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!sheet || !el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [sheet, text]);
+
   const field = (
     <div className="qa-field">
       {variant === "bar" && <Plus size={16} className="qa-plus" />}
@@ -455,98 +554,12 @@ export function QuickAdd({
         <div className="qa-backdrop" ref={backdrop} aria-hidden="true">
           {segments}
         </div>
-        <input
-          ref={input}
-          className="qa-input"
-          aria-label="Task name"
-          placeholder={
-            placeholder ||
-            (variant === "bar"
-              ? "Add a task"
-              : "Task name, e.g. Call mom tomorrow 5pm p1 #Home")
-          }
-          maxLength={500}
-          autoFocus={autoFocus}
-          spellCheck
-          value={text}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            setTimeout(() => setSuggest(null), 150);
-          }}
-          onPointerDown={() => (pointerDown.current = true)}
-          onClick={(e) => {
-            // Clicking a highlighted word keeps it as plain text, as in Todoist.
-            const el = e.currentTarget;
-            if (!pointerDown.current || el.selectionStart !== el.selectionEnd)
-              return;
-            pointerDown.current = false;
-            const caret = el.selectionStart ?? 0;
-            const hit = parsed.tokens.find(
-              (t: Token) => caret > t.start && caret < t.end,
-            );
-            if (hit) setIgnore(new Set([...ignore, tokenKey(hit)]));
-          }}
-          onScroll={(e) => {
-            if (backdrop.current)
-              backdrop.current.scrollLeft = e.currentTarget.scrollLeft;
-          }}
-          onChange={(e) => {
-            setText(e.target.value);
-            updateSuggest(
-              e.target.value,
-              e.target.selectionStart ?? e.target.value.length,
-            );
-          }}
-          onKeyDown={(e) => {
-            if (suggest) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                const n = suggest.items.length;
-                setSuggest({
-                  ...suggest,
-                  index:
-                    (suggest.index + (e.key === "ArrowDown" ? 1 : n - 1)) % n,
-                });
-                return;
-              }
-              const item = suggest.items[suggest.index];
-              const typed = text
-                .slice(suggest.start, suggest.end)
-                .toLowerCase();
-              // When picking would not change the text (a whole project name, or a new label), Enter adds the task.
-              const finished =
-                !item.create && item.insert.toLowerCase() === typed;
-              if (e.key === "Tab" || (e.key === "Enter" && !finished)) {
-                e.preventDefault();
-                choose(item);
-                return;
-              }
-              if (e.key === "Enter") setSuggest(null);
-              if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
-                setSuggest(null);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit(e.metaKey || e.ctrlKey);
-            } else if (e.key === "Escape") {
-              e.stopPropagation();
-              if (variant === "bar") {
-                if (text) reset();
-                else input.current?.blur();
-              } else close?.();
-            } else if (e.key === "ArrowDown" && variant === "bar" && !text) {
-              e.preventDefault();
-              (
-                document.querySelector(".task-row") as HTMLElement | null
-              )?.focus();
-            }
-          }}
-        />
+        {sheet ? (
+          // On a phone the name wraps onto more lines instead of scrolling sideways.
+          <textarea ref={input} rows={1} {...fieldProps} />
+        ) : (
+          <input ref={input} {...fieldProps} />
+        )}
       </div>
       {variant === "bar" && text.trim() && (
         <button
@@ -639,7 +652,7 @@ export function QuickAdd({
 
   return (
     <form
-      className={`quick-add-box is-${variant}`}
+      className={`quick-add-box is-${variant}${sheet ? " is-sheet" : ""}`}
       onSubmit={(e) => {
         // Only the button submits the form (Enter is handled on the fields and keeps the dialog open).
         e.preventDefault();
@@ -682,17 +695,34 @@ export function QuickAdd({
           )}
           {project?.name || "Inbox"}
         </button>
-        <span className="qa-hint">
-          <kbd>↵</kbd> add · <kbd>esc</kbd> close
-        </span>
-        {close && (
-          <button type="button" className="secondary" onClick={close}>
-            Cancel
+        {sheet ? (
+          <button
+            className="qa-send"
+            aria-label="Add task"
+            disabled={!title.trim()}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
+            <ArrowUp size={20} strokeWidth={2.5} />
           </button>
+        ) : (
+          <>
+            <span className="qa-hint">
+              <kbd>↵</kbd> add · <kbd>esc</kbd> close
+            </span>
+            {close && (
+              <button type="button" className="secondary" onClick={close}>
+                Cancel
+              </button>
+            )}
+            <button className="primary" disabled={!title.trim()}>
+              Add task
+            </button>
+          </>
         )}
-        <button className="primary" disabled={!title.trim()}>
-          Add task
-        </button>
       </div>
       {popups}
     </form>

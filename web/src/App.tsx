@@ -3,6 +3,8 @@
 //
 // Wide: sidebar (views, projects, labels), the list, and the open task beside it.
 // Narrow: the sidebar becomes a drawer and the task opens over the list.
+// Phone: a native layout (phone.tsx): bottom tabs, a + button, a quick add sheet on the keyboard,
+// swipe actions, and the task full screen.
 // Companion: quick add at the top, a view picker, and a compact list.
 import React, {
   useCallback,
@@ -21,6 +23,7 @@ import {
   CheckCheck,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   CircleAlert,
   CloudOff,
   Copy,
@@ -87,6 +90,15 @@ import {
   usePermission,
 } from "./reminders";
 import * as S from "./store";
+import {
+  BrowseScreen,
+  holdKeyboard,
+  swipeRow,
+  TabBar,
+  useKeyboardInset,
+  useMedia,
+  type PhoneTab,
+} from "./phone";
 import {
   DatePicker,
   daysFromNow,
@@ -369,6 +381,22 @@ function Workspace({
   const mainWidth = width - (sidebarDocked ? 260 : 0);
   const detailBeside = !companion && mainWidth >= 900;
   const narrow = !companion && width < 700;
+  // A phone, or a phone-sized browser window: the native layout. A narrow column on a desktop
+  // keeps the drawer layout.
+  const coarse = useMedia("(pointer: coarse)");
+  const phone = narrow && (coarse || (!hosted && width < 560));
+  const [phoneScreen, setPhoneScreen] = useState<"list" | "search" | "browse">(
+    "list",
+  );
+  const [scrolled, setScrolled] = useState(false);
+  useKeyboardInset(phone);
+  useEffect(() => {
+    if (!phone) return;
+    const update = () => setScrolled(scrollY > 36);
+    addEventListener("scroll", update, { passive: true });
+    update();
+    return () => removeEventListener("scroll", update);
+  }, [phone, phoneScreen, view]);
   const floating = surfaceKind === "floating";
   const peek = surfaceKind === "sheet" && detent === "peek";
 
@@ -439,6 +467,7 @@ function Workspace({
   function navigate(next: View) {
     setSearch("");
     setDrawer(false);
+    setPhoneScreen("list");
     setOpenId(null);
     setSelected(null);
     setInlineAdd(null);
@@ -761,6 +790,7 @@ function Workspace({
       setFocusKey(Date.now());
       return;
     }
+    holdKeyboard();
     setQuick(
       defaults || {
         project_id: selectedProject?.id ?? null,
@@ -791,7 +821,7 @@ function Workspace({
 
   /* ---------- menus ---------- */
 
-  const sheet = () => pointerType.current === "touch";
+  const sheet = () => phone || pointerType.current === "touch";
   const dateOptions = (task: Task) => {
     const now = new Date();
     const dates: [string, string, React.ReactNode][] = [
@@ -1257,7 +1287,7 @@ function Workspace({
       return;
     }
     if (key === "?") return setShortcuts(true);
-    if (key === "m" && !companion) {
+    if (key === "m" && !companion && !phone) {
       if (wide) {
         setSidebarPref(!sidebarPref);
         store("tasks.sidebar", sidebarPref ? "hidden" : "shown");
@@ -1336,6 +1366,37 @@ function Workspace({
 
   /* ---------- pieces ---------- */
 
+  // On a phone a row also swipes: right completes, left schedules.
+  const rowHandlers = (task: Task) => {
+    const menuProps = menuFor(() => taskMenu(task), task.title, task.id);
+    if (!phone) return menuProps;
+    const swipe = swipeRow({
+      right: () => toggle(task),
+      left: () =>
+        setMenu({
+          x: innerWidth / 2,
+          y: innerHeight / 2,
+          entries: dateOptions(task),
+          title: "Schedule",
+          target: task.id,
+          sheet: true,
+        }),
+      began: () => clearTimeout(press.current.timer),
+    });
+    return {
+      ...menuProps,
+      ...swipe,
+      onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+        menuProps.onPointerDown(e);
+        swipe.onPointerDown(e);
+      },
+      onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+        menuProps.onPointerMove(e);
+        swipe.onPointerMove(e);
+      },
+    };
+  };
+
   const taskRow = (task: Task, inGroup?: string) => {
     const project = projects.find((p) => p.id === task.project_id);
     const done = task.completed;
@@ -1395,7 +1456,7 @@ function Workspace({
             {l}
           </span>
         ))}
-        {companion &&
+        {(companion || phone) &&
           view !== `project:${task.project_id}` &&
           (project || view !== "inbox") && (
             <span className="row-project">
@@ -1422,8 +1483,18 @@ function Workspace({
         onFocus={(e) => {
           if (e.target === e.currentTarget) setSelected(task.id);
         }}
-        {...menuFor(() => taskMenu(task), task.title, task.id)}
+        {...rowHandlers(task)}
       >
+        {phone && (
+          <>
+            <span className="swipe-act is-done" aria-hidden="true">
+              <Check size={22} strokeWidth={2.5} />
+            </span>
+            <span className="swipe-act is-date" aria-hidden="true">
+              <CalendarDays size={22} />
+            </span>
+          </>
+        )}
         <button
           className={`check-task priority-${task.priority}`}
           aria-label={`${done ? "Restore" : "Complete"} ${task.title}`}
@@ -1517,7 +1588,7 @@ function Workspace({
             {g.title && (
               <h3 className={g.overdue ? "overdue" : ""}>
                 <span className="group-title">{g.title}</span>
-                {g.key !== "main" && (
+                {g.key !== "main" && g.key !== "search" && (
                   <span className="group-count">{g.tasks.length || ""}</span>
                 )}
                 {g.overdue && (
@@ -1531,6 +1602,7 @@ function Workspace({
             {g.add &&
               view !== "completed" &&
               !search &&
+              (!phone || view === "upcoming") &&
               (inlineAdd === g.key ? (
                 <QuickAdd
                   variant="inline"
@@ -1546,7 +1618,9 @@ function Workspace({
                 !companion && (
                   <button
                     className="add-task-row"
-                    onClick={() => setInlineAdd(g.key)}
+                    onClick={() =>
+                      phone ? openQuick(g.add) : setInlineAdd(g.key)
+                    }
                   >
                     <Plus size={18} /> Add task
                     {g.key === "main" && (
@@ -1581,7 +1655,9 @@ function Workspace({
                 ? "Completed tasks show up here."
                 : companion
                   ? "Type above to add one."
-                  : "Press Q to add one."}
+                  : phone
+                    ? "Tap + to add one."
+                    : "Press Q to add one."}
           </p>
         </div>
       )}
@@ -1814,6 +1890,104 @@ function Workspace({
     ]),
   ];
 
+  // Menus, notices and dialogs, shared by the full and phone layouts.
+  const overlays = (
+    <>
+      {menu && <ContextMenu request={menu} close={() => setMenu(null)} />}
+      {toast && (
+        <ToastView
+          toast={toast}
+          close={() => setToast(null)}
+          top={phone && !!quick}
+        />
+      )}
+      {picker && (
+        <DatePicker
+          anchor={picker.anchor}
+          value={picker.task}
+          close={() => setPicker(null)}
+          change={(next) => patchDue(picker.task, next)}
+        />
+      )}
+      {bell && (
+        <BellPanel
+          anchor={bell}
+          close={() => setBell(null)}
+          tasks={tasks}
+          hosted={hosted}
+        />
+      )}
+      {quick && (
+        <Modal
+          close={() => setQuick(null)}
+          label="Add task"
+          className={`is-quick${phone ? " is-sheet" : ""}`}
+        >
+          <QuickAdd
+            variant="modal"
+            projects={projects}
+            labels={labels}
+            defaults={quick}
+            add={addTask}
+            createProject={newProject}
+            close={() => setQuick(null)}
+            sheet={phone}
+            autoFocus
+          />
+        </Modal>
+      )}
+      {projectEditor && (
+        <ProjectEditor
+          project={projectEditor === "new" ? null : projectEditor}
+          close={() => setProjectEditor(null)}
+          save={(name, color) => {
+            if (projectEditor === "new") {
+              const p = S.createProject(name, color);
+              navigate(`project:${p.id}`);
+            } else S.patchProject(projectEditor.id, { name, color });
+            setProjectEditor(null);
+          }}
+          remove={
+            projectEditor === "new"
+              ? undefined
+              : () => {
+                  S.deleteProject(projectEditor.id);
+                  navigate("inbox");
+                  setProjectEditor(null);
+                }
+          }
+        />
+      )}
+      {settings && (
+        <SettingsPanel
+          user={user}
+          shell={!!config.shell || hosted}
+          close={() => setSettings(false)}
+          openShortcuts={() => {
+            setSettings(false);
+            setShortcuts(true);
+          }}
+          logout={() =>
+            S.signOut(async () => {
+              await disableBrowserPush().catch(() => {});
+              await api("/auth/logout", "POST");
+            }).then(
+              () => setSettings(false),
+              (e) => setToast({ id: Date.now(), text: e.message, error: true }),
+            )
+          }
+          deleteAccount={() =>
+            S.signOut(() => api("/me", "DELETE")).then(
+              () => setSettings(false),
+              (e) => setToast({ id: Date.now(), text: e.message, error: true }),
+            )
+          }
+        />
+      )}
+      {shortcuts && <ShortcutsDialog close={() => setShortcuts(false)} />}
+    </>
+  );
+
   /* ---------- companion ---------- */
 
   if (companion)
@@ -1925,262 +2099,375 @@ function Workspace({
     );
   }
 
-  /* ---------- full app ---------- */
+  /* ---------- phone ---------- */
 
-  return (
-    <div
-      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""} ${openTask && detailBeside ? "with-detail" : ""}`}
-    >
-      {sidebar}
-      {drawer && !sidebarDocked && (
-        <button
-          className="mobile-shade"
-          aria-label="Close navigation"
-          onClick={() => setDrawer(false)}
+  if (phone) {
+    const tab: PhoneTab =
+      phoneScreen !== "list"
+        ? phoneScreen
+        : view === "today" || view === "inbox" || view === "upcoming"
+          ? view
+          : "browse";
+    const goTab = (next: PhoneTab) => {
+      if (next === tab && phoneScreen === "list")
+        return scrollTo({ top: 0, behavior: "smooth" });
+      setOpenId(null);
+      setSelected(null);
+      if (next === "search") {
+        holdKeyboard();
+        setPhoneScreen("search");
+      } else if (next === "browse") {
+        setSearch("");
+        setPhoneScreen("browse");
+      } else navigate(next);
+      scrollTo({ top: 0 });
+    };
+    const open = shown.filter((t) => !t.completed).length;
+    const subtitle =
+      view === "upcoming"
+        ? null
+        : view === "completed"
+          ? `${shown.length} completed`
+          : open
+            ? `${open} ${open === 1 ? "task" : "tasks"}`
+            : null;
+    const viewButton = (
+      <button
+        className="icon-button"
+        aria-label="View options"
+        onClick={(e) => openMenuAt(e, listMenu().slice(2), "View")}
+      >
+        <MoreHorizontal size={22} />
+      </button>
+    );
+    const page =
+      phoneScreen === "browse" ? (
+        <BrowseScreen
+          projects={projects}
+          labels={labels}
+          counts={counts}
+          projectCount={(id) =>
+            active.filter((t) => t.project_id === id).length
+          }
+          labelCount={(l) => active.filter((t) => t.labels.includes(l)).length}
+          go={(next) => navigate(next as View)}
+          addProject={() => setProjectEditor("new")}
+          projectProps={(p) => menuFor(() => projectMenu(p), p.name)}
+          reminders={permission === "granted"}
+          openReminders={(anchor) => setBell(anchor)}
+          openSettings={() => setSettings(true)}
+          openShortcuts={coarse ? undefined : () => setShortcuts(true)}
+          status={status}
         />
-      )}
-      <div className="main-shell">
-        <header className="topbar">
-          {!sidebarDocked && (
-            <button
-              className="icon-button mobile-menu"
-              aria-label={wide ? "Show sidebar" : "Open navigation"}
-              title={wide ? "Show sidebar (M)" : "Navigation"}
-              onClick={() => {
-                if (wide) {
-                  setSidebarPref(true);
-                  store("tasks.sidebar", "shown");
-                } else setDrawer(true);
-              }}
-            >
-              {wide ? <PanelLeft size={18} /> : <Menu size={20} />}
-            </button>
-          )}
-          {!hosted && (
-            <div className="breadcrumb">
-              My workspace <span className="crumb-sep">/</span>{" "}
-              <span>{title}</span>
+      ) : phoneScreen === "search" ? (
+        <div className="phone-page">
+          <header className="phone-head">
+            <div className="phone-bar">
+              <span />
+              <span className="phone-bar-title">Search</span>
+              <div className="phone-bar-actions">{status}</div>
             </div>
+            <h1>Search</h1>
+            <div className="search-box phone-search">
+              <Search size={18} />
+              <input
+                ref={searchRef}
+                type="search"
+                enterKeyHint="search"
+                autoFocus
+                placeholder="Tasks, descriptions and labels"
+                aria-label="Search tasks"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Escape")
+                    e.currentTarget.blur();
+                }}
+              />
+              {search && (
+                <button aria-label="Clear search" onClick={() => setSearch("")}>
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </header>
+          {search ? (
+            <main className="task-main">{sections}</main>
+          ) : (
+            <p className="phone-hint">
+              Search task names, descriptions and labels.
+            </p>
           )}
-          <span className="spacer" />
-          <div className="search-box">
-            <Search size={16} />
-            <input
-              ref={searchRef}
-              placeholder="Search tasks"
-              aria-label="Search tasks"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setSearch("");
-                  e.currentTarget.blur();
-                } else if (e.key === "ArrowDown" || e.key === "Enter") {
-                  e.preventDefault();
-                  const first = flat[0];
-                  if (first) {
-                    setSelected(first.id);
-                    (
-                      listRef.current?.querySelector(
-                        `[data-id="${CSS.escape(first.id)}"]`,
-                      ) as HTMLElement | null
-                    )?.focus();
-                  }
-                }
-              }}
-            />
-            {search ? (
-              <button aria-label="Clear search" onClick={() => setSearch("")}>
-                <X size={14} />
-              </button>
-            ) : (
-              <kbd>{hosted ? "/" : "⌘ K"}</kbd>
-            )}
-          </div>
-          {bellButton}
-          {!hosted && (
-            <button
-              className="top-avatar"
-              aria-label="Open settings"
-              onClick={() => setSettings(true)}
-            >
-              {user.name.slice(0, 1)}
-            </button>
-          )}
-        </header>
-        {expiredBanner}
-        <div className="content-layout">
-          <main className="task-main" {...menuFor(listMenu, title)}>
-            <div className="page-title">
-              <h1>
-                {selectedProject && (
-                  <span
-                    className="project-hash"
-                    style={{ color: selectedProject.color }}
-                  >
-                    #
-                  </span>
-                )}
-                {title}
-              </h1>
-              <div>
+        </div>
+      ) : (
+        <div className="phone-page">
+          <header className="phone-head">
+            <div className="phone-bar">
+              {tab === "browse" ? (
+                <button
+                  className="phone-back"
+                  onClick={() => {
+                    setPhoneScreen("browse");
+                    scrollTo({ top: 0 });
+                  }}
+                >
+                  <ChevronLeft size={24} />
+                  Browse
+                </button>
+              ) : (
+                <span />
+              )}
+              <span className="phone-bar-title">{title}</span>
+              <div className="phone-bar-actions">
+                {status}
                 {selectedProject && (
                   <button
                     className="icon-button"
                     aria-label="Edit project"
                     onClick={() => setProjectEditor(selectedProject)}
                   >
-                    <Pencil size={18} />
+                    <Pencil size={19} />
                   </button>
                 )}
-                <button
-                  className="icon-button"
-                  aria-label="View options"
-                  title="Sort and filter"
-                  onClick={(e) => openMenuAt(e, listMenu().slice(2), "View")}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-                <button className="primary" onClick={() => openQuick()}>
-                  <Plus size={16} /> Add task
-                </button>
+                {bellButton}
+                {viewButton}
               </div>
             </div>
-            <div className="list-toolbar">
-              <span>
-                <Layers size={15} />
-                {view === "completed"
-                  ? `${shown.length} completed`
-                  : (() => {
-                      const n = shown.filter((t) => !t.completed).length;
-                      return `${n} ${n === 1 ? "task" : "tasks"}`;
-                    })()}
-              </span>
-              <div>
-                <button
-                  className={priorityFilter ? "filter-on" : ""}
-                  onClick={() => setPriorityFilter(!priorityFilter)}
+            <h1>
+              {selectedProject && (
+                <span
+                  className="project-hash"
+                  style={{ color: selectedProject.color }}
                 >
-                  <ListFilter size={15} />
-                  {priorityFilter ? "High priority" : "Filter"}
-                </button>
-                <label>
-                  <ArrowDownWideNarrow size={14} />
-                  <select
-                    aria-label="Sort tasks"
-                    value={sort}
-                    onChange={(e) => {
-                      setSort(e.target.value);
-                      store("tasks.sort", e.target.value);
-                    }}
-                  >
-                    <option value="smart">Due date</option>
-                    <option value="priority">Priority</option>
-                    <option value="name">Name</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            {view === "upcoming" && !search && (
-              <WeekStrip
-                tasks={active}
-                jump={(d) =>
-                  listRef.current
-                    ?.querySelector(`[data-group="${d}"]`)
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
-              />
-            )}
+                  #
+                </span>
+              )}
+              {title}
+            </h1>
+            {subtitle && <p className="phone-sub">{subtitle}</p>}
+          </header>
+          {expiredBanner}
+          {view === "upcoming" && (
+            <WeekStrip
+              tasks={active}
+              jump={(d) => {
+                const el = listRef.current?.querySelector(
+                  `[data-group="${d}"]`,
+                ) as HTMLElement | null;
+                if (el)
+                  scrollTo({
+                    top: el.getBoundingClientRect().top + scrollY - 64,
+                    behavior: "smooth",
+                  });
+              }}
+            />
+          )}
+          <main className="task-main" {...menuFor(listMenu, title)}>
             {sections}
           </main>
-          {detail}
         </div>
+      );
+    // Same root and the overlays in the same place as the full layout, so a rotation or a
+    // resize between the two keeps an open sheet and what was typed in it.
+    return (
+      <div
+        className={`app-shell is-phone${hosted ? " hosted" : ""}${scrolled ? " is-scrolled" : ""}${toast && !quick ? " has-toast" : ""}${openTask ? " has-detail" : ""}`}
+      >
+        <React.Fragment key="phone">
+          {page}
+          {phoneScreen !== "search" && (
+            <button
+              className="fab"
+              aria-label="Add task"
+              onClick={() =>
+                openQuick(phoneScreen === "browse" ? {} : undefined)
+              }
+            >
+              <Plus size={28} strokeWidth={2.25} />
+            </button>
+          )}
+          <TabBar tab={tab} go={goTab} />
+          {detail}
+        </React.Fragment>
+        {overlays}
       </div>
-      {menu && <ContextMenu request={menu} close={() => setMenu(null)} />}
-      {toast && <ToastView toast={toast} close={() => setToast(null)} />}
-      {picker && (
-        <DatePicker
-          anchor={picker.anchor}
-          value={picker.task}
-          close={() => setPicker(null)}
-          change={(next) => patchDue(picker.task, next)}
-        />
-      )}
-      {bell && (
-        <BellPanel
-          anchor={bell}
-          close={() => setBell(null)}
-          tasks={tasks}
-          hosted={hosted}
-        />
-      )}
-      {quick && (
-        <Modal
-          close={() => setQuick(null)}
-          label="Add task"
-          className="is-quick"
-        >
-          <QuickAdd
-            variant="modal"
-            projects={projects}
-            labels={labels}
-            defaults={quick}
-            add={addTask}
-            createProject={newProject}
-            close={() => setQuick(null)}
-            autoFocus
+    );
+  }
+
+  /* ---------- full app ---------- */
+
+  return (
+    <div
+      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""} ${openTask && detailBeside ? "with-detail" : ""}`}
+    >
+      <React.Fragment key="full">
+        {sidebar}
+        {drawer && !sidebarDocked && (
+          <button
+            className="mobile-shade"
+            aria-label="Close navigation"
+            onClick={() => setDrawer(false)}
           />
-        </Modal>
-      )}
-      {projectEditor && (
-        <ProjectEditor
-          project={projectEditor === "new" ? null : projectEditor}
-          close={() => setProjectEditor(null)}
-          save={(name, color) => {
-            if (projectEditor === "new") {
-              const p = S.createProject(name, color);
-              navigate(`project:${p.id}`);
-            } else S.patchProject(projectEditor.id, { name, color });
-            setProjectEditor(null);
-          }}
-          remove={
-            projectEditor === "new"
-              ? undefined
-              : () => {
-                  S.deleteProject(projectEditor.id);
-                  navigate("inbox");
-                  setProjectEditor(null);
-                }
-          }
-        />
-      )}
-      {settings && (
-        <SettingsPanel
-          user={user}
-          shell={!!config.shell || hosted}
-          close={() => setSettings(false)}
-          openShortcuts={() => {
-            setSettings(false);
-            setShortcuts(true);
-          }}
-          logout={() =>
-            S.signOut(async () => {
-              await disableBrowserPush().catch(() => {});
-              await api("/auth/logout", "POST");
-            }).then(
-              () => setSettings(false),
-              (e) => setToast({ id: Date.now(), text: e.message, error: true }),
-            )
-          }
-          deleteAccount={() =>
-            S.signOut(() => api("/me", "DELETE")).then(
-              () => setSettings(false),
-              (e) => setToast({ id: Date.now(), text: e.message, error: true }),
-            )
-          }
-        />
-      )}
-      {shortcuts && <ShortcutsDialog close={() => setShortcuts(false)} />}
+        )}
+        <div className="main-shell">
+          <header className="topbar">
+            {!sidebarDocked && (
+              <button
+                className="icon-button mobile-menu"
+                aria-label={wide ? "Show sidebar" : "Open navigation"}
+                title={wide ? "Show sidebar (M)" : "Navigation"}
+                onClick={() => {
+                  if (wide) {
+                    setSidebarPref(true);
+                    store("tasks.sidebar", "shown");
+                  } else setDrawer(true);
+                }}
+              >
+                {wide ? <PanelLeft size={18} /> : <Menu size={20} />}
+              </button>
+            )}
+            {!hosted && (
+              <div className="breadcrumb">
+                My workspace <span className="crumb-sep">/</span>{" "}
+                <span>{title}</span>
+              </div>
+            )}
+            <span className="spacer" />
+            <div className="search-box">
+              <Search size={16} />
+              <input
+                ref={searchRef}
+                placeholder="Search tasks"
+                aria-label="Search tasks"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearch("");
+                    e.currentTarget.blur();
+                  } else if (e.key === "ArrowDown" || e.key === "Enter") {
+                    e.preventDefault();
+                    const first = flat[0];
+                    if (first) {
+                      setSelected(first.id);
+                      (
+                        listRef.current?.querySelector(
+                          `[data-id="${CSS.escape(first.id)}"]`,
+                        ) as HTMLElement | null
+                      )?.focus();
+                    }
+                  }
+                }}
+              />
+              {search ? (
+                <button aria-label="Clear search" onClick={() => setSearch("")}>
+                  <X size={14} />
+                </button>
+              ) : (
+                <kbd>{hosted ? "/" : "⌘ K"}</kbd>
+              )}
+            </div>
+            {bellButton}
+            {!hosted && (
+              <button
+                className="top-avatar"
+                aria-label="Open settings"
+                onClick={() => setSettings(true)}
+              >
+                {user.name.slice(0, 1)}
+              </button>
+            )}
+          </header>
+          {expiredBanner}
+          <div className="content-layout">
+            <main className="task-main" {...menuFor(listMenu, title)}>
+              <div className="page-title">
+                <h1>
+                  {selectedProject && (
+                    <span
+                      className="project-hash"
+                      style={{ color: selectedProject.color }}
+                    >
+                      #
+                    </span>
+                  )}
+                  {title}
+                </h1>
+                <div>
+                  {selectedProject && (
+                    <button
+                      className="icon-button"
+                      aria-label="Edit project"
+                      onClick={() => setProjectEditor(selectedProject)}
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
+                  <button
+                    className="icon-button"
+                    aria-label="View options"
+                    title="Sort and filter"
+                    onClick={(e) => openMenuAt(e, listMenu().slice(2), "View")}
+                  >
+                    <MoreHorizontal size={18} />
+                  </button>
+                  <button className="primary" onClick={() => openQuick()}>
+                    <Plus size={16} /> Add task
+                  </button>
+                </div>
+              </div>
+              <div className="list-toolbar">
+                <span>
+                  <Layers size={15} />
+                  {view === "completed"
+                    ? `${shown.length} completed`
+                    : (() => {
+                        const n = shown.filter((t) => !t.completed).length;
+                        return `${n} ${n === 1 ? "task" : "tasks"}`;
+                      })()}
+                </span>
+                <div>
+                  <button
+                    className={priorityFilter ? "filter-on" : ""}
+                    onClick={() => setPriorityFilter(!priorityFilter)}
+                  >
+                    <ListFilter size={15} />
+                    {priorityFilter ? "High priority" : "Filter"}
+                  </button>
+                  <label>
+                    <ArrowDownWideNarrow size={14} />
+                    <select
+                      aria-label="Sort tasks"
+                      value={sort}
+                      onChange={(e) => {
+                        setSort(e.target.value);
+                        store("tasks.sort", e.target.value);
+                      }}
+                    >
+                      <option value="smart">Due date</option>
+                      <option value="priority">Priority</option>
+                      <option value="name">Name</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              {view === "upcoming" && !search && (
+                <WeekStrip
+                  tasks={active}
+                  jump={(d) =>
+                    listRef.current
+                      ?.querySelector(`[data-group="${d}"]`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                />
+              )}
+              {sections}
+            </main>
+            {detail}
+          </div>
+        </div>
+      </React.Fragment>
+      {overlays}
     </div>
   );
 }
@@ -2189,14 +2476,17 @@ function ToastView({
   toast,
   close,
   compact,
+  top,
 }: {
   toast: Toast;
   close: () => void;
   compact?: boolean;
+  /** At the top of the screen, clear of a sheet on the keyboard. */
+  top?: boolean;
 }) {
   return (
     <div
-      className={`toast ${toast.error ? "is-error" : ""} ${compact ? "is-compact" : ""}`}
+      className={`toast ${toast.error ? "is-error" : ""} ${compact ? "is-compact" : ""} ${top ? "is-top" : ""}`}
       role="status"
       key={toast.id}
     >
