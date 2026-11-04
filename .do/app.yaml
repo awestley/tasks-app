@@ -1,0 +1,62 @@
+# Replace repository, domain and Apple identifiers before deployment.
+name: taskwell
+region: nyc
+services:
+  - name: app
+    github:
+      repo: YOUR_GITHUB_OWNER/taskwell
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+    routes:
+      - path: /
+    envs:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${taskwell-db.DATABASE_URL}
+      - key: PUBLIC_URL
+        value: https://tasks.example.com
+      - key: DEV_LOGIN
+        value: 'false'
+      - key: SECRET_KEY
+        type: SECRET
+        value: REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
+      - key: APPLE_TEAM_ID
+        value: REPLACE_WITH_APPLE_TEAM_ID
+      - key: APPLE_KEY_ID
+        value: REPLACE_WITH_APPLE_KEY_ID
+      - key: APPLE_PRIVATE_KEY
+        type: SECRET
+        value: REPLACE_WITH_APPLE_P8_KEY
+      - key: APPLE_WEB_CLIENT_ID
+        value: com.example.taskwell.web
+      - key: APPLE_NATIVE_CLIENT_IDS
+        value: com.example.taskwell.ios,com.example.taskwell.macos
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: YOUR_GITHUB_OWNER/taskwell
+      branch: main
+    dockerfile_path: Dockerfile
+    run_command: alembic upgrade head
+    instance_size_slug: apps-s-1vcpu-1gb
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${taskwell-db.DATABASE_URL}
+databases:
+  - name: taskwell-db
+    engine: PG
+    production: true
+    cluster_name: taskwell-db
+    db_name: taskwell
+    db_user: taskwell

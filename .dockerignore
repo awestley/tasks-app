@@ -1,0 +1,15 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.env
+**/.env.*
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/.backups
+**/dist
+**/DerivedData
+.git
+apple
+postman
+web/test-results

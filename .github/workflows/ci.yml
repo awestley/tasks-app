@@ -1,0 +1,26 @@
+name: Verify Taskwell
+on: [push, pull_request]
+jobs:
+  server-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --directory api --python 3.12 --frozen
+      - run: cd api && .venv/bin/pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - run: docker build -t taskwell:ci .
+  apple:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate --spec apple/project.yml
+      - run: xcodebuild -project apple/Taskwell.xcodeproj -scheme Taskwell-macOS -configuration Debug -derivedDataPath apple/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - run: xcodebuild -project apple/Taskwell.xcodeproj -scheme Taskwell-iOS -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath apple/DerivedData-iOS CODE_SIGNING_ALLOWED=NO build

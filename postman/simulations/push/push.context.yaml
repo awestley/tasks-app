@@ -1,0 +1,30 @@
+purpose:
+  stands_in_for: APNs alert delivery and standards-based encrypted Web Push acceptance.
+  unblocks: Local verification of Taskwell reminder delivery, retries and subscription cleanup without provider credentials.
+assumptions:
+  - id: apns-response-contract
+    status: supported
+    claim: APNs uses 200 for accepted requests, 410 for inactive device tokens, and 503 for temporary service failure.
+    reason: The delivery loop distinguishes acceptance, endpoint removal and retryable failure using these responses.
+    verification: On 2026-10-30 and 2026-10-31, test_push.py exercised the real HTTP adapter against local fixtures. Simulation request events included 200, 503, 410 and 403. The retry, cancellation and cleanup assertions passed on SQLite and PostgreSQL. This proves caller behavior under those fixtures, not live delivery.
+    source: https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns; api/tests/test_push.py; postman/mocks/push/default.js
+    updated_at: '2026-10-31'
+  - id: webpush-encrypted-request
+    status: supported
+    claim: Taskwell sends its Web Push payload encrypted with aes128gcm and authenticates with VAPID.
+    reason: Browser subscriptions provide encryption keys and the server uses pywebpush to construct the request.
+    verification: Local simulation runs on 2026-10-30 and 2026-10-31 received Web Push requests with the expected content-encoding, authorization and TTL headers and returned 201. The stored delivery became sent. The mock does not decrypt the body or establish browser receipt.
+    source: api/taskwell/push.py; api/tests/test_push.py; postman/mocks/push/default.js
+    updated_at: '2026-10-31'
+  - id: live-device-delivery
+    status: unknown
+    claim: The configured production service can display reminders on the user's browsers, Mac and iPhone.
+    reason: Real push credentials, signed Apple apps, device permission and a reachable deployed backend are still required.
+    verification: No live push provider or physical-device delivery was attempted. The local provider mock served both APNs and Web Push routes. Native apps compiled successfully. The service-worker handler was checked with simulated browser APIs, not OS notification delivery. Owner mock discovery was skipped because Postman CLI is signed out; Orbit discovery did not find a relevant APNs sending contract, so the fixtures use Apple's published documentation.
+    source: docs/reminders.md; web/tests/scheduling.spec.ts; api/tests/test_push.py
+    updated_at: '2026-10-31'
+fingerprints:
+  - id: local-reminders-2026-10-31
+    date: '2026-10-31'
+    commit: Uncommitted local repository; no HEAD commit exists.
+    cli: Postman CLI 1.73.0

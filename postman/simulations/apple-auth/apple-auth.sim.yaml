@@ -1,0 +1,7 @@
+simulation: apple-auth
+routing: path
+mocks:
+  - name: apple-auth
+    routeKey: apple
+    origin: [appleid.apple.com]
+    path: postman/mocks/apple-auth/config.yaml

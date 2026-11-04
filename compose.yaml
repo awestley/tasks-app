@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: taskwell
+      POSTGRES_USER: taskwell
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U taskwell]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    build: .
+    env_file: .env
+    command: [alembic, upgrade, head]
+    environment:
+      DATABASE_URL: postgresql+psycopg://taskwell:${POSTGRES_PASSWORD}@db:5432/taskwell
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://taskwell:${POSTGRES_PASSWORD}@db:5432/taskwell
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    ports: ['80:80', '443:443']
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [app]
+    restart: unless-stopped
+volumes:
+  postgres:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,54 @@
+# Quick entry, reminders and push
+
+Type `Order Pizza Friday Afternoon` in the task title. The preview shows `Order Pizza`, Friday at 15:00 in the editor's time zone, and a reminder at that time. Save applies the preview. Use **Use details and edit** to change the result, or turn off detection to keep the exact title. Parsing runs on your Taskwell server, without an external language model or third-party access to task text.
+
+Supported English phrases: today, tomorrow, day after tomorrow, tonight, weekday names, next weekday, in N days/weeks, ISO dates, morning (09:00), afternoon (15:00), evening (19:00), noon, midnight, 12-hour times such as `10am`, and 24-hour times such as `15:30`. A bare weekday means the next matching day including today; `next Monday` means Monday of next calendar week. A time without a date uses today if still ahead, otherwise tomorrow. Explicit dates can be in the past and are shown for review.
+
+Other details: `p1` through `p4`, `@label`, `#Project name` for an existing project, `every day/week/month`, and `remind me 15 minutes before` alongside a date and time. Unknown text stays in the title. This is a bounded English parser, not unrestricted natural-language understanding.
+
+## Scheduling
+
+The API stores `due_date`, `due_time` (`HH:MM`), an IANA `time_zone`, and `reminder_minutes` (null disables reminders, 0 means at due time, positive values mean before). The web and native editors use the device time zone initially and preserve the task's selected zone during edits. There is one reminder per occurrence, delivered to every enabled device.
+
+The server checks every 15 seconds while push is configured. A durable delivery record and atomic lease prevent normal duplicate sends across workers. Failed transport requests and temporary provider errors retry with exponential backoff, up to eight attempts. After an outage, reminders can arrive up to 24 hours late. Expired device subscriptions are removed. Invalid credentials and permanent errors stop that delivery and are recorded in the database. Push is best effort; provider acceptance is not proof that a notification appeared on a device, and a crash after acceptance but before recording success can produce a duplicate. Matching notification tags/collapse IDs limit duplicates on devices.
+
+Completion, deletion, removing a reminder, or rescheduling suppresses pending deliveries when the worker next checks them. A delivery already accepted by a provider cannot be recalled. Editing a title does not resend a delivered reminder. Reopening the same occurrence does not resend its already-delivered reminder; changing the reminder time creates a new delivery. Recurring successors retain the time zone, time, and reminder offset, with a fresh date. A recurring time in a spring-forward gap shifts forward by that gap. An explicitly entered nonexistent time is rejected; an ambiguous fall-back time uses its first occurrence.
+
+## Browser push
+
+Generate a stable VAPID key pair using your contact address:
+
+```sh
+api/.venv/bin/python scripts/generate-vapid.py --subject mailto:YOUR_EMAIL --output api/.env.push
+```
+
+The new file is private and ignored by Git and Docker. Copy its three settings into the backend's environment or secret store: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT`. The private key is base64url-encoded PKCS8 DER, not raw PEM. Restart the service after configuration. Do not rotate the key pair routinely; subscriptions are tied to it.
+
+On DigitalOcean App Platform, use encrypted environment variables for the private key. On a Droplet, add settings to the root `.env`. For local development, append the generated settings to `api/.env`. The background delivery loop runs inside the API process; no extra worker service is required. Keep at least one API instance running for reminders.
+
+In the app, open **Settings & integrations > Reminders & notifications > Enable on this browser**. Permission is requested only after that button press. The service worker displays reminders with the task title, and clicking a notification opens the task. Notes and checklist contents are not included in payloads. Disabling a device removes its server subscription. Normal sign-out also disables this browser's subscription.
+
+Production uses HTTPS. iPhone browser push is supported through a Home Screen web app; the included manifest supplies that installation mode. See [Apple's Web Push requirements](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers) and [WebKit's Home Screen guidance](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/). This does not add offline task editing.
+
+## Native Apple push
+
+Configure these backend values when your Apple Developer setup is available:
+
+- `APNS_TEAM_ID`: Apple team ID.
+- `APNS_KEY_ID`: key identifier for an APNs-enabled signing key.
+- `APNS_PRIVATE_KEY`: the `.p8` key, using literal `\n` between lines in an environment value.
+- `APPLE_NATIVE_CLIENT_IDS`: comma-separated allowed iOS and macOS bundle identifiers.
+
+The Sign in with Apple key is not assumed to have APNs permission. Enable Push Notifications for both app identifiers and regenerate provisioning profiles. The XcodeGen project includes the platform-specific push entitlements and uses development APNs for Debug and production APNs for Release. Make sure the build configuration matches its provisioning environment.
+
+Native settings let you enable or disable notifications for that device. The app registers with APNs, refreshes its device token on launch, and uploads the token for the signed-in account. Notification taps refresh the workspace and open the matching task. Apple signing, provisioning and real-device delivery remain required release checks. See [Apple's APNs request contract](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns).
+
+## Local provider verification
+
+```sh
+postman simulation run postman/simulations/push/push.sim.yaml --port 4902 --output ndjson
+# Another terminal, from the repository root:
+PUSH_SIMULATION_URL=http://127.0.0.1:4902/push PYTHONPATH=api api/.venv/bin/pytest api/tests -q
+```
+
+The fixtures exercise real HTTP requests with ephemeral signing/encryption keys, including success, a transient 503, expired-token 410, and invalid-provider-token 403. This proves local integration and recovery behavior, not live APNs/Web Push delivery. `PUSH_SIMULATION_URL` is rejected in production. Never configure it on a deployed service.

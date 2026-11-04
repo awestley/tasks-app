@@ -1,0 +1,6 @@
+simulation: push
+routing: path
+mocks:
+  - name: push
+    routeKey: push
+    path: postman/mocks/push/config.yaml

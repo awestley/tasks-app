@@ -1,0 +1,10 @@
+version: 1
+name: push
+slug: push
+protocol: http
+port: 4903
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
