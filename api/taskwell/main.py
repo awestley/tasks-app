@@ -301,6 +301,7 @@ def mutate(db, user, task_id, data):
     task = owned(db, Task, task_id, user)
     changes = data.model_dump(exclude_unset=True)
     version = changes.pop("version")
+    undo = changes.pop("undo", None)
     snapshot = TaskIn.model_validate(task).model_dump()
     snapshot.update({k: v for k, v in changes.items() if k != "completed"})
     try:
@@ -318,6 +319,12 @@ def mutate(db, user, task_id, data):
     if complete:
         changes["checklist"] = [{**item.model_dump(), "completed": True} for item in validated.checklist]
     changes["completed_at"] = (task.completed_at or now()) if complete else None
+    discard = None
+    if undo and not complete and task.completed and task.successor_id:
+        found = db.get(Task, task.successor_id)
+        if found and found.user_id == user.id and found.version == 1 and not found.completed:
+            discard = found
+            changes["successor_id"] = None
     successor = None
     if complete and not task.completed and validated.recurrence and not task.successor_id:
         successor = Task(
@@ -345,9 +352,13 @@ def mutate(db, user, task_id, data):
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     if successor:
         db.add(successor)
+    if discard:
+        db.delete(discard)
     db.commit()
     db.refresh(task)
     events.publish(user.id, task_ref(task.id), "updated", task.version)
+    if discard:
+        events.publish(user.id, task_ref(discard.id), "deleted")
     if successor:
         events.publish(user.id, task_ref(successor.id), "updated", 1)
     return task

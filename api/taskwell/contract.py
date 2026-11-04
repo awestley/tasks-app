@@ -71,11 +71,17 @@ def manifest(user=Depends(authenticate)):
                 {"id": "inbox", "label": "Inbox", "url": f"{b}/#/inbox"},
                 {"id": "upcoming", "label": "Upcoming", "url": f"{b}/#/upcoming"},
                 {"id": "all", "label": "All tasks", "url": f"{b}/#/all"},
+                {"id": "completed", "label": "Completed", "url": f"{b}/#/completed"},
             ],
             "commands": [
                 {"id": "new-task", "label": "New task", "shortcut": "Mod+Shift+T"},
+                {"id": "search-tasks", "label": "Search tasks"},
+                {"id": "reminders", "label": "Task reminders"},
                 {"id": "settings", "label": "Tasks settings"},
             ],
+            # Local replica and outbox in the app, client ids, version checks, and a service worker
+            # that keeps these files (app-contract.md, section 9).
+            "offline": {"precache": [f"{b}/", f"{b}/companion.html", f"{b}/embed.js"]},
             # docs/companion.md in westley-app: the compact view kept beside the workspace.
             "companion": {
                 "url": f"{b}/companion.html#today",

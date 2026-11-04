@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "test": "playwright test",
     "format": "prettier --write src tests *.ts",
-    "sync-vendor": "node scripts/sync-vendor.mjs"
+    "sync-vendor": "node scripts/sync-vendor.mjs",
+    "test:unit": "TZ=America/New_York node --experimental-strip-types --no-warnings --test tests/unit/parse.test.ts"
   },
   "dependencies": {
     "@awestley/glassive": "file:vendor/glassive",

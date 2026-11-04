@@ -15,16 +15,28 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
     fullPage: true,
     animations: "disabled",
   });
+
+  // Add a task through the dialog: priority and label come from the text.
   const name = "Browser check " + Date.now();
   await page.getByRole("button", { name: "Add task", exact: true }).click();
-  await page.getByLabel("Task title").fill(name);
-  await page
+  const dialog = page.getByRole("dialog", { name: "Add task" });
+  await dialog.getByLabel("Task name").fill(name + " p1 @testing");
+  await dialog
     .getByLabel("Description")
     .fill("Created through the real web interface.");
-  await page
-    .getByRole("combobox", { name: "Priority", exact: true })
-    .selectOption("1");
-  await page.getByLabel("Labels", { exact: true }).fill("testing");
+  await dialog.getByRole("button", { name: "Add task", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByLabel("Search tasks").fill(name);
+  const rows = page.locator(".task-row");
+  await expect(rows).toHaveCount(1);
+  const row = rows.first();
+  await expect(row).toContainText("testing");
+  await expect(row.locator(".check-task")).toHaveClass(/priority-1/);
+  await expect(row).toContainText("Created through the real web interface.");
+
+  // Edit in place: changes save as you go.
+  await row.locator(".task-body").click();
+  await page.getByLabel("Task title").fill(name + " updated");
   await page.getByRole("button", { name: "Add item", exact: true }).click();
   await page
     .getByLabel("Checklist item 1", { exact: true })
@@ -36,36 +48,29 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
   await page
     .getByRole("checkbox", { name: "Complete checklist item 1", exact: true })
     .check();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Add task", exact: true })
-    .click();
-  await expect(
-    page.locator(".task-row").filter({ hasText: name }),
-  ).toBeVisible();
-  await page.getByLabel("Search tasks").fill(name);
-  await expect(page.locator(".task-row")).toHaveCount(1);
-  await expect(page.locator(".checklist-progress")).toHaveText("1/2");
-  await page.locator(".task-row .task-body").click();
-  await page.getByLabel("Task title").fill(name + " updated");
-  await expect(
-    page.getByLabel("Checklist item 1", { exact: true }),
-  ).toHaveValue("Review inbox");
-  await page
-    .getByLabel("Checklist item 2", { exact: true })
-    .fill("Updated notes");
   await page.screenshot({
     path: "../docs/screenshots/checklist-editor.png",
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.locator(".task-row")).toContainText(name + " updated");
+  await page.getByLabel("Close task").click();
+  await expect(row).toContainText(name + " updated");
+  await expect(page.locator(".checklist-progress")).toHaveText("1/2");
+
+  // Complete, undo, complete again.
   await page
     .getByLabel("Complete " + name + " updated", { exact: true })
     .click();
-  await expect(page.locator(".task-row")).toHaveClass(/is-complete/);
+  await expect(row).toHaveClass(/is-complete/);
   await expect(page.locator(".checklist-progress")).toHaveText("2/2");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(row).not.toHaveClass(/is-complete/);
+  await page
+    .getByLabel("Complete " + name + " updated", { exact: true })
+    .click();
+  await expect(row).toHaveClass(/is-complete/);
+
+  // It survives a reload, shows in Completed, and can be restored.
   await page.reload();
   await page
     .locator(".sidebar nav")
@@ -78,19 +83,22 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
     .getByLabel("Restore " + name + " updated", { exact: true })
     .click();
   await page.getByLabel("Search tasks").fill(name);
-  await page.locator(".task-row .task-body").click();
+  await expect(row).not.toHaveClass(/is-complete/);
+  await row.locator(".task-body").click();
   await expect(
     page.getByLabel("Checklist item 2", { exact: true }),
-  ).toHaveValue("Updated notes");
+  ).toHaveValue("Write notes");
   await page
     .getByRole("checkbox", { name: "Complete checklist item 2", exact: true })
     .uncheck();
   await page
     .getByRole("button", { name: "Remove checklist item 1", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByLabel("Close task").click();
   await expect(page.locator(".checklist-progress")).toHaveText("0/1");
-  await page.locator(".task-row .task-body").click();
+
+  // Delete from the task view.
+  await row.locator(".task-body").click();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page
     .getByRole("button", { name: "Confirm delete", exact: true })
@@ -99,9 +107,12 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
     page.getByRole("heading", { name: "Nothing found" }),
   ).toBeVisible();
   await page.getByLabel("Clear search").click();
+
+  // Projects
   await page.getByLabel("Add project", { exact: true }).click();
   await page.getByLabel("Project name").fill(name);
   await page.getByRole("button", { name: "Save project" }).click();
+  await expect(page.getByRole("heading", { name })).toBeVisible();
   await page
     .locator(".sidebar nav")
     .getByRole("button", { name: new RegExp(name) })
@@ -116,16 +127,16 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();
+
+  // Personal access tokens
   await page.getByLabel("Open settings", { exact: true }).click();
   await page.getByLabel("Token name").fill(name);
   await page.getByRole("button", { name: "Create token", exact: true }).click();
   const token = await page.locator(".token-created code").innerText();
-  const response = await request.get(
-    (process.env.TASKWELL_API_URL || "http://127.0.0.1:8000") + "/api/v1/tasks",
-    {
-      headers: { Authorization: "Bearer " + token },
-    },
-  );
+  const api = process.env.TASKWELL_API_URL || "http://127.0.0.1:8000";
+  const response = await request.get(api + "/api/v1/tasks", {
+    headers: { Authorization: "Bearer " + token },
+  });
   expect(response.status()).toBe(200);
   await page
     .locator(".token-row")
@@ -137,22 +148,20 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
   ).toHaveCount(0);
   expect(
     (
-      await request.get(
-        (process.env.TASKWELL_API_URL || "http://127.0.0.1:8000") +
-          "/api/v1/tasks",
-        {
-          headers: { Authorization: "Bearer " + token },
-        },
-      )
+      await request.get(api + "/api/v1/tasks", {
+        headers: { Authorization: "Bearer " + token },
+      })
     ).status(),
   ).toBe(401);
   await page.getByLabel("Close settings").click();
+
+  // Phone width: the sidebar becomes a drawer and nothing scrolls sideways.
   await page
     .locator(".sidebar nav")
     .getByRole("button", { name: /Today/ })
     .click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0, { timeout: 10000 });
   await page.screenshot({
     path: "../docs/screenshots/web-mobile.png",
     fullPage: true,

@@ -90,6 +90,9 @@ class TaskPatch(Model):
     recurrence: Literal["daily", "weekly", "monthly"] | None = None
     completed: bool | None = None
     checklist: list[ChecklistItem] | None = Field(default=None, max_length=100)
+    # With completed=false right after completing (the app's Undo): also remove the recurring successor
+    # that completion created, if it hasn't been touched since.
+    undo: bool | None = None
 
 
 class TaskOut(TaskIn):

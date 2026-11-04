@@ -172,6 +172,8 @@ def test_base_path_frames_and_manifest(shell):
     companion = manifest["companion"]
     assert companion["url"] == "/apps/tasks/companion.html#today" and companion["badge"] == "/apps/tasks/api/v1/companion/badge"
     assert companion["quickAdd"] in {c["id"] for c in manifest["commands"]}
+    assert {p["id"] for p in manifest["panes"]} >= {"today", "inbox", "upcoming", "completed"}
+    assert manifest["offline"]["precache"] == ["/apps/tasks/", "/apps/tasks/companion.html", "/apps/tasks/embed.js"]
     assert client.get("/apps/tasks/manifest.json").status_code == 401
     openapi = client.get("/apps/tasks/openapi.json").json()
     assert "/api/v1/resolve" in openapi["paths"] and openapi["servers"][0]["url"] == "/apps/tasks"
