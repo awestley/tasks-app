@@ -36,7 +36,21 @@ import {
   Apple,
   CheckCircle2,
   CircleAlert,
+  Calendar,
+  Sunrise,
+  Sofa,
+  ArrowRightToLine,
+  CircleSlash,
+  Ellipsis,
+  Bell,
+  FolderInput,
+  CopyPlus,
+  Link,
+  ListTree,
+  RefreshCw,
+  ExternalLink,
 } from "lucide-react";
+import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
 import {
   api,
   allTasks,
@@ -105,6 +119,31 @@ function Logo() {
     </div>
   );
 }
+const daysFromNow = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return localDate(d);
+};
+const weekday = (value: string) =>
+  new Date(value + "T12:00:00").toLocaleDateString(undefined, {
+    weekday: "short",
+  });
+const priorityNames: Record<number, string> = {
+  1: "Urgent",
+  2: "High",
+  3: "Medium",
+  4: "Normal",
+};
+const reminderChoices: [number, string][] = [
+  [0, "At due time"],
+  [5, "5 minutes before"],
+  [15, "15 minutes before"],
+  [30, "30 minutes before"],
+  [60, "1 hour before"],
+  [1440, "1 day before"],
+];
+const taskLink = (task: Task) => `${location.origin}/?task=${task.id}`;
+const editable = "input,textarea,select,a[href],code,[contenteditable]";
 function App() {
   const [user, setUser] = useState<Profile | null>(null),
     [loading, setLoading] = useState(true),
@@ -126,6 +165,14 @@ function App() {
     [priorityFilter, setPriorityFilter] = useState(false),
     [busy, setBusy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState<MenuRequest | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  // Long-press state for touch. Clicks right after a long press are swallowed.
+  const press = useRef({ timer: 0, x: 0, y: 0, active: false, until: 0 });
+  const pointerType = useRef("mouse");
+  const claimed = useRef<Event | null>(null);
+  const hovered = useRef<string | null>(null);
+  const rowKeys = useRef<(key: string) => boolean>(() => false);
   const refresh = useCallback(async () => {
     const [nextTasks, nextProjects] = await Promise.all([
       allTasks(),
@@ -177,6 +224,14 @@ function App() {
         searchRef.current?.focus();
       }
       if (!input && e.key === "q" && user) setEditor("new");
+      else if (
+        !input &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        rowKeys.current(e.key)
+      )
+        e.preventDefault();
       if (e.key === "Escape") {
         setEditor(null);
         setSettings(false);
@@ -187,6 +242,36 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [user]);
+  useEffect(() => {
+    // Behave like an app: no browser context menu outside text and links.
+    const native = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (!target.closest?.(editable) && !getSelection()?.toString())
+        e.preventDefault();
+    };
+    const released = () => {
+      clearTimeout(press.current.timer);
+      if (press.current.active) press.current.until = Date.now() + 400;
+      press.current.active = false;
+    };
+    const swallow = (e: MouseEvent) => {
+      if (Date.now() < press.current.until) {
+        e.preventDefault();
+        e.stopPropagation();
+        press.current.until = 0;
+      }
+    };
+    document.addEventListener("contextmenu", native);
+    document.addEventListener("pointerup", released, true);
+    document.addEventListener("pointercancel", released, true);
+    document.addEventListener("click", swallow, true);
+    return () => {
+      document.removeEventListener("contextmenu", native);
+      document.removeEventListener("pointerup", released, true);
+      document.removeEventListener("pointercancel", released, true);
+      document.removeEventListener("click", swallow, true);
+    };
+  }, []);
   useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(""), 4000);
@@ -274,6 +359,384 @@ function App() {
       setNotice(task.completed ? "Task restored" : "Task completed");
     });
   }
+  function patch(task: Task, changes: Partial<Task>, message: string) {
+    return run(async () => {
+      await api(`/tasks/${task.id}`, "PATCH", {
+        ...changes,
+        version: task.version,
+      });
+      await refresh();
+      setNotice(message);
+    });
+  }
+  const schedule = (task: Task, due: string | null) =>
+    patch(
+      task,
+      due
+        ? { due_date: due }
+        : {
+            due_date: null,
+            due_time: null,
+            reminder_minutes: null,
+            recurrence: null,
+          },
+      due ? `Due date set to ${dateLabel(due)}` : "Due date removed",
+    );
+  const setPriority = (task: Task, priority: number) =>
+    patch(
+      task,
+      { priority },
+      `Priority set to ${priorityNames[priority].toLowerCase()}`,
+    );
+  const duplicate = (task: Task) =>
+    run(async () => {
+      await api("/tasks", "POST", {
+        title: task.title,
+        description: task.description,
+        project_id: task.project_id,
+        due_date: task.due_date,
+        due_time: task.due_time,
+        time_zone: task.time_zone,
+        reminder_minutes: task.reminder_minutes,
+        priority: task.priority,
+        labels: task.labels,
+        recurrence: task.recurrence,
+        checklist: task.checklist.map(({ title, completed }) => ({
+          title,
+          completed,
+        })),
+      });
+      await refresh();
+      setNotice("Task duplicated");
+    });
+  const removeTask = (task: Task) =>
+    run(async () => {
+      await api(`/tasks/${task.id}?version=${task.version}`, "DELETE");
+      await refresh();
+      setNotice("Task deleted");
+    });
+  const copy = (text: string, message: string) =>
+    navigator.clipboard.writeText(text).then(
+      () => setNotice(message),
+      () => setError("Copying is not available in this browser."),
+    );
+  const goToProject = (task: Task) =>
+    navigate(task.project_id ? `project:${task.project_id}` : "inbox");
+  const rescheduleOverdue = () =>
+    run(async () => {
+      for (const task of overdue)
+        await api(`/tasks/${task.id}`, "PATCH", {
+          version: task.version,
+          due_date: today,
+        });
+      await refresh();
+      setNotice("Overdue tasks moved to today");
+    });
+  function taskMenu(task: Task): MenuEntry[] {
+    const day = new Date().getDay(),
+      tomorrow = daysFromNow(1),
+      weekend = daysFromNow(day === 0 ? 0 : 6 - day),
+      nextWeek = daysFromNow((8 - day) % 7 || 7);
+    const dates: [string, string, React.ReactNode][] = [
+      [
+        today,
+        `Today · ${weekday(today)}`,
+        <span className="day-icon tone-green">
+          <Calendar size={20} />
+          <b>{new Date().getDate()}</b>
+        </span>,
+      ],
+      [
+        tomorrow,
+        `Tomorrow · ${weekday(tomorrow)}`,
+        <Sunrise size={20} className="tone-orange" />,
+      ],
+      [
+        weekend,
+        `This weekend · ${weekday(weekend)}`,
+        <Sofa size={20} className="tone-blue" />,
+      ],
+      [
+        nextWeek,
+        `Next week · ${weekday(nextWeek)}`,
+        <ArrowRightToLine size={20} className="tone-purple" />,
+      ],
+    ];
+    return [
+      {
+        label: "Edit",
+        icon: <Pencil size={16} />,
+        shortcut: "E",
+        key: "e",
+        action: () => setEditor(task),
+      },
+      {
+        label: "Go to project",
+        icon: <ListTree size={16} />,
+        shortcut: "G",
+        key: "g",
+        action: () => goToProject(task),
+      },
+      {
+        label: task.completed ? "Restore" : "Complete",
+        icon: <CheckCircle2 size={16} />,
+        shortcut: "C",
+        key: "c",
+        action: () => toggle(task),
+      },
+      "separator",
+      {
+        row: "Date",
+        options: [
+          ...dates
+            // Weekend can fall on today or tomorrow; keep one button per date.
+            .filter(([d], i) => dates.findIndex(([o]) => o === d) === i)
+            .map(([d, label, icon]) => ({
+              label,
+              icon,
+              selected: task.due_date === d,
+              action: () => schedule(task, d),
+            })),
+          {
+            label: "No date",
+            icon: <CircleSlash size={20} />,
+            selected: !task.due_date,
+            action: () => schedule(task, null),
+          },
+          {
+            label: "Pick a date",
+            icon: <Ellipsis size={20} />,
+            date: {
+              value: task.due_date,
+              change: (value) => schedule(task, value),
+            },
+          },
+        ],
+      },
+      {
+        row: "Priority",
+        shortcut: "1–4",
+        options: [1, 2, 3, 4].map((p) => ({
+          label: priorityNames[p],
+          icon: (
+            <Flag
+              size={20}
+              className={`flag-${p}`}
+              fill={p < 4 ? "currentColor" : "none"}
+            />
+          ),
+          selected: task.priority === p,
+          action: () => setPriority(task, p),
+        })),
+      },
+      "separator",
+      ...(task.due_time
+        ? [
+            {
+              label: "Reminder",
+              icon: <Bell size={16} />,
+              items: [
+                {
+                  label: "None",
+                  checked: task.reminder_minutes === null,
+                  action: () =>
+                    patch(task, { reminder_minutes: null }, "Reminder removed"),
+                },
+                ...reminderChoices.map(([minutes, label]) => ({
+                  label,
+                  checked: task.reminder_minutes === minutes,
+                  action: () =>
+                    patch(task, { reminder_minutes: minutes }, "Reminder set"),
+                })),
+              ],
+            },
+          ]
+        : []),
+      {
+        label: "Move to",
+        icon: <FolderInput size={16} />,
+        shortcut: "V",
+        key: "v",
+        items: [
+          {
+            label: "Inbox",
+            icon: <Inbox size={16} />,
+            checked: !task.project_id,
+            action: () => patch(task, { project_id: null }, "Moved to Inbox"),
+          },
+          ...projects.map((p) => ({
+            label: p.name,
+            icon: (
+              <span className="project-hash" style={{ color: p.color }}>
+                #
+              </span>
+            ),
+            checked: task.project_id === p.id,
+            action: () =>
+              patch(task, { project_id: p.id }, `Moved to ${p.name}`),
+          })),
+        ],
+      },
+      {
+        label: "Duplicate",
+        icon: <CopyPlus size={16} />,
+        shortcut: "D",
+        key: "d",
+        action: () => duplicate(task),
+      },
+      {
+        label: "Copy link to task",
+        icon: <Link size={16} />,
+        action: () => copy(taskLink(task), "Link copied"),
+      },
+      "separator",
+      {
+        label: "Delete task",
+        icon: <Trash2 size={16} />,
+        danger: true,
+        confirm: "Confirm delete",
+        action: () => removeTask(task),
+      },
+    ];
+  }
+  const addTaskIn = (next: View): MenuEntry[] => [
+    {
+      label: "Add task",
+      icon: <Plus size={16} />,
+      action: () => {
+        navigate(next);
+        setEditor("new");
+      },
+    },
+  ];
+  const projectMenu = (project: Project): MenuEntry[] => [
+    ...addTaskIn(`project:${project.id}`),
+    {
+      label: "Edit project",
+      icon: <Pencil size={16} />,
+      action: () => setProjectEditor(project),
+    },
+    "separator",
+    {
+      label: "Delete project",
+      icon: <Trash2 size={16} />,
+      danger: true,
+      confirm: "Confirm delete",
+      action: () =>
+        run(async () => {
+          await api(`/projects/${project.id}`, "DELETE");
+          await refresh();
+          if (view === `project:${project.id}`) navigate("inbox");
+          setNotice("Project deleted. Its tasks moved to Inbox.");
+        }),
+    },
+  ];
+  const listMenu = (): MenuEntry[] => [
+    {
+      label: "Add task",
+      icon: <Plus size={16} />,
+      shortcut: "Q",
+      key: "q",
+      action: () => setEditor("new"),
+    },
+    "separator",
+    {
+      label: "Sort by",
+      icon: <ArrowDownWideNarrow size={16} />,
+      items: [
+        ["smart", "Due date"],
+        ["priority", "Priority"],
+        ["name", "Name"],
+      ].map(([value, label]) => ({
+        label,
+        checked: sort === value,
+        action: () => setSort(value),
+      })),
+    },
+    {
+      label: "High priority only",
+      icon: <ListFilter size={16} />,
+      checked: priorityFilter,
+      action: () => setPriorityFilter(!priorityFilter),
+    },
+    ...(overdue.length
+      ? [
+          {
+            label: "Move overdue to today",
+            icon: <CalendarDays size={16} />,
+            action: rescheduleOverdue,
+          },
+        ]
+      : []),
+    "separator",
+    {
+      label: "Refresh",
+      icon: <RefreshCw size={16} />,
+      action: () => run(refresh),
+    },
+  ];
+  // Right-click opens a menu at the pointer; a touch long-press opens it as a sheet.
+  const menuFor = (
+    entries: () => MenuEntry[],
+    title?: string,
+    target?: string,
+  ) => ({
+    onContextMenu: (e: React.MouseEvent) => {
+      if ((e.target as Element).closest(editable)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      clearTimeout(press.current.timer);
+      if (press.current.active) return;
+      const touch = pointerType.current === "touch";
+      press.current.active = touch;
+      let { clientX: x, clientY: y } = e;
+      if (!x && !y) {
+        const box = e.currentTarget.getBoundingClientRect();
+        x = box.left + 24;
+        y = box.bottom;
+      }
+      setMenu({ x, y, entries: entries(), title, target, sheet: touch });
+    },
+    onPointerDown: (e: React.PointerEvent) => {
+      pointerType.current = e.pointerType;
+      if (e.pointerType !== "touch" || claimed.current === e.nativeEvent)
+        return;
+      claimed.current = e.nativeEvent;
+      clearTimeout(press.current.timer);
+      press.current.x = e.clientX;
+      press.current.y = e.clientY;
+      press.current.timer = window.setTimeout(() => {
+        press.current.active = true;
+        navigator.vibrate?.(10);
+        getSelection()?.removeAllRanges();
+        setMenu({
+          x: press.current.x,
+          y: press.current.y,
+          entries: entries(),
+          title,
+          target,
+          sheet: true,
+        });
+      }, 450);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (
+        Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8
+      )
+        clearTimeout(press.current.timer);
+    },
+  });
+  rowKeys.current = (key) => {
+    const task = shown.find((t) => t.id === hovered.current);
+    if (!task || editor || settings || projectEditor || menu) return false;
+    if (key === "e") setEditor(task);
+    else if (key === "g") goToProject(task);
+    else if (key === "c") toggle(task);
+    else if (key === "d") duplicate(task);
+    else if (["1", "2", "3", "4"].includes(key)) setPriority(task, Number(key));
+    else return false;
+    return true;
+  };
   if (loading)
     return (
       <div className="loading">
@@ -322,8 +785,15 @@ function App() {
         </section>
       </main>
     );
-  const TaskRow = ({ task }: { task: Task }) => (
-    <div className={`task-row ${task.completed ? "is-complete" : ""}`}>
+  const taskRow = (task: Task) => (
+    <div
+      key={task.id}
+      className={`task-row ${task.completed ? "is-complete" : ""} ${menu?.target === task.id ? "menu-target" : ""}`}
+      onMouseEnter={() => (hovered.current = task.id)}
+      onMouseLeave={() => (hovered.current = null)}
+      onFocus={() => (hovered.current = task.id)}
+      {...menuFor(() => taskMenu(task), task.title, task.id)}
+    >
       <button
         className={`check-task priority-${task.priority}`}
         aria-label={`${task.completed ? "Restore" : "Complete"} ${task.title}`}
@@ -392,8 +862,19 @@ function App() {
       </button>
       <button
         className="icon-button row-menu"
-        aria-label={`Edit ${task.title}`}
-        onClick={() => setEditor(task)}
+        aria-label={`More actions for ${task.title}`}
+        aria-haspopup="menu"
+        onClick={(e) => {
+          const box = e.currentTarget.getBoundingClientRect();
+          setMenu({
+            x: box.right,
+            y: box.bottom + 4,
+            entries: taskMenu(task),
+            title: task.title,
+            target: task.id,
+            sheet: false,
+          });
+        }}
       >
         <MoreHorizontal size={18} />
       </button>
@@ -405,27 +886,12 @@ function App() {
         {name}
         <span>{items.length}</span>
         {isOverdue && (
-          <button
-            onClick={() =>
-              run(async () => {
-                for (const task of items)
-                  await api(`/tasks/${task.id}`, "PATCH", {
-                    version: task.version,
-                    due_date: today,
-                  });
-                await refresh();
-                setNotice("Overdue tasks moved to today");
-              })
-            }
-            disabled={busy}
-          >
+          <button onClick={rescheduleOverdue} disabled={busy}>
             Reschedule
           </button>
         )}
       </h3>
-      {items.map((task) => (
-        <TaskRow task={task} key={task.id} />
-      ))}
+      {items.map((task) => taskRow(task))}
     </section>
   );
   return (
@@ -463,6 +929,7 @@ function App() {
                   className={view === item && !search ? "active" : ""}
                   onClick={() => navigate(item)}
                   key={item}
+                  {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
                 >
                   <Icon size={18} />
                   <span>
@@ -498,6 +965,7 @@ function App() {
               key={p.id}
               className={view === `project:${p.id}` ? "active" : ""}
               onClick={() => navigate(`project:${p.id}`)}
+              {...menuFor(() => projectMenu(p), p.name)}
             >
               <span className="project-hash" style={{ color: p.color }}>
                 #
@@ -577,7 +1045,7 @@ function App() {
           </button>
         </header>
         <div className="content-layout">
-          <main className="task-main">
+          <main className="task-main" {...menuFor(listMenu, title)}>
             <div className="page-title">
               <h1>{title}</h1>
               <div>
@@ -711,6 +1179,7 @@ function App() {
           </main>
         </div>
       </div>
+      {menu && <ContextMenu request={menu} close={closeMenu} />}
       {notice && (
         <div className="toast" role="status">
           <CheckCircle2 size={18} />

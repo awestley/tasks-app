@@ -1499,3 +1499,306 @@ input[type="checkbox"] {
     transition: none !important;
   }
 }
+
+/* App chrome: no text selection or touch callouts outside fields and dialogs. */
+.app-shell {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.app-shell input,
+.app-shell textarea,
+.modal {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.task-row.menu-target {
+  background: var(--background-modifier-hover-subtle);
+  box-shadow: inset 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+/* Context menu: glass popover at the pointer. */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 236px;
+  max-width: 300px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--menu-radius);
+  corner-shape: squircle;
+  background: color-mix(in srgb, var(--background-primary) 86%, transparent);
+  backdrop-filter: var(--gl-glass-filter);
+  -webkit-backdrop-filter: var(--gl-glass-filter);
+  box-shadow: var(--menu-shadow), var(--shadow-glass-border-tilted);
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
+  animation: menu-in 0.12s ease-out;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+.menu-panel :focus-visible {
+  outline: none;
+}
+.menu-item {
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: var(--control-height-l);
+  padding: 0 10px;
+  border-radius: 14px;
+  corner-shape: squircle;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+.menu-item:focus,
+.menu-item.expanded {
+  outline: none;
+  background: var(--background-modifier-hover);
+}
+.menu-icon {
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
+  color: var(--text-muted);
+}
+.menu-icon .project-hash {
+  font-size: 15px;
+  font-weight: 500;
+}
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-check {
+  color: var(--text-accent);
+}
+.menu-shortcut {
+  padding: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.menu-chevron {
+  color: var(--text-muted);
+}
+.menu-item.danger,
+.menu-item.danger .menu-icon {
+  color: var(--text-error);
+}
+.menu-separator {
+  height: 1px;
+  margin: 5px 10px;
+  background: var(--background-modifier-border-subtle);
+}
+.menu-row {
+  padding: 6px 10px 4px;
+}
+.menu-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+}
+.menu-row-options {
+  display: flex;
+  gap: 2px;
+  margin: 6px -6px 0;
+}
+.menu-option-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.menu-option {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 12px;
+  corner-shape: squircle;
+  color: var(--text-muted);
+  cursor: default;
+}
+.menu-option:focus {
+  outline: none;
+  background: var(--background-modifier-hover);
+}
+.menu-option.selected {
+  background: var(--background-modifier-hover-strong);
+  box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+.menu-option-label {
+  display: none;
+}
+.menu-date-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+.day-icon {
+  position: relative;
+  display: inline-flex;
+}
+.day-icon b {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  font-size: 8.5px;
+  line-height: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+.tone-green {
+  color: var(--color-green);
+}
+.tone-orange {
+  color: var(--color-orange);
+}
+.tone-blue {
+  color: var(--color-blue);
+}
+.tone-purple {
+  color: var(--color-purple);
+}
+.flag-1 {
+  color: var(--color-red);
+}
+.flag-2 {
+  color: var(--color-orange);
+}
+.flag-3 {
+  color: var(--interactive-accent);
+}
+
+/* After a touch long-press, the same menu opens as a bottom sheet. */
+.menu-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 8px;
+  background: rgb(0 0 0 / 20%);
+  animation: gl-fade-in 0.2s ease-out;
+}
+.menu-sheet {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
+  border-radius: var(--sidebar-radius);
+  corner-shape: squircle;
+  background: var(--background-secondary);
+  box-shadow: var(--shadow-raised-xl), var(--glass-shadow-inset-edge);
+  -webkit-user-select: none;
+  user-select: none;
+  animation: menu-sheet-in 0.25s cubic-bezier(0.32, 0.1, 0.2, 0.99);
+}
+@keyframes menu-sheet-in {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+.menu-sheet-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding-left: 8px;
+}
+.menu-sheet-heading strong {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  line-height: 20px;
+}
+.menu-sheet-heading .icon-button {
+  width: 40px;
+  height: 40px;
+}
+.menu-sheet .menu-panel {
+  outline: none;
+}
+.menu-sheet .menu-item {
+  height: 48px;
+  padding: 0 12px;
+  gap: 14px;
+  border-radius: 16px;
+  font-size: 16px;
+}
+.menu-sheet .menu-item:focus:not(:active) {
+  background: none;
+}
+.menu-sheet .menu-item:active,
+.menu-sheet .menu-option:active {
+  background: var(--background-modifier-hover);
+}
+.menu-sheet .menu-icon {
+  width: 20px;
+}
+.menu-sheet .menu-shortcut {
+  display: none;
+}
+.menu-sheet .menu-row {
+  padding: 8px 12px 6px;
+}
+.menu-sheet .menu-row-heading {
+  font-size: 13px;
+}
+.menu-sheet .menu-row-options {
+  margin: 8px -8px 0;
+}
+.menu-sheet .menu-option-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.menu-sheet .menu-option {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  height: auto;
+  min-height: 64px;
+  padding: 8px 0;
+  border-radius: 14px;
+}
+.menu-sheet .menu-option:focus:not(.selected) {
+  background: none;
+}
+.menu-sheet .menu-option-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 13px;
+  text-align: center;
+}
+@media (prefers-color-scheme: dark) {
+  .menu-sheet-backdrop {
+    background: rgb(0 0 0 / 45%);
+  }
+}

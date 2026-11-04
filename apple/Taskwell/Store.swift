@@ -62,6 +62,19 @@ import Combine
             try await self.refresh()
         }
     }
+    /// Changes a few fields of a task. Pass NSNull() to clear a field.
+    func update(_ task: TodoTask, _ fields: [String: Any]) async {
+        await perform {
+            let _: TodoTask = try await self.api.request("/api/v1/tasks/\(task.id)", method: "PATCH", body: API.body(fields.merging(["version": task.version]) { $1 }))
+            try await self.refresh()
+        }
+    }
+    func duplicate(_ task: TodoTask) async {
+        await perform {
+            let copy = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist.map { ChecklistItem(title: $0.title, completed: $0.completed) }, recurrence: task.recurrence)
+            try await self.save(copy, id: nil)
+        }
+    }
     func delete(_ task: TodoTask) async throws {
         try await api.send("/api/v1/tasks/\(task.id)?version=\(task.version)", method: "DELETE")
         try await refresh()

@@ -1,5 +1,10 @@
 import SwiftUI
 import AuthenticationServices
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 private struct StoreErrorAlert: ViewModifier {
     @EnvironmentObject var store: Store
@@ -112,7 +117,14 @@ struct WorkspaceView: View {
     @State private var editor: TaskEditorSelection?
     @State private var showSettings = false
     @State private var projectEditor: ProjectEditorSelection?
+    @State private var pendingDelete: TodoTask?
+    @State private var pendingProjectDelete: Project?
     var today: String { DateOnly.string(Date()) }
+    func addTask(in list: String) {
+        selection = list
+        search = ""
+        editor = TaskEditorSelection(task: nil)
+    }
     var title: String {
         if let project = store.projects.first(where: { $0.id == selection }) { return project.name }
         if let selection, selection.hasPrefix("label:") { return String(selection.dropFirst(6)) }
@@ -138,17 +150,22 @@ struct WorkspaceView: View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section {
-                    Label("Inbox", systemImage: "tray").tag("inbox")
-                    Label("Today", systemImage: "sun.max").tag("today")
-                    Label("Upcoming", systemImage: "calendar").tag("upcoming")
-                    Label("All tasks", systemImage: "square.stack").tag("all")
+                    ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")], id: \.0) { tag, name, symbol in
+                        Label(name, systemImage: symbol).tag(tag)
+                            .contextMenu { Button { addTask(in: tag) } label: { Label("Add task", systemImage: "plus") } }
+                    }
                     Label("Completed", systemImage: "checkmark.circle").tag("completed")
                 }
                 Section("My projects") {
                     ForEach(store.projects) { project in
                         Label { Text(project.name) } icon: { Text("#").foregroundStyle(Color(hex: project.color)) }
                             .tag(project.id)
-                            .contextMenu { Button("Edit project") { projectEditor = ProjectEditorSelection(project: project) } }
+                            .contextMenu {
+                                Button { addTask(in: project.id) } label: { Label("Add task", systemImage: "plus") }
+                                Button { projectEditor = ProjectEditorSelection(project: project) } label: { Label("Edit project", systemImage: "pencil") }
+                                Divider()
+                                Button(role: .destructive) { pendingProjectDelete = project } label: { Label("Delete project", systemImage: "trash") }
+                            }
                     }
                     Button { projectEditor = ProjectEditorSelection(project: nil) } label: { Label("Add project", systemImage: "plus") }
                 }
@@ -204,7 +221,20 @@ struct WorkspaceView: View {
                             }.padding(.vertical, 6)
                             .listRowBackground(Glassive.backgroundPrimary)
                             .listRowSeparatorTint(Glassive.border)
-                            .swipeActions { Button("Edit") { editor = TaskEditorSelection(task: task) }.tint(Glassive.accent) }
+                            .contextMenu {
+                                TaskMenu(task: task, edit: { editor = TaskEditorSelection(task: task) },
+                                         goToProject: { search = ""; selection = task.project_id ?? "inbox" },
+                                         delete: { pendingDelete = task })
+                            }
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button { Task { await store.toggle(task) } } label: {
+                                    Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward" : "checkmark")
+                                }.tint(task.completed ? Glassive.accent : Glassive.green)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Glassive.red)
+                                Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Glassive.accent)
+                            }
                         }
                     }.listStyle(.plain).scrollContentBackground(.hidden).refreshable { await store.perform { try await store.refresh() } }
                 }
@@ -224,6 +254,89 @@ struct WorkspaceView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(item: $projectEditor) { ProjectEditorView(project: $0.project) }
         .taskwellErrorAlert(active: editor == nil && projectEditor == nil && !showSettings)
+        .confirmationDialog("Permanently delete this task?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { task in
+            Button("Delete task", role: .destructive) { Task { await store.perform { try await store.delete(task) } } }
+        }
+        .confirmationDialog("Delete this project? Its tasks will move to Inbox.", isPresented: Binding(get: { pendingProjectDelete != nil }, set: { if !$0 { pendingProjectDelete = nil } }), presenting: pendingProjectDelete) { project in
+            Button("Delete project", role: .destructive) { Task { await store.perform {
+                try await store.api.send("/api/v1/projects/\(project.id)", method: "DELETE")
+                if selection == project.id { selection = "inbox" }
+                try await store.refresh()
+            } } }
+        }
+    }
+}
+/// Right-click and long-press actions for a task, matching the web menu.
+struct TaskMenu: View {
+    @EnvironmentObject var store: Store
+    let task: TodoTask
+    let edit: () -> Void
+    let goToProject: () -> Void
+    let delete: () -> Void
+    static func day(_ offset: Int) -> String {
+        DateOnly.string(Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date())
+    }
+    var dates: [(String, String, String, Color)] {
+        let weekday = Calendar.current.component(.weekday, from: Date()) // Sunday is 1
+        let options = [(Self.day(0), "Today", "calendar", Glassive.green), (Self.day(1), "Tomorrow", "sunrise", Glassive.orange),
+                       (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Glassive.accent),
+                       (Self.day((9 - weekday) % 7 == 0 ? 7 : (9 - weekday) % 7), "Next week", "arrow.right.to.line", Color.purple)]
+        // The weekend can be today or tomorrow; keep one choice per date.
+        return options.filter { option in options.first { $0.0 == option.0 }?.1 == option.1 }
+    }
+    var body: some View {
+        Button(action: edit) { Label("Edit", systemImage: "pencil") }
+        Button(action: goToProject) { Label("Go to project", systemImage: "list.bullet.indent") }
+        Button { Task { await store.toggle(task) } } label: {
+            Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward.circle" : "checkmark.circle")
+        }
+        Divider()
+        Section("Date") {
+            Picker("Date", selection: Binding(get: { task.due_date ?? "" }, set: { value in
+                Task { await store.update(task, value.isEmpty ? ["due_date": NSNull(), "due_time": NSNull(), "reminder_minutes": NSNull(), "recurrence": NSNull()] : ["due_date": value]) }
+            })) {
+                // Palette pickers color each symbol with its tint.
+                ForEach(dates, id: \.0) { date, name, symbol, color in Label(name, systemImage: symbol).tint(color).tag(date) }
+                Label("No date", systemImage: "circle.slash").tint(Color.secondary).tag("")
+            }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
+        }
+        Section("Priority") {
+            Picker("Priority", selection: Binding(get: { task.priority }, set: { value in Task { await store.update(task, ["priority": value]) } })) {
+                ForEach([(1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Normal")], id: \.0) { value, name in
+                    Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Glassive.priority(value)).tag(value)
+                }
+            }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
+        }
+        Divider()
+        if task.due_time != nil {
+            Picker(selection: Binding(get: { task.reminder_minutes ?? -1 }, set: { value in
+                Task { await store.update(task, ["reminder_minutes": value < 0 ? NSNull() : value]) }
+            })) {
+                Text("None").tag(-1)
+                Text("At due time").tag(0)
+                ForEach([5, 15, 30], id: \.self) { Text("\($0) minutes before").tag($0) }
+                Text("1 hour before").tag(60)
+                Text("1 day before").tag(1440)
+            } label: { Label("Reminder", systemImage: "bell") }.pickerStyle(.menu)
+        }
+        Picker(selection: Binding(get: { task.project_id ?? "" }, set: { value in
+            Task { await store.update(task, ["project_id": value.isEmpty ? NSNull() : value]) }
+        })) {
+            Label("Inbox", systemImage: "tray").tag("")
+            ForEach(store.projects) { project in Text("# " + project.name).tag(project.id) }
+        } label: { Label("Move to", systemImage: "folder") }.pickerStyle(.menu)
+        Button { Task { await store.duplicate(task) } } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+        Button {
+            let link = "\(store.server)/?task=\(task.id)"
+            #if os(iOS)
+            UIPasteboard.general.string = link
+            #else
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(link, forType: .string)
+            #endif
+        } label: { Label("Copy link to task", systemImage: "link") }
+        Divider()
+        Button(role: .destructive, action: delete) { Label("Delete task", systemImage: "trash") }
     }
 }
 struct TaskEditorView: View {
