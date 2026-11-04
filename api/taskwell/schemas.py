@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -14,6 +14,11 @@ class Model(BaseModel):
 class ProjectIn(Model):
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(default="#2563eb", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class ProjectCreate(ProjectIn):
+    # Clients may choose the id (a UUID), so an item can be referenced before it reaches the server.
+    id: UUID | None = None
 
 
 class ProjectOut(ProjectIn):
@@ -65,6 +70,10 @@ class TaskIn(Model):
             raise ValueError("A reminder needs a due date and time")
         due_instant(self.due_date, self.due_time, self.time_zone)
         return self
+
+
+class TaskCreate(TaskIn):
+    id: UUID | None = None
 
 
 class TaskPatch(Model):

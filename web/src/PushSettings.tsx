@@ -14,7 +14,7 @@ export async function disableBrowserPush() {
     }
   }
   if ("serviceWorker" in navigator) {
-    const registration = await navigator.serviceWorker.getRegistration("/");
+    const registration = await navigator.serviceWorker.getRegistration("./");
     await (await registration?.pushManager.getSubscription())?.unsubscribe();
   }
   localStorage.removeItem("taskwell-push-id");
@@ -58,7 +58,7 @@ export function PushSettings() {
       throw new Error(
         "Notifications are blocked. Allow them in browser settings to receive reminders.",
       );
-    await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.register("./sw.js");
     const registration = await navigator.serviceWorker.ready;
     const key = config!.vapid_public_key!.replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(
@@ -89,8 +89,8 @@ export function PushSettings() {
       </p>
       {!supported ? (
         <p className="muted">
-          This browser does not expose push notifications. On iPhone, add
-          this app to your Home Screen and open it there.
+          This browser does not expose push notifications. On iPhone, add this
+          app to your Home Screen and open it there.
         </p>
       ) : !config?.web_enabled ? (
         <p className="muted">

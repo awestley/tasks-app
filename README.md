@@ -1,8 +1,8 @@
-# Taskwell
+# Tasks
 
 A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for DigitalOcean with Sign in with Apple.
 
-![Taskwell web workspace](docs/screenshots/web-desktop.png)
+![Tasks web workspace](docs/screenshots/web-desktop.png)
 
 ## Included
 
@@ -16,6 +16,32 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
 This is an online-first first release. It does not yet include shared projects, subtasks, comments, attachments, calendar integrations, or offline editing. It is an independent app and does not use Todoist branding or services.
+
+## Inside Personal Command
+
+Tasks is one of the apps in Personal Command, the shell at westley.app (repo `awestley/westley-app`). It follows the shell's app contract (`docs/app-contract.md` there): the shell signs people in, opens Tasks views in columns, searches it with everything else, and lets other apps embed tasks and projects.
+
+Set `SHELL_URL` to turn this on. Then:
+
+- Sign in is the shell's. The API verifies the shell's ES256 access token (the `pc_session` cookie, or `Authorization: Bearer`) against `SHELL_URL/auth/.well-known/jwks.json` (or `SHELL_JWKS_URL`), and keys data by the token's `sub`. This app's own Apple and development sign in are turned off. Personal access tokens for MCP and scripts keep working.
+- The app is served under `BASE_PATH` (`/apps/tasks`) as well as at the root (health checks), and can be framed by the same origin only.
+- `GET /apps/tasks/manifest.json` describes it to the shell. Contract endpoints live in the API: `GET /api/v1/resolve`, `/search` (the shared search contract, ported in `api/taskwell/search.py`), `/references`, `/events` (server-sent events), plus `GET /tasks/{id}` and `GET /projects/{id}`. Creates accept a client-chosen UUID `id`, and replaying one returns the existing item.
+- Pane routes: `#/today`, `#/inbox`, `#/upcoming`, `#/all`, `#/completed`, `#/project/<id>`, `#/label/<name>`, `#/task/<id>`. Inside the shell the sidebar and top bar are hidden, the theme follows the shell, and a task opens as its own page.
+- `embed.js` defines `<tasks-task>` and `<tasks-project>`. Other apps show them through the shell runtime's `<pc-embed ref="pc://tasks/task/<id>">`. A task description can link `[[note:<id>]]` or embed `![[note:<id>]]` items from other apps.
+- Styles come from `@awestley/glassive`, and the bridge from `@awestley/pc-runtime`. Both are private packages, vendored into `web/vendor/` until the build can install them from GitHub Packages; refresh them with `npm --prefix web run sync-vendor -- <obsidian-glassive> <westley-app>`.
+
+Run it inside the shell locally:
+
+```sh
+# Tasks API on :8000, serving the built web app
+npm --prefix web run build
+cd api && SHELL_URL=http://127.0.0.1:8080 PUBLIC_URL=http://127.0.0.1:8080 BASE_PATH=/apps/tasks \
+  .venv/bin/uvicorn taskwell.main:app --port 8000
+# The shell on :8080 (in westley-app), proxying /apps/tasks to it
+PC_APPS=tasks=/apps/tasks/=http://127.0.0.1:8000 npm run dev
+```
+
+Offline support (a local replica and write queue) is the next step; until then the manifest does not declare `offline`.
 
 ## Run locally
 

@@ -1,0 +1,14 @@
+/* Glassive accent mixes.
+   tokens.css resolves these for the default (Blue) accent. The theme computes them at runtime from
+   whichever accent is active, so this file recomputes them from --color-accent with color-mix.
+   Load it after tokens.css. */
+:root, :root[data-theme] {
+  --color-accent-1: color-mix(in oklch, var(--color-accent), white 4%);
+  --color-accent-2: color-mix(in oklch, var(--color-accent), white 10%);
+  --background-modifier-active-hover: color-mix(in oklch, var(--color-accent) 10%, transparent);
+  --background-modifier-border-focus: color-mix(in oklch, var(--color-accent) 60%, transparent);
+  --text-selection: color-mix(in oklch, var(--color-accent) 20%, transparent);
+  --nav-item-background-selected: color-mix(in oklch, var(--color-accent) 15%, transparent);
+  --table-selection: color-mix(in oklch, var(--color-accent) 10%, transparent);
+  --font-text-size: 17px;
+}

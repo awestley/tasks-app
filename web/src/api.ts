@@ -39,8 +39,9 @@ export async function api<T>(
   method = "GET",
   data?: unknown,
 ): Promise<T> {
+  // Relative to the page, so the app works at the root and under the shell's /apps/tasks/.
   const response = await fetch(
-    path.startsWith("/auth") ? path : "/api/v1" + path,
+    (path.startsWith("/auth") ? path : "/api/v1" + path).slice(1),
     {
       method,
       credentials: "same-origin",

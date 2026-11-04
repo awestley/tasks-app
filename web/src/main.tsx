@@ -63,8 +63,20 @@ import {
   type Token,
   type ParsedTask,
 } from "./api";
-import "./glassive.css";
+import "@awestley/glassive/tokens.css";
+import "@awestley/glassive/accent.css";
+import "./glassive-app.css";
 import "./style.css";
+import { applyTheme } from "@awestley/glassive";
+import { findShortRefs } from "@awestley/pc-runtime";
+import {
+  PcEmbed,
+  PcProvider,
+  useCommands,
+  useHosted,
+  usePaneTitle,
+  usePc,
+} from "@awestley/pc-runtime/react";
 import { PushSettings, disableBrowserPush } from "./PushSettings";
 import { ChecklistEditor } from "./ChecklistEditor";
 
@@ -103,6 +115,34 @@ const emptyDraft = (): Draft => ({
   checklist: [],
   recurrence: null,
 });
+// Pane routes: #/today, #/inbox, #/upcoming, #/all, #/completed, #/project/<id>, #/label/<name>,
+// #/task/<id>. The shell opens these in columns and records them as the pane moves.
+const LISTS = ["today", "inbox", "upcoming", "all", "completed"] as const;
+function readRoute(): { view: View | null; taskId: string | null } {
+  const [kind, ...rest] = location.hash.replace(/^#\/?/, "").split("/");
+  let arg = "";
+  try {
+    arg = decodeURIComponent(rest.join("/"));
+  } catch {
+    return { view: null, taskId: null };
+  }
+  if (kind === "task" && arg) return { view: null, taskId: arg };
+  if (kind === "project" && arg)
+    return { view: `project:${arg}`, taskId: null };
+  if (kind === "label" && arg) return { view: `label:${arg}`, taskId: null };
+  if ((LISTS as readonly string[]).includes(kind))
+    return { view: kind as View, taskId: null };
+  return { view: null, taskId: null };
+}
+function hashFor(view: View) {
+  if (view.startsWith("project:"))
+    return "#/project/" + encodeURIComponent(view.slice(8));
+  if (view.startsWith("label:"))
+    return "#/label/" + encodeURIComponent(view.slice(6));
+  return "#/" + view;
+}
+// Which app owns each short reference type ([[note:…]], ![[task:…]]) in task descriptions.
+const TYPE_OWNERS = { task: "tasks", project: "tasks", note: "notes" };
 const icons = {
   today: Sun,
   inbox: Inbox,
@@ -142,9 +182,15 @@ const reminderChoices: [number, string][] = [
   [60, "1 hour before"],
   [1440, "1 day before"],
 ];
-const taskLink = (task: Task) => `${location.origin}/?task=${task.id}`;
+// Inside the shell (under /apps/), a link opens the task in a shell column; on its own, in the app.
+const taskLink = (task: Task) =>
+  location.pathname.startsWith("/apps/")
+    ? `${location.origin}/?open=${encodeURIComponent(`pc://tasks/task/${task.id}`)}`
+    : `${location.origin}${location.pathname}?task=${task.id}`;
 const editable = "input,textarea,select,a[href],code,[contenteditable]";
 function App() {
+  const pc = usePc();
+  const hosted = useHosted();
   const [user, setUser] = useState<Profile | null>(null),
     [loading, setLoading] = useState(true),
     [tasks, setTasks] = useState<Task[]>([]),
@@ -152,8 +198,10 @@ function App() {
   const [config, setConfig] = useState({
       apple_enabled: false,
       dev_login: false,
+      shell: false,
     }),
-    [view, setView] = useState<View>("today"),
+    [view, setView] = useState<View>(() => readRoute().view || "today"),
+    [taskPage, setTaskPage] = useState<string | null>(() => readRoute().taskId),
     [search, setSearch] = useState("");
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -273,6 +321,41 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    const follow = () => {
+      const route = readRoute();
+      setTaskPage(route.taskId);
+      if (route.view) setView(route.view);
+      setEditor(null);
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
+  useEffect(() => {
+    // Live updates: changes from other panes, embeds in other apps, and other devices.
+    if (!user || typeof EventSource === "undefined") return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const source = new EventSource("api/v1/events");
+    source.onmessage = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => refresh().catch(() => {}), 150);
+    };
+    return () => {
+      clearTimeout(timer);
+      source.close();
+    };
+  }, [user, refresh]);
+  useCommands(
+    [
+      { id: "new-task", label: "New task", shortcut: "Mod+Shift+T" },
+      { id: "settings", label: "Tasks settings" },
+    ],
+    (id) => {
+      if (!user) return;
+      if (id === "new-task") setEditor("new");
+      if (id === "settings") setSettings(true);
+    },
+  );
+  useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(""), 4000);
       return () => clearTimeout(timer);
@@ -294,6 +377,7 @@ function App() {
     active = tasks.filter((t) => !t.completed),
     todayTasks = active.filter((t) => t.due_date && t.due_date <= today);
   const labels = Array.from(new Set(tasks.flatMap((t) => t.labels))).sort();
+  const pageTask = taskPage ? tasks.find((t) => t.id === taskPage) : null;
   const selectedProject = view.startsWith("project:")
     ? projects.find((p) => p.id === view.slice(8))
     : null;
@@ -310,6 +394,9 @@ function App() {
         } as Record<string, string>
       )[view] ||
       view.slice(6);
+  usePaneTitle(
+    loading || !user ? null : taskPage ? pageTask?.title || "Task" : title,
+  );
   const shown = useMemo(
     () =>
       tasks
@@ -346,8 +433,16 @@ function App() {
     rest = shown.filter((t) => !overdue.includes(t));
   function navigate(next: View) {
     setView(next);
+    setTaskPage(null);
     setSearch("");
     setMobile(false);
+    if (location.hash !== hashFor(next)) location.hash = hashFor(next);
+  }
+  // Inside the shell a task opens as its own page, so it can sit in a column and the
+  // shell can go back to the list; on its own the app keeps the editor dialog.
+  function openTask(task: Task) {
+    if (hosted) location.hash = "#/task/" + encodeURIComponent(task.id);
+    else setEditor(task);
   }
   async function toggle(task: Task) {
     await run(async () => {
@@ -468,7 +563,7 @@ function App() {
         icon: <Pencil size={16} />,
         shortcut: "E",
         key: "e",
-        action: () => setEditor(task),
+        action: () => openTask(task),
       },
       {
         label: "Go to project",
@@ -729,7 +824,7 @@ function App() {
   rowKeys.current = (key) => {
     const task = shown.find((t) => t.id === hovered.current);
     if (!task || editor || settings || projectEditor || menu) return false;
-    if (key === "e") setEditor(task);
+    if (key === "e") openTask(task);
     else if (key === "g") goToProject(task);
     else if (key === "c") toggle(task);
     else if (key === "d") duplicate(task);
@@ -752,8 +847,20 @@ function App() {
           <Logo />
           <h1>Sign in</h1>
           <div className="auth-actions">
+            {config.shell && (
+              <a
+                className="primary"
+                target="_top"
+                href={
+                  "/login?next=" +
+                  encodeURIComponent(location.pathname + location.hash)
+                }
+              >
+                Sign in
+              </a>
+            )}
             {config.apple_enabled && (
-              <a className="apple-button" href="/auth/apple/start">
+              <a className="apple-button" href="auth/apple/start">
                 <Apple size={20} /> Sign in with Apple
               </a>
             )}
@@ -772,7 +879,7 @@ function App() {
                 {busy ? "Opening..." : "Open local workspace"}
               </button>
             )}
-            {!config.apple_enabled && (
+            {!config.apple_enabled && !config.shell && (
               <p className="auth-note">Apple sign-in is not configured.</p>
             )}
             {error && (
@@ -802,7 +909,7 @@ function App() {
       >
         {task.completed && <Check size={13} />}
       </button>
-      <button className="task-body" onClick={() => setEditor(task)}>
+      <button className="task-body" onClick={() => openTask(task)}>
         <span className="task-title">{task.title}</span>
         {task.description && (
           <span className="task-description">{task.description}</span>
@@ -895,112 +1002,118 @@ function App() {
     </section>
   );
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobile ? "open" : ""}`}>
-        <Logo />
-        <button className="workspace-switch" onClick={() => setSettings(true)}>
-          <span className="avatar">{user.name.slice(0, 1)}</span>
-          <span>
-            {user.name}
-            <small>Personal workspace</small>
-          </span>
-          <ChevronDown size={14} />
-        </button>
-        <button className="quick-add" onClick={() => setEditor("new")}>
-          <Plus size={18} /> Add task <kbd>Q</kbd>
-        </button>
-        <nav>
-          {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
-            (item) => {
-              const Icon = icons[item];
-              const count =
-                item === "today"
-                  ? todayTasks.length
-                  : item === "inbox"
-                    ? active.filter((t) => !t.project_id).length
-                    : item === "upcoming"
-                      ? active.filter((t) => t.due_date && t.due_date > today)
-                          .length
-                      : item === "completed"
-                        ? tasks.length - active.length
-                        : active.length;
-              return (
-                <button
-                  className={view === item && !search ? "active" : ""}
-                  onClick={() => navigate(item)}
-                  key={item}
-                  {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
-                >
-                  <Icon size={18} />
-                  <span>
-                    {
-                      {
-                        inbox: "Inbox",
-                        today: "Today",
-                        upcoming: "Upcoming",
-                        all: "All tasks",
-                        completed: "Completed",
-                      }[item]
-                    }
-                  </span>
-                  <small>{count || ""}</small>
-                </button>
-              );
-            },
-          )}
-        </nav>
-        <div className="sidebar-heading">
-          My projects
+    <div className={`app-shell ${hosted ? "hosted" : ""}`}>
+      {!hosted && (
+        <aside className={`sidebar ${mobile ? "open" : ""}`}>
+          <Logo />
           <button
-            className="icon-button"
-            aria-label="Add project"
-            onClick={() => setProjectEditor("new")}
+            className="workspace-switch"
+            onClick={() => setSettings(true)}
           >
-            <Plus size={16} />
+            <span className="avatar">{user.name.slice(0, 1)}</span>
+            <span>
+              {user.name}
+              <small>Personal workspace</small>
+            </span>
+            <ChevronDown size={14} />
           </button>
-        </div>
-        <nav>
-          {projects.map((p) => (
-            <button
-              key={p.id}
-              className={view === `project:${p.id}` ? "active" : ""}
-              onClick={() => navigate(`project:${p.id}`)}
-              {...menuFor(() => projectMenu(p), p.name)}
-            >
-              <span className="project-hash" style={{ color: p.color }}>
-                #
-              </span>
-              <span>{p.name}</span>
-              <small>
-                {active.filter((t) => t.project_id === p.id).length || ""}
-              </small>
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-heading">
-          Labels
-          <Tag size={13} />
-        </div>
-        <nav>
-          {labels.map((l) => (
-            <button
-              key={l}
-              className={view === `label:${l}` ? "active" : ""}
-              onClick={() => navigate(`label:${l}`)}
-            >
-              <span className="label-dot" />
-              <span>{l}</span>
-            </button>
-          ))}
-          {!labels.length && <p className="sidebar-hint">No labels</p>}
-        </nav>
-        <div className="sidebar-bottom">
-          <button onClick={() => setSettings(true)}>
-            <Settings size={17} /> Settings & integrations
+          <button className="quick-add" onClick={() => setEditor("new")}>
+            <Plus size={18} /> Add task <kbd>Q</kbd>
           </button>
-        </div>
-      </aside>
-      {mobile && (
+          <nav>
+            {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
+              (item) => {
+                const Icon = icons[item];
+                const count =
+                  item === "today"
+                    ? todayTasks.length
+                    : item === "inbox"
+                      ? active.filter((t) => !t.project_id).length
+                      : item === "upcoming"
+                        ? active.filter((t) => t.due_date && t.due_date > today)
+                            .length
+                        : item === "completed"
+                          ? tasks.length - active.length
+                          : active.length;
+                return (
+                  <button
+                    className={view === item && !search ? "active" : ""}
+                    onClick={() => navigate(item)}
+                    key={item}
+                    {...(item !== "completed" &&
+                      menuFor(() => addTaskIn(item)))}
+                  >
+                    <Icon size={18} />
+                    <span>
+                      {
+                        {
+                          inbox: "Inbox",
+                          today: "Today",
+                          upcoming: "Upcoming",
+                          all: "All tasks",
+                          completed: "Completed",
+                        }[item]
+                      }
+                    </span>
+                    <small>{count || ""}</small>
+                  </button>
+                );
+              },
+            )}
+          </nav>
+          <div className="sidebar-heading">
+            My projects
+            <button
+              className="icon-button"
+              aria-label="Add project"
+              onClick={() => setProjectEditor("new")}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+          <nav>
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                className={view === `project:${p.id}` ? "active" : ""}
+                onClick={() => navigate(`project:${p.id}`)}
+                {...menuFor(() => projectMenu(p), p.name)}
+              >
+                <span className="project-hash" style={{ color: p.color }}>
+                  #
+                </span>
+                <span>{p.name}</span>
+                <small>
+                  {active.filter((t) => t.project_id === p.id).length || ""}
+                </small>
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-heading">
+            Labels
+            <Tag size={13} />
+          </div>
+          <nav>
+            {labels.map((l) => (
+              <button
+                key={l}
+                className={view === `label:${l}` ? "active" : ""}
+                onClick={() => navigate(`label:${l}`)}
+              >
+                <span className="label-dot" />
+                <span>{l}</span>
+              </button>
+            ))}
+            {!labels.length && <p className="sidebar-hint">No labels</p>}
+          </nav>
+          <div className="sidebar-bottom">
+            <button onClick={() => setSettings(true)}>
+              <Settings size={17} /> Settings & integrations
+            </button>
+          </div>
+        </aside>
+      )}
+      {mobile && !hosted && (
         <button
           className="mobile-shade"
           aria-label="Close navigation"
@@ -1008,175 +1121,231 @@ function App() {
         />
       )}
       <div className="main-shell">
-        <header className="topbar">
-          <button
-            className="icon-button mobile-menu"
-            aria-label="Open navigation"
-            onClick={() => setMobile(true)}
-          >
-            <Menu size={20} />
-          </button>
-          <div className="breadcrumb">
-            My workspace <ChevronRight size={13} /> <span>{title}</span>
-          </div>
-          <div className="search-box">
-            <Search size={16} />
-            <input
-              ref={searchRef}
-              placeholder="Search tasks"
-              aria-label="Search tasks"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search ? (
-              <button aria-label="Clear search" onClick={() => setSearch("")}>
-                <X size={14} />
-              </button>
-            ) : (
-              <kbd>⌘ K</kbd>
-            )}
-          </div>
-          <button
-            className="top-avatar"
-            aria-label="Open settings"
-            onClick={() => setSettings(true)}
-          >
-            {user.name.slice(0, 1)}
-          </button>
-        </header>
-        <div className="content-layout">
-          <main className="task-main" {...menuFor(listMenu, title)}>
-            <div className="page-title">
-              <h1>{title}</h1>
-              <div>
-                {selectedProject && (
-                  <button
-                    className="icon-button"
-                    aria-label="Edit project"
-                    onClick={() => setProjectEditor(selectedProject)}
-                  >
-                    <Pencil size={18} />
-                  </button>
-                )}
-                <button className="primary" onClick={() => setEditor("new")}>
-                  <Plus size={16} /> Add task
-                </button>
-              </div>
+        {!hosted && (
+          <header className="topbar">
+            <button
+              className="icon-button mobile-menu"
+              aria-label="Open navigation"
+              onClick={() => setMobile(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <div className="breadcrumb">
+              My workspace <ChevronRight size={13} /> <span>{title}</span>
             </div>
-            <p className="page-subtitle">
-              {view === "today" && !search ? (
-                <>
-                  <strong>
-                    {new Date().toLocaleDateString(undefined, {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </strong>
-                </>
-              ) : search ? (
-                `${shown.length} tasks matching “${search}”`
-              ) : view === "completed" ? (
-                `${shown.length} completed tasks`
-              ) : (
-                `${shown.length} tasks`
-              )}
-            </p>
-            <div className="list-toolbar">
-              <span>
-                <Layers size={15} />
-                {shown.length} tasks
-              </span>
-              <div>
-                <button
-                  className={priorityFilter ? "filter-on" : ""}
-                  onClick={() => setPriorityFilter(!priorityFilter)}
-                >
-                  <ListFilter size={15} />
-                  {priorityFilter ? "High priority" : "Filter"}
-                </button>
-                <label>
-                  <ArrowDownWideNarrow size={14} />
-                  <select
-                    aria-label="Sort tasks"
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value)}
-                  >
-                    <option value="smart">Due date</option>
-                    <option value="priority">Priority</option>
-                    <option value="name">Name</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            {error && (
-              <div className="error" role="alert">
-                <CircleAlert className="error-icon" size={16} />
-                <span>{error}</span>
-                <button
-                  className="icon-button"
-                  aria-label="Dismiss error"
-                  onClick={() => setError("")}
-                >
+            <div className="search-box">
+              <Search size={16} />
+              <input
+                ref={searchRef}
+                placeholder="Search tasks"
+                aria-label="Search tasks"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search ? (
+                <button aria-label="Clear search" onClick={() => setSearch("")}>
                   <X size={14} />
                 </button>
-              </div>
-            )}
-            {overdue.length > 0 && group("Overdue", overdue, true)}
-            {rest.length > 0 &&
-              (view === "upcoming" && !search
-                ? Array.from(new Set(rest.map((t) => t.due_date))).map((d) =>
-                    group(
-                      dateLabel(d),
-                      rest.filter((t) => t.due_date === d),
-                    ),
-                  )
-                : group(
-                    view === "today" && !search
-                      ? "Today"
-                      : view === "completed"
-                        ? "Completed"
-                        : "Tasks",
-                    rest,
-                  ))}
-            {!shown.length && (
-              <div className="empty-state">
-                <div>
-                  <CheckCheck size={32} />
-                </div>
-                <h2>
-                  {search
-                    ? "Nothing found"
-                    : view === "completed"
-                      ? "No completed tasks"
-                      : "No tasks"}
-                </h2>
-                <p>
-                  {search
-                    ? "Try a different search."
-                    : view === "completed"
-                      ? "Your completed tasks will appear here."
-                      : "Add a task with the button above or press Q."}
-                </p>
-                {!search && view !== "completed" && (
+              ) : (
+                <kbd>⌘ K</kbd>
+              )}
+            </div>
+            <button
+              className="top-avatar"
+              aria-label="Open settings"
+              onClick={() => setSettings(true)}
+            >
+              {user.name.slice(0, 1)}
+            </button>
+          </header>
+        )}
+        <div className="content-layout">
+          {taskPage ? (
+            <main className="task-main task-page">
+              {pageTask ? (
+                <TaskEditor
+                  inline
+                  key={pageTask.id + ":" + pageTask.version}
+                  task={pageTask}
+                  projects={projects}
+                  initialProject={null}
+                  initialDate={null}
+                  busy={busy}
+                  close={() => navigate(view)}
+                  save={(draft) =>
+                    run(async () => {
+                      await api(`/tasks/${pageTask.id}`, "PATCH", {
+                        ...draft,
+                        version: pageTask.version,
+                      });
+                      await refresh();
+                      setNotice("Task updated");
+                      pc.notify("Task updated", "success");
+                    })
+                  }
+                  remove={() =>
+                    run(async () => {
+                      await api(
+                        `/tasks/${pageTask.id}?version=${pageTask.version}`,
+                        "DELETE",
+                      );
+                      await refresh();
+                      navigate(view);
+                      setNotice("Task deleted");
+                    })
+                  }
+                  linked={<Linked text={pageTask.description} />}
+                />
+              ) : (
+                <div className="empty-state">
+                  <h2>Task not found</h2>
+                  <p>It may have been deleted.</p>
                   <button
                     className="subtle-button"
-                    onClick={() => setEditor("new")}
+                    onClick={() => navigate(view)}
                   >
-                    <Plus size={16} /> Create a task
+                    Back to tasks
                   </button>
-                )}
+                </div>
+              )}
+            </main>
+          ) : (
+            <main className="task-main" {...menuFor(listMenu, title)}>
+              <div className="page-title">
+                <h1>{title}</h1>
+                <div>
+                  {selectedProject && (
+                    <button
+                      className="icon-button"
+                      aria-label="Edit project"
+                      onClick={() => setProjectEditor(selectedProject)}
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
+                  <button className="primary" onClick={() => setEditor("new")}>
+                    <Plus size={16} /> Add task
+                  </button>
+                </div>
               </div>
-            )}
-            {view !== "completed" && (
-              <button className="add-task-row" onClick={() => setEditor("new")}>
-                <Plus size={18} /> Add a task{" "}
+              <p className="page-subtitle">
+                {view === "today" && !search ? (
+                  <>
+                    <strong>
+                      {new Date().toLocaleDateString(undefined, {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </strong>
+                  </>
+                ) : search ? (
+                  `${shown.length} tasks matching “${search}”`
+                ) : view === "completed" ? (
+                  `${shown.length} completed tasks`
+                ) : (
+                  `${shown.length} tasks`
+                )}
+              </p>
+              <div className="list-toolbar">
                 <span>
-                  or press <kbd>Q</kbd>
+                  <Layers size={15} />
+                  {shown.length} tasks
                 </span>
-              </button>
-            )}
-          </main>
+                <div>
+                  <button
+                    className={priorityFilter ? "filter-on" : ""}
+                    onClick={() => setPriorityFilter(!priorityFilter)}
+                  >
+                    <ListFilter size={15} />
+                    {priorityFilter ? "High priority" : "Filter"}
+                  </button>
+                  <label>
+                    <ArrowDownWideNarrow size={14} />
+                    <select
+                      aria-label="Sort tasks"
+                      value={sort}
+                      onChange={(e) => setSort(e.target.value)}
+                    >
+                      <option value="smart">Due date</option>
+                      <option value="priority">Priority</option>
+                      <option value="name">Name</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              {error && (
+                <div className="error" role="alert">
+                  <CircleAlert className="error-icon" size={16} />
+                  <span>{error}</span>
+                  <button
+                    className="icon-button"
+                    aria-label="Dismiss error"
+                    onClick={() => setError("")}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              {overdue.length > 0 && group("Overdue", overdue, true)}
+              {rest.length > 0 &&
+                (view === "upcoming" && !search
+                  ? Array.from(new Set(rest.map((t) => t.due_date))).map((d) =>
+                      group(
+                        dateLabel(d),
+                        rest.filter((t) => t.due_date === d),
+                      ),
+                    )
+                  : group(
+                      view === "today" && !search
+                        ? "Today"
+                        : view === "completed"
+                          ? "Completed"
+                          : "Tasks",
+                      rest,
+                    ))}
+              {!shown.length && (
+                <div className="empty-state">
+                  <div>
+                    <CheckCheck size={32} />
+                  </div>
+                  <h2>
+                    {search
+                      ? "Nothing found"
+                      : view === "completed"
+                        ? "No completed tasks"
+                        : "No tasks"}
+                  </h2>
+                  <p>
+                    {search
+                      ? "Try a different search."
+                      : view === "completed"
+                        ? "Your completed tasks will appear here."
+                        : "Add a task with the button above or press Q."}
+                  </p>
+                  {!search && view !== "completed" && (
+                    <button
+                      className="subtle-button"
+                      onClick={() => setEditor("new")}
+                    >
+                      <Plus size={16} /> Create a task
+                    </button>
+                  )}
+                </div>
+              )}
+              {view !== "completed" && (
+                <button
+                  className="add-task-row"
+                  onClick={() => setEditor("new")}
+                >
+                  <Plus size={18} /> Add a task{" "}
+                  <span>
+                    or press <kbd>Q</kbd>
+                  </span>
+                </button>
+              )}
+            </main>
+          )}
         </div>
       </div>
       {menu && <ContextMenu request={menu} close={closeMenu} />}
@@ -1269,6 +1438,7 @@ function App() {
       {settings && (
         <SettingsPanel
           user={user}
+          shell={!!config.shell}
           close={() => setSettings(false)}
           logout={() =>
             run(async () => {
@@ -1298,13 +1468,16 @@ function Modal({
   children,
   close,
   label,
+  inline = false,
 }: {
   children: React.ReactNode;
   close: () => void;
   label: string;
+  inline?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (inline) return;
     const previous = document.activeElement as HTMLElement;
     ref.current?.querySelector<HTMLElement>("input,button,textarea")?.focus();
     const trap = (e: KeyboardEvent) => {
@@ -1328,7 +1501,13 @@ function Modal({
       document.removeEventListener("keydown", trap);
       previous?.focus();
     };
-  }, []);
+  }, [inline]);
+  if (inline)
+    return (
+      <section className="modal inline" aria-label={label}>
+        {children}
+      </section>
+    );
   return (
     <div
       className="modal-backdrop"
@@ -1357,7 +1536,11 @@ function TaskEditor({
   close,
   save,
   remove,
+  inline = false,
+  linked,
 }: {
+  inline?: boolean;
+  linked?: React.ReactNode;
   task: Task | null;
   projects: Project[];
   initialProject: string | null;
@@ -1443,7 +1626,11 @@ function TaskEditor({
         }
       : base;
   return (
-    <Modal close={close} label={task ? "Edit task" : "Add task"}>
+    <Modal
+      close={close}
+      label={task ? "Edit task" : "Add task"}
+      inline={inline}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -1554,6 +1741,7 @@ function TaskEditor({
           value={draft.description}
           onChange={(e) => setDraft({ ...draft, description: e.target.value })}
         />
+        {linked}
         <ChecklistEditor
           items={draft.checklist}
           locked={task?.completed}
@@ -1823,11 +2011,13 @@ function ProjectEditor({
 }
 function SettingsPanel({
   user,
+  shell,
   close,
   logout,
   deleteAccount,
 }: {
   user: Profile;
+  shell: boolean;
   close: () => void;
   logout: () => void;
   deleteAccount: () => void;
@@ -1870,9 +2060,11 @@ function SettingsPanel({
           <strong>{user.name}</strong>
           <p>{user.email}</p>
         </div>
-        <button className="secondary" onClick={logout}>
-          <LogOut size={14} /> Sign out
-        </button>
+        {!shell && (
+          <button className="secondary" onClick={logout}>
+            <LogOut size={14} /> Sign out
+          </button>
+        )}
       </div>
       <PushSettings />
       <section className="token-group">
@@ -1951,7 +2143,7 @@ function SettingsPanel({
       <div className="integration-note">
         <strong>Connection details</strong>
         <p>
-          REST API: <code>{location.origin}/api/v1</code>
+          REST API: <code>{new URL("api/v1", location.href).href}</code>
           <br />
           Use the included MCP adapter with your server URL and a token. Tokens
           expire after 90 days and can be revoked here.
@@ -1985,8 +2177,36 @@ function SettingsPanel({
     </Modal>
   );
 }
+// Notes, tasks and projects a description links to ([[note:id]]) or embeds (![[note:id]]).
+function Linked({ text }: { text: string }) {
+  const pc = usePc();
+  const refs = findShortRefs(text, TYPE_OWNERS);
+  if (!refs.length) return null;
+  return (
+    <section className="linked-items" aria-label="Linked items">
+      <h3>Linked</h3>
+      {refs.map((r, i) =>
+        r.embed ? (
+          <PcEmbed key={i} target={r.ref} size="card">
+            {r.label || r.ref}
+          </PcEmbed>
+        ) : (
+          <button
+            key={i}
+            className="linked-link"
+            onClick={() => pc.open(r.ref, { placement: "new-column" })}
+          >
+            {r.label || r.ref.replace(/^pc:\/\/[^/]+\//, "")}
+          </button>
+        ),
+      )}
+    </section>
+  );
+}
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <PcProvider app="tasks" applyTheme={applyTheme}>
+      <App />
+    </PcProvider>
   </React.StrictMode>,
 );

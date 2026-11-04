@@ -1487,11 +1487,9 @@ input[type="checkbox"] {
     height: var(--control-height-xl);
   }
 }
-@media (prefers-color-scheme: dark) {
-  .modal-backdrop,
-  .mobile-shade {
-    background: rgb(0 0 0 / 45%);
-  }
+[data-theme="dark"] .modal-backdrop,
+[data-theme="dark"] .mobile-shade {
+  background: rgb(0 0 0 / 45%);
 }
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -1797,8 +1795,46 @@ input[type="checkbox"] {
   line-height: 13px;
   text-align: center;
 }
-@media (prefers-color-scheme: dark) {
-  .menu-sheet-backdrop {
-    background: rgb(0 0 0 / 45%);
-  }
+[data-theme="dark"] .menu-sheet-backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+/* Inside the shell: the shell provides navigation and search, so the pane is just the list or the task. */
+.app-shell.hosted .main-shell {
+  margin-left: 0;
+}
+.app-shell.hosted .task-main {
+  padding: 16px 24px 40px;
+}
+.task-page .modal.inline {
+  width: auto;
+  max-width: 720px;
+  max-height: none;
+  margin: 0 auto;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+  overflow: visible;
+}
+.linked-items {
+  margin: 12px 0 4px;
+  display: grid;
+  gap: 8px;
+}
+.linked-items h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.linked-link {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+.linked-link:hover {
+  text-decoration: underline;
 }
