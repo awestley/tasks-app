@@ -7,9 +7,13 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "playwright test",
-    "format": "prettier --write src tests *.ts"
+    "format": "prettier --write src tests *.ts",
+    "sync-vendor": "node scripts/sync-vendor.mjs",
+    "test:unit": "TZ=America/New_York node --experimental-strip-types --no-warnings --test tests/unit/parse.test.ts"
   },
   "dependencies": {
+    "@awestley/glassive": "file:vendor/glassive",
+    "@awestley/pc-runtime": "file:vendor/pc-runtime",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

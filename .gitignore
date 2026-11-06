@@ -23,3 +23,4 @@ DerivedData-*/
 *.tsbuildinfo
 
 .backups/
+!web/vendor/glassive/dist/

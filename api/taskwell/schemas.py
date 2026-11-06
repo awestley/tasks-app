@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -14,6 +14,11 @@ class Model(BaseModel):
 class ProjectIn(Model):
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(default="#2563eb", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class ProjectCreate(ProjectIn):
+    # Clients may choose the id (a UUID), so an item can be referenced before it reaches the server.
+    id: UUID | None = None
 
 
 class ProjectOut(ProjectIn):
@@ -67,6 +72,10 @@ class TaskIn(Model):
         return self
 
 
+class TaskCreate(TaskIn):
+    id: UUID | None = None
+
+
 class TaskPatch(Model):
     version: int = Field(ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=500)
@@ -81,6 +90,9 @@ class TaskPatch(Model):
     recurrence: Literal["daily", "weekly", "monthly"] | None = None
     completed: bool | None = None
     checklist: list[ChecklistItem] | None = Field(default=None, max_length=100)
+    # With completed=false right after completing (the app's Undo): also remove the recurring successor
+    # that completion created, if it hasn't been touched since.
+    undo: bool | None = None
 
 
 class TaskOut(TaskIn):

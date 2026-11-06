@@ -8,6 +8,8 @@
 **/*.sqlite
 **/.backups
 **/dist
+# The vendored Glassive package ships its build output in dist/.
+!web/vendor/glassive/dist
 **/DerivedData
 .git
 apple

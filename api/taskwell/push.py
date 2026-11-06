@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import time
+from datetime import UTC
 from urllib.parse import urlsplit
 
 import httpx
@@ -175,7 +176,13 @@ def apns_token():
     return token
 
 
-def send_push(subscription, task, delivery_id):
+def reminder_tag(task_id, scheduled_for):
+    """Notification tag shared with the app's own reminders (web/src/reminders.ts), so a reminder
+    delivered both ways shows once."""
+    return f"reminder-{task_id}-{int(scheduled_for.replace(tzinfo=UTC).timestamp() * 1000)}"
+
+
+def send_push(subscription, task, delivery_id, tag=None):
     details = subscription.details
     # Limit payload size. Never include notes, checklist text or credentials.
     title = task.title[:160]
@@ -191,7 +198,9 @@ def send_push(subscription, task, delivery_id):
                     "endpoint": endpoint,
                     "keys": {"p256dh": details["p256dh"], "auth": details["auth"]},
                 },
-                data=json.dumps({"title": "Task reminder", "body": title, "task_id": task.id, "tag": delivery_id}),
+                data=json.dumps(
+                    {"title": "Task reminder", "body": title, "task_id": task.id, "tag": tag or delivery_id}
+                ),
                 vapid_private_key=settings.vapid_private_key.replace("\\n", "\n"),
                 vapid_claims={"sub": settings.vapid_subject},
                 ttl=3600,

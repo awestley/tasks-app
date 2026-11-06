@@ -54,6 +54,9 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     apple_sub: Mapped[str] = mapped_column(String(255), unique=True)
+    # The shell's stable user id (the JWT `sub`) when the app runs inside Personal Command. Users created
+    # by the shell get a placeholder apple_sub ("shell:<sub>"), which can never match an Apple id.
+    shell_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(320), default="")
     name: Mapped[str] = mapped_column(String(200), default="My workspace")
     apple_refresh: Mapped[str | None] = mapped_column(Text)

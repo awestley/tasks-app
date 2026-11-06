@@ -1,0 +1,173 @@
+{
+  "now": "2026-11-04T10:00:00-05:00",
+  "zone": "America/New_York",
+  "projects": [
+    {
+      "id": "p-work",
+      "name": "Work"
+    },
+    {
+      "id": "p-little",
+      "name": "Little adventures"
+    }
+  ],
+  "cases": [
+    {
+      "text": "Order pizza friday afternoon",
+      "title": "Order pizza",
+      "due_date": "2026-11-06",
+      "due_time": "15:00",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Call mom tmr at 10am",
+      "title": "Call mom",
+      "due_date": "2026-11-05",
+      "due_time": "10:00",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Dentist Nov 12 at 3:30pm",
+      "title": "Dentist",
+      "due_date": "2026-11-12",
+      "due_time": "15:30",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Pay taxes 15 April",
+      "title": "Pay taxes",
+      "due_date": "2027-04-15"
+    },
+    {
+      "text": "Trip planning next week",
+      "title": "Trip planning",
+      "due_date": "2026-11-09"
+    },
+    {
+      "text": "Clean garage this weekend",
+      "title": "Clean garage",
+      "due_date": "2026-11-07"
+    },
+    {
+      "text": "Plan a hike next weekend",
+      "title": "Plan a hike",
+      "due_date": "2026-11-14"
+    },
+    {
+      "text": "Water plants every monday",
+      "title": "Water plants",
+      "due_date": "2026-11-09",
+      "recurrence": "weekly"
+    },
+    {
+      "text": "Standup every day at 9:15",
+      "title": "Standup",
+      "due_date": "2026-11-05",
+      "due_time": "09:15",
+      "recurrence": "daily",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Tidy up monthly",
+      "title": "Tidy up",
+      "due_date": "2026-11-04",
+      "recurrence": "monthly"
+    },
+    {
+      "text": "Stretch in 2 hours",
+      "title": "Stretch",
+      "due_date": "2026-11-04",
+      "due_time": "12:00",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Review report p1 @work #Work !30m before tomorrow 4pm",
+      "title": "Review report",
+      "priority": 1,
+      "labels": [
+        "work"
+      ],
+      "project": "p-work",
+      "due_date": "2026-11-05",
+      "due_time": "16:00",
+      "reminder_minutes": 30
+    },
+    {
+      "text": "Picnic #Little adventures saturday",
+      "title": "Picnic",
+      "project": "p-little",
+      "due_date": "2026-11-07"
+    },
+    {
+      "text": "Book flights in 3 months",
+      "title": "Book flights",
+      "due_date": "2027-02-04"
+    },
+    {
+      "text": "Pay rent next month",
+      "title": "Pay rent",
+      "due_date": "2026-12-01"
+    },
+    {
+      "text": "Lunch on wed",
+      "title": "Lunch",
+      "due_date": "2026-11-04"
+    },
+    {
+      "text": "Gym next friday 6pm",
+      "title": "Gym",
+      "due_date": "2026-11-13",
+      "due_time": "18:00",
+      "reminder_minutes": 0
+    },
+    {
+      "text": "Call the bank remind me 1 hour before tomorrow 11am",
+      "title": "Call the bank",
+      "due_date": "2026-11-05",
+      "due_time": "11:00",
+      "reminder_minutes": 60
+    },
+    {
+      "text": "Lunch tod",
+      "title": "Lunch",
+      "due_date": "2026-11-04"
+    },
+    {
+      "text": "Buy bread",
+      "title": "Buy bread"
+    },
+    {
+      "text": "Call tom",
+      "title": "Call tom"
+    },
+    {
+      "text": "Review !15m before",
+      "title": "Review !15m before"
+    },
+    {
+      "text": "Read Feb 31",
+      "title": "Read Feb 31"
+    },
+    {
+      "text": "Buy 2026-02-30 tickets",
+      "title": "Buy 2026-02-30 tickets"
+    },
+    {
+      "text": "Renew passport yesterday p1",
+      "title": "Renew passport",
+      "due_date": "2026-11-03",
+      "priority": 1
+    },
+    {
+      "text": "Write weekly review every friday 4pm @focus",
+      "title": "Write weekly review",
+      "due_date": "2026-11-06",
+      "due_time": "16:00",
+      "recurrence": "weekly",
+      "labels": [
+        "focus"
+      ],
+      "reminder_minutes": 0
+    }
+  ]
+}

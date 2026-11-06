@@ -1,0 +1,51 @@
+{
+  "name": "@awestley/pc-runtime",
+  "version": "0.1.0",
+  "description": "Personal Command runtime for apps: the shell bridge, pc:// references and <pc-embed>.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awestley/westley-app.git",
+    "directory": "packages/runtime"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./refs": {
+      "types": "./src/refs.d.ts",
+      "default": "./src/refs.js"
+    },
+    "./protocol": "./src/protocol.js",
+    "./embed": {
+      "types": "./src/embed.d.ts",
+      "default": "./src/embed.js"
+    },
+    "./search": {
+      "types": "./src/search.d.ts",
+      "default": "./src/search.js"
+    },
+    "./react": {
+      "types": "./src/react.d.ts",
+      "default": "./src/react.js"
+    }
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "types": "./src/index.d.ts"
+}

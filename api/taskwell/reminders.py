@@ -8,7 +8,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .db import PushSubscription, ReminderDelivery, SessionLocal, Task, now
-from .push import DeliveryError, apns_ready, send_push, web_ready
+from .push import DeliveryError, apns_ready, reminder_tag, send_push, web_ready
 from .scheduling import reminder_instant
 
 log = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def tick(session_factory=SessionLocal, instant=None):
                 db.commit()
                 continue
             try:
-                send_push(endpoint, task, delivery_id)
+                send_push(endpoint, task, delivery_id, reminder_tag(task.id, delivery.scheduled_for))
                 delivery.status = "sent"
                 delivery.error = None
             except DeliveryError as error:

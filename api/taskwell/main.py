@@ -8,14 +8,18 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from .auth import authenticate, issue, revoke_apple, session_only, trusted_origin
 from .auth import router as auth_router
+from . import events
 from .config import settings
+from .contract import api as contract_api
+from .contract import project_ref, task_ref
+from .contract import router as contract_router
 from .db import Credential, Project, SessionLocal, Task, get_db, now, uid
 from .mcp_server import mcp
 from .migrations import upgrade_local_database
@@ -24,7 +28,19 @@ from .push import router as push_router
 from .quick_add import router as quick_router
 from .reminders import run as reminder_loop
 from .scheduling import recurrence_clock
-from .schemas import Profile, ProjectIn, ProjectOut, TaskIn, TaskOut, TaskPatch, TokenIn, TokenOut, Version
+from .schemas import (
+    Profile,
+    ProjectCreate,
+    ProjectIn,
+    ProjectOut,
+    TaskCreate,
+    TaskIn,
+    TaskOut,
+    TaskPatch,
+    TokenIn,
+    TokenOut,
+    Version,
+)
 
 
 @asynccontextmanager
@@ -60,14 +76,23 @@ api = APIRouter(prefix="/api/v1", tags=["Workspace"])
 rate_windows = defaultdict(deque)
 
 
+def route_path(request):
+    """The path inside the app, without the base path the shell serves it under."""
+    path, prefix = request.url.path, settings.base_path
+    return path[len(prefix) :] if prefix and path.startswith(prefix + "/") else path
+
+
 @app.middleware("http")
 async def protect(request: Request, call_next):
+    if settings.base_path and request.url.path == settings.base_path:
+        return RedirectResponse(settings.base_path + "/", 308)
+    path = route_path(request)
     if len(request.headers.get("content-length", "")) > 8 or (
         request.headers.get("content-length", "0").isdigit()
         and int(request.headers.get("content-length", "0")) > 100_000
     ):
         return JSONResponse({"detail": "Request too large"}, 413)
-    if request.url.path.startswith("/auth/") and request.url.path != "/auth/config":
+    if path.startswith("/auth/") and path != "/auth/config":
         instant = time.monotonic()
         key = request.client.host if request.client else "unknown"
         if len(rate_windows) > 10000:
@@ -80,7 +105,7 @@ async def protect(request: Request, call_next):
                 {"detail": "Too many sign-in attempts. Retry in a minute."}, 429, headers={"Retry-After": "60"}
             )
         window.append(instant)
-    if request.url.path.startswith("/mcp"):
+    if path.startswith("/mcp"):
         if not request.headers.get("authorization", "").startswith("Bearer "):
             return JSONResponse({"detail": "Bearer token required"}, 401)
         if request.headers.get("origin") and not trusted_origin(request):
@@ -93,19 +118,39 @@ async def protect(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
-    response.headers["X-Frame-Options"] = "DENY"
+    # Inside the shell, panes are same-origin frames; on its own the app can't be framed at all.
+    frames = "'self'" if settings.shell_mode else "'none'"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN" if settings.shell_mode else "DENY"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self' https://appleid.apple.com"
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+        f"frame-ancestors {frames}; form-action 'self' https://appleid.apple.com"
     )
-    if request.url.path in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
+    if path in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self'; frame-ancestors 'none'"
         )
     if settings.production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    if request.url.path.startswith(("/api/", "/auth/")):
+    if path.startswith(("/api/", "/auth/")) and "cache-control" not in response.headers:
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+class BasePath:
+    """Serve the app under settings.base_path (e.g. /apps/tasks) as well as at the root. The platform keeps
+    the prefix on the request; setting root_path lets routing ignore it and keeps generated URLs right."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        prefix = settings.base_path
+        if prefix and scope["type"] in {"http", "websocket"} and scope["path"].startswith(prefix + "/"):
+            scope = {**scope, "root_path": scope.get("root_path", "") + prefix}
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(BasePath)
 
 
 @app.get("/health", tags=["Operations"])
@@ -142,11 +187,31 @@ def projects(user=Depends(authenticate), db: Session = Depends(get_db)):
     return db.scalars(select(Project).where(Project.user_id == user.id).order_by(Project.created_at)).all()
 
 
+@api.get("/projects/{project_id}", response_model=ProjectOut)
+def get_project(project_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
+    return owned(db, Project, project_id, user)
+
+
+def existing(db, model, resource_id, user, response):
+    """Replaying a create with a client-chosen id returns the item instead of failing (offline replay)."""
+    found = db.get(model, resource_id)
+    if found and found.user_id == user.id:
+        response.status_code = 200
+        return found
+    if found:
+        raise HTTPException(409, "This id is already in use")
+    return None
+
+
 @api.post("/projects", response_model=ProjectOut, status_code=201)
-def create_project(data: ProjectIn, user=Depends(authenticate), db: Session = Depends(get_db)):
-    project = Project(user_id=user.id, **data.model_dump())
+def create_project(data: ProjectCreate, response: Response, user=Depends(authenticate), db: Session = Depends(get_db)):
+    fields = data.model_dump(exclude={"id"})
+    if data.id and (found := existing(db, Project, str(data.id), user, response)):
+        return found
+    project = Project(user_id=user.id, **fields, **({"id": str(data.id)} if data.id else {}))
     db.add(project)
     db.commit()
+    events.publish(user.id, project_ref(project.id), "updated")
     return project
 
 
@@ -155,19 +220,24 @@ def edit_project(project_id: str, data: ProjectIn, user=Depends(authenticate), d
     project = owned(db, Project, project_id, user)
     project.name, project.color = data.name, data.color
     db.commit()
+    events.publish(user.id, project_ref(project.id), "updated")
     return project
 
 
 @api.delete("/projects/{project_id}", status_code=204)
 def delete_project(project_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
     project = owned(db, Project, project_id, user)
-    db.execute(
+    moved = db.execute(
         update(Task)
         .where(Task.project_id == project.id, Task.user_id == user.id)
         .values(project_id=None, version=Task.version + 1, updated_at=now())
-    )
+        .returning(Task.id, Task.version)
+    ).all()
     db.delete(project)
     db.commit()
+    events.publish(user.id, project_ref(project_id), "deleted")
+    for task_id, version in moved:
+        events.publish(user.id, task_ref(task_id), "updated", version)
 
 
 @api.get("/tasks", response_model=list[TaskOut])
@@ -199,13 +269,21 @@ def tasks(
     return db.scalars(query.offset(offset).limit(limit)).all()
 
 
+@api.get("/tasks/{task_id}", response_model=TaskOut)
+def get_task(task_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
+    return owned(db, Task, task_id, user)
+
+
 @api.post("/tasks", response_model=TaskOut, status_code=201)
-def create_task(data: TaskIn, user=Depends(authenticate), db: Session = Depends(get_db)):
+def create_task(data: TaskCreate, response: Response, user=Depends(authenticate), db: Session = Depends(get_db)):
+    if data.id and (found := existing(db, Task, str(data.id), user, response)):
+        return found
     if data.project_id:
         owned(db, Project, data.project_id, user)
-    task = Task(user_id=user.id, **data.model_dump())
+    task = Task(user_id=user.id, **data.model_dump(exclude={"id"}), **({"id": str(data.id)} if data.id else {}))
     db.add(task)
     db.commit()
+    events.publish(user.id, task_ref(task.id), "updated", task.version)
     return task
 
 
@@ -223,6 +301,7 @@ def mutate(db, user, task_id, data):
     task = owned(db, Task, task_id, user)
     changes = data.model_dump(exclude_unset=True)
     version = changes.pop("version")
+    undo = changes.pop("undo", None)
     snapshot = TaskIn.model_validate(task).model_dump()
     snapshot.update({k: v for k, v in changes.items() if k != "completed"})
     try:
@@ -240,6 +319,12 @@ def mutate(db, user, task_id, data):
     if complete:
         changes["checklist"] = [{**item.model_dump(), "completed": True} for item in validated.checklist]
     changes["completed_at"] = (task.completed_at or now()) if complete else None
+    discard = None
+    if undo and not complete and task.completed and task.successor_id:
+        found = db.get(Task, task.successor_id)
+        if found and found.user_id == user.id and found.version == 1 and not found.completed:
+            discard = found
+            changes["successor_id"] = None
     successor = None
     if complete and not task.completed and validated.recurrence and not task.successor_id:
         successor = Task(
@@ -267,8 +352,15 @@ def mutate(db, user, task_id, data):
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     if successor:
         db.add(successor)
+    if discard:
+        db.delete(discard)
     db.commit()
     db.refresh(task)
+    events.publish(user.id, task_ref(task.id), "updated", task.version)
+    if discard:
+        events.publish(user.id, task_ref(discard.id), "deleted")
+    if successor:
+        events.publish(user.id, task_ref(successor.id), "updated", 1)
     return task
 
 
@@ -289,6 +381,7 @@ def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authentic
     if result.rowcount != 1:
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     db.commit()
+    events.publish(user.id, task_ref(task_id), "deleted")
 
 
 @api.get("/tokens", response_model=list[TokenOut])
@@ -317,6 +410,8 @@ def delete_token(token_id: str, request: Request, user=Depends(authenticate), db
 app.include_router(push_router)
 app.include_router(quick_router)
 app.include_router(api)
+app.include_router(contract_api)
+app.include_router(contract_router)
 app.mount("/mcp", mcp.streamable_http_app())
 static = Path(settings.static_directory).resolve()
 
@@ -326,8 +421,10 @@ def frontend(path: str):
     if path.startswith(("api/", "auth/")):
         raise HTTPException(404)
     requested = (static / path).resolve()
+    # Hashed build assets can be cached for good; everything else (index.html, embed.js, sw.js) is revalidated.
+    fresh = {"Cache-Control": "no-cache"}
     if requested.is_relative_to(static) and requested.is_file():
-        return FileResponse(requested)
+        return FileResponse(requested, headers=None if path.startswith("assets/") else fresh)
     if (static / "index.html").exists():
-        return FileResponse(static / "index.html")
+        return FileResponse(static / "index.html", headers=fresh)
     raise HTTPException(404, "Build the web app or start the Vite development server")

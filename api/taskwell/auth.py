@@ -2,6 +2,8 @@ import base64
 import hashlib
 import secrets
 from datetime import timedelta
+from functools import cache
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import httpx
@@ -21,6 +23,8 @@ from .schemas import Model
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 COOKIE = "taskwell_session"
+SHELL_COOKIE = "pc_session"
+SHELL_AUDIENCE = "personal-command"
 
 
 def digest(value):
@@ -32,7 +36,51 @@ def trusted_origin(request):
     origin = request.headers.get("origin")
     if origin == settings.public_url:
         return True
-    return not settings.production and origin == str(request.base_url).rstrip("/")
+    return not settings.production and origin == f"{request.url.scheme}://{request.url.netloc}"
+
+
+@cache
+def shell_keys():
+    # Keys are cached and refetched when a token names a key id not seen yet (key rotation).
+    return jwt.PyJWKClient(settings.jwks_url, cache_keys=True, lifespan=600, timeout=5)
+
+
+def verify_shell_token(token):
+    """Claims of a valid access token from the shell's identity service, or None."""
+    try:
+        key = shell_keys().get_signing_key_from_jwt(token).key
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["ES256"],
+            audience=SHELL_AUDIENCE,
+            issuer=settings.shell_url,
+            leeway=30,
+            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+        )
+    except (jwt.PyJWTError, ValueError, TypeError):
+        return None
+    return claims if isinstance(claims.get("sub"), str) and 0 < len(claims["sub"]) <= 200 else None
+
+
+def shell_user(db, claims):
+    """The user for a shell identity, created on first use. Data stays keyed by this row, so it survives a
+    change of sign in provider in the shell (the sub is stable)."""
+    user = db.scalar(select(User).where(User.shell_sub == claims["sub"]))
+    if not user:
+        user = User(
+            apple_sub="shell:" + claims["sub"],
+            shell_sub=claims["sub"],
+            email=str(claims.get("email") or "")[:320],
+            name="My workspace",
+        )
+        db.add(user)
+        db.commit()
+    return user
+
+
+def looks_like_jwt(token):
+    return token.count(".") == 2 and not token.startswith("tw_")
 
 
 def cipher():
@@ -47,12 +95,19 @@ def authenticate(
 ):
     authorization = request.headers.get("authorization", "")
     bearer = authorization.startswith("Bearer ")
-    token = authorization[7:] if bearer else request.cookies.get(COOKIE)
+    shell_cookie = settings.shell_mode and not bearer and request.cookies.get(SHELL_COOKIE)
+    token = authorization[7:] if bearer else (shell_cookie or request.cookies.get(COOKIE))
     if not token:
         raise HTTPException(401, "Sign in required")
     if not bearer and request.method not in {"GET", "HEAD", "OPTIONS"}:
         if not trusted_origin(request):
             raise HTTPException(403, "Invalid request origin")
+    if settings.shell_mode and looks_like_jwt(token):
+        claims = verify_shell_token(token)
+        if not claims:
+            raise HTTPException(401, "Session expired")
+        request.state.credential = SimpleNamespace(kind="shell", id=None)
+        return shell_user(db, claims)
     credential = db.scalar(select(Credential).where(Credential.digest == digest(token), Credential.expires_at > now()))
     if not credential:
         raise HTTPException(401, "Session expired or token revoked")
@@ -179,11 +234,20 @@ def apple_user(db, claims, tokens, client_id):
 
 @router.get("/config")
 def config():
+    if settings.shell_mode:
+        # Sign in happens in the shell; the web app sends people there.
+        return {"apple_enabled": False, "dev_login": False, "shell": True}
     return {"apple_enabled": settings.apple_ready, "dev_login": settings.dev_login and not settings.production}
+
+
+def own_sign_in():
+    if settings.shell_mode:
+        raise HTTPException(404, "Sign in through the shell")
 
 
 @router.post("/dev")
 def dev(response: Response, request: Request, db: Session = Depends(get_db)):
+    own_sign_in()
     if settings.production or not settings.dev_login:
         raise HTTPException(404)
     if not trusted_origin(request):
@@ -203,6 +267,7 @@ def dev(response: Response, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/apple/start")
 def apple_start(db: Session = Depends(get_db)):
+    own_sign_in()
     if not settings.apple_ready:
         raise HTTPException(503, "Sign in with Apple is not configured")
     binding = secrets.token_urlsafe(32)
@@ -225,6 +290,7 @@ def apple_start(db: Session = Depends(get_db)):
 
 @router.post("/apple/callback")
 async def apple_callback(request: Request, db: Session = Depends(get_db)):
+    own_sign_in()
     form = await request.form()
     try:
         challenge = consume(db, str(form.get("state", "")), "web", digest(request.cookies.get("apple_binding", "")))
@@ -250,6 +316,7 @@ class NativeExchange(Model):
 
 @router.post("/apple/challenge")
 def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
+    own_sign_in()
     if not settings.apple_ready or data.client_id not in settings.apple_native_client_ids.split(","):
         raise HTTPException(400, "Unknown Apple application")
     challenge = new_challenge(db, "native", data.client_id)
@@ -258,6 +325,7 @@ def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
 
 @router.post("/apple/native")
 def native_exchange(data: NativeExchange, db: Session = Depends(get_db)):
+    own_sign_in()
     challenge = consume(db, data.challenge_id, "native")
     claims, tokens = exchange(data.code, challenge)
     user = apple_user(db, claims, tokens, challenge.client_id)
@@ -267,6 +335,8 @@ def native_exchange(data: NativeExchange, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(request: Request, response: Response, user=Depends(authenticate), db: Session = Depends(get_db)):
+    if request.state.credential.kind == "shell":
+        raise HTTPException(400, "Sign out from the shell")
     db.delete(request.state.credential)
     db.commit()
     response.delete_cookie(COOKIE)

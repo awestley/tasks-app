@@ -34,13 +34,31 @@ export class APIError extends Error {
     super(message);
   }
 }
+/** Network failures and an unreachable app behind the proxy: the request may be retried later. */
+export const isOffline = (e: unknown) =>
+  e instanceof TypeError ||
+  [0, 502, 503, 504].includes((e as APIError)?.status);
+let refreshing: Promise<boolean> | null = null;
+/** Inside Personal Command the shell's access token is short-lived; renew it once on a 401. */
+function renewShellSession() {
+  refreshing ||= fetch("/auth/refresh", {
+    method: "POST",
+    credentials: "same-origin",
+  })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .finally(() => setTimeout(() => (refreshing = null), 5000));
+  return refreshing;
+}
 export async function api<T>(
   path: string,
   method = "GET",
   data?: unknown,
+  retry = true,
 ): Promise<T> {
+  // Relative to the page, so the app works at the root and under the shell's /apps/tasks/.
   const response = await fetch(
-    path.startsWith("/auth") ? path : "/api/v1" + path,
+    (path.startsWith("/auth") ? path : "/api/v1" + path).slice(1),
     {
       method,
       credentials: "same-origin",
@@ -48,6 +66,13 @@ export async function api<T>(
       body: data ? JSON.stringify(data) : undefined,
     },
   );
+  if (
+    response.status === 401 &&
+    retry &&
+    location.pathname.startsWith("/apps/") &&
+    (await renewShellSession())
+  )
+    return api<T>(path, method, data, false);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new APIError(

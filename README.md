@@ -1,8 +1,8 @@
-# Taskwell
+# Tasks
 
 A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for DigitalOcean with Sign in with Apple.
 
-![Taskwell web workspace](docs/screenshots/web-desktop.png)
+![Tasks web workspace](docs/screenshots/web-desktop.png)
 
 ## Included
 
@@ -16,6 +16,34 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
 This is an online-first first release. It does not yet include shared projects, subtasks, comments, attachments, calendar integrations, or offline editing. It is an independent app and does not use Todoist branding or services.
+
+## Inside Personal Command
+
+Tasks is one of the apps in Personal Command, the shell at westley.app (repo `awestley/westley-app`). It follows the shell's app contract (`docs/app-contract.md` there): the shell signs people in, opens Tasks views in columns, searches it with everything else, and lets other apps embed tasks and projects.
+
+Set `SHELL_URL` to turn this on. Then:
+
+- Sign in is the shell's. The API verifies the shell's ES256 access token (the `pc_session` cookie, or `Authorization: Bearer`) against `SHELL_URL/auth/.well-known/jwks.json` (or `SHELL_JWKS_URL`), and keys data by the token's `sub`. This app's own Apple and development sign in are turned off. Personal access tokens for MCP and scripts keep working.
+- The app is served under `BASE_PATH` (`/apps/tasks`) as well as at the root (health checks), and can be framed by the same origin only.
+- `GET /apps/tasks/manifest.json` describes it to the shell. Contract endpoints live in the API: `GET /api/v1/resolve`, `/search` (the shared search contract, ported in `api/taskwell/search.py`), `/references`, `/events` (server-sent events), plus `GET /tasks/{id}` and `GET /projects/{id}`. Creates accept a client-chosen UUID `id`, and replaying one returns the existing item.
+- Pane routes: `#/today`, `#/inbox`, `#/upcoming`, `#/all`, `#/completed`, `#/project/<id>`, `#/label/<name>`, `#/task/<id>`. It is the same app at every size: in a wide column the sidebar (views, projects, labels) is docked and a task opens beside the list; in a narrow one the sidebar is a drawer (M toggles it) and a task opens over the list. The theme follows the shell.
+- On a phone (a touch screen under 700px wide, or a browser window under 560px) it switches to a native layout (`web/src/phone.tsx`, `phone.css`): tabs at the bottom (Inbox, Today, Upcoming, Search, Browse), a + button, large titles, quick add as a sheet that sits on the keyboard, swipe right to complete and left to schedule, and a task full screen. Inside the shell's phone layout it fills the screen below the shell's bar and pads itself with the `--pc-safe-*` insets the shell sets on the frame.
+- The companion (`companion.html`) is the same app in its compact layout: a capture field first, a list picker, Space completes, ⌘Enter opens the task in a column, Escape twice hides it. The shell's quick add (`new-task`) focuses that field.
+- `embed.js` defines `<tasks-task>` and `<tasks-project>`. Other apps show them through the shell runtime's `<pc-embed ref="pc://tasks/task/<id>">`. A task description can link `[[note:<id>]]` or embed `![[note:<id>]]` items from other apps.
+- Styles come from `@awestley/glassive`, and the bridge from `@awestley/pc-runtime`. Both are private packages, vendored into `web/vendor/` until the build can install them from GitHub Packages; refresh them with `npm --prefix web run sync-vendor -- <obsidian-glassive> <westley-app>`.
+
+Run it inside the shell locally:
+
+```sh
+# Tasks API on :8000, serving the built web app
+npm --prefix web run build
+cd api && SHELL_URL=http://127.0.0.1:8080 PUBLIC_URL=http://127.0.0.1:8080 BASE_PATH=/apps/tasks \
+  .venv/bin/uvicorn taskwell.main:app --port 8000
+# The shell on :8080 (in westley-app), proxying /apps/tasks to it
+PC_APPS=tasks=/apps/tasks/=http://127.0.0.1:8000 npm run dev
+```
+
+Offline: every view keeps a local replica and an outbox in `localStorage` (shared by the column, the companion and any tab, with one sender at a time through Web Locks). Changes show at once and sync in the background; new items get client-made UUIDs; a `409` re-applies the changed fields on top of the newer copy. The service worker keeps the app's files and answers `/search` and `/resolve` with `503 offline` when there is no connection, so the manifest declares `offline`.
 
 ## Run locally
 
@@ -42,7 +70,7 @@ npm --prefix web run dev
 
 Development startup applies database migrations automatically. An original unversioned SQLite database is backed up into `api/.backups/` before its first migration. Keep that directory private, since backups contain workspace data. Production migrations run separately before deployment.
 
-The web app refreshes after writes, when focused, and every 30 seconds. Native apps refresh on activation and support manual refresh. There is no offline write queue. Dates are calendar dates; clients render them in the local calendar. Completion timestamps in the API are UTC. Recurrence advances one interval from the scheduled date, including overdue tasks; monthly recurrence clamps to the destination month's last day. Reopening a completed recurring occurrence does not remove its already-created successor.
+The web app saves every change locally first, sends it in the background, and follows server-sent events (polling every 30 seconds as a fallback). Native apps refresh on activation and support manual refresh. Dates are calendar dates; clients render them in the local calendar. Completion timestamps in the API are UTC. Recurrence advances one interval from the scheduled date, including overdue tasks; monthly recurrence clamps to the destination month's last day. Reopening a completed recurring occurrence keeps its successor, except through Undo (`undo: true` on the reopen), which removes the successor if it has not been touched.
 
 Checklists support up to 100 items per task. Completing a task checks its remaining items; a recurring successor starts with every item unchecked. Reopening a task preserves its checkmarks. Checking the last item does not automatically complete the task.
 
