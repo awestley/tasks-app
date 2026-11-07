@@ -141,7 +141,8 @@ async def protect(request: Request, call_next):
     if settings.base_path and request.url.path == settings.base_path:
         return RedirectResponse(settings.base_path + "/", 308)
     path = route_path(request)
-    if path.startswith("/auth/") and path != "/auth/config":
+    # Only what could be a sign-in attempt counts. /auth/dev does not exist in production.
+    if path.startswith("/auth/") and path not in {"/auth/config", "/auth/dev", "/auth/logout"}:
         instant = time.monotonic()
         key = client_address(request)
         if len(rate_windows) > 10000:

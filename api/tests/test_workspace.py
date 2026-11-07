@@ -441,3 +441,10 @@ def test_body_limit_passes_live_event_streams_through():
     """GET requests with no body reach the app at once, so the event stream is not held back."""
     received, sent = run_body_limit([{"type": "http.request", "body": b"", "more_body": False}])
     assert received == [{"type": "http.request", "body": b"", "more_body": False}] and not sent
+
+
+def test_rate_limit_counts_only_sign_in_attempts(client):
+    client.headers.pop("Authorization")
+    for path in ("/auth/logout", "/auth/dev"):
+        assert {client.post(path).status_code for _ in range(35)} <= {401, 403, 404}
+    assert client.get("/auth/config").status_code == 200
