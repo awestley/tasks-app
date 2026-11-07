@@ -25,6 +25,9 @@ enum Keychain {
 }
 struct APIError: LocalizedError {
     let message: String
+    var status: Int? = nil
+    /// The server no longer accepts this session, so signing in again is the only way forward.
+    var sessionEnded = false
     var errorDescription: String? { message }
 }
 struct API {
@@ -50,7 +53,9 @@ struct API {
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "The server did not respond.") }
         guard (200...299).contains(http.statusCode) else {
             let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["detail"] as? String
-            throw APIError(message: detail ?? "Request failed (\(http.statusCode)). Please try again.")
+            // Apple's sign-in routes also answer 401, which means that attempt failed rather than the session.
+            throw APIError(message: detail ?? "Request failed (\(http.statusCode)). Please try again.", status: http.statusCode,
+                           sessionEnded: http.statusCode == 401 && !path.hasPrefix("/auth/apple/"))
         }
         return data
     }

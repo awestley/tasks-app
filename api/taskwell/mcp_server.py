@@ -1,6 +1,7 @@
 """MCP adapter using the same versioned, authenticated API as every client."""
 
 import os
+import re
 from urllib.parse import urlparse
 
 import httpx
@@ -10,19 +11,24 @@ from mcp.types import ToolAnnotations
 
 from .schemas import ChecklistItem
 
-public = urlparse(os.environ.get("PUBLIC_URL", "http://localhost:5173"))
 mcp = FastMCP(
     "Tasks",
     instructions="Manage the user's tasks and projects. Read before editing, and supply the returned version. Dates are local calendar dates. Only make changes the user has requested.",
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
-    transport_security=TransportSecuritySettings(
+)
+
+
+def http_app(public_url: str):
+    """Build the remote endpoint. The API supplies its settings, because the stdio adapter runs without them."""
+    public = urlparse(public_url)
+    mcp.settings.transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=["127.0.0.1:*", "localhost:*", public.netloc],
         allowed_origins=[public.scheme + "://" + public.netloc],
-    ),
-)
+    )
+    return mcp.streamable_http_app()
 
 
 async def call(ctx: Context, path: str, method="GET", data=None, params=None):
@@ -49,6 +55,13 @@ async def call(ctx: Context, path: str, method="GET", data=None, params=None):
                 detail = "Request failed"
             raise ValueError(f"The server returned {response.status_code}: {detail}")
         return response.json() if response.status_code != 204 else {"ok": True}
+
+
+def task_path(task_id: str, suffix: str = "") -> str:
+    """Task IDs become URL path segments, so accept only the form the API issues."""
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", task_id):
+        raise ValueError("task_id must be an ID returned by list_tasks")
+    return "/tasks/" + task_id + suffix
 
 
 read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False)
@@ -141,19 +154,19 @@ async def update_task(ctx: Context, task_id: str, version: int, changes: dict) -
     }
     if not changes or not set(changes).issubset(allowed):
         raise ValueError("Supply at least one supported task field")
-    return await call(ctx, "/tasks/" + task_id, "PATCH", {**changes, "version": version})
+    return await call(ctx, task_path(task_id), "PATCH", {**changes, "version": version})
 
 
 @mcp.tool(annotations=write)
 async def complete_task(ctx: Context, task_id: str, version: int) -> dict:
     """Complete a task and generate its next occurrence if recurring. Requires the current version."""
-    return await call(ctx, "/tasks/" + task_id + "/complete", "POST", {"version": version})
+    return await call(ctx, task_path(task_id, "/complete"), "POST", {"version": version})
 
 
 @mcp.tool(annotations=destructive)
 async def delete_task(ctx: Context, task_id: str, version: int) -> dict:
     """Permanently delete a task. Only do this at the user's explicit request."""
-    return await call(ctx, "/tasks/" + task_id, "DELETE", params={"version": version})
+    return await call(ctx, task_path(task_id), "DELETE", params={"version": version})
 
 
 @mcp.tool(annotations=write)

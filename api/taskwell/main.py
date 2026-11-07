@@ -10,21 +10,34 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from .auth import authenticate, issue, revoke_apple, session_only, trusted_origin
 from .auth import router as auth_router
 from .config import settings
 from .db import Credential, Project, SessionLocal, Task, get_db, now, uid
-from .mcp_server import mcp
+from .mcp_server import http_app, mcp
 from .migrations import upgrade_local_database
-from .push import apns_ready, web_ready
 from .push import router as push_router
 from .quick_add import router as quick_router
-from .reminders import run as reminder_loop
+from .reminders import run as background_work
 from .scheduling import recurrence_clock
-from .schemas import Profile, ProjectIn, ProjectOut, TaskIn, TaskOut, TaskPatch, TokenIn, TokenOut, Version
+from .schemas import (
+    Profile,
+    ProjectIn,
+    ProjectOut,
+    ProjectPatch,
+    SessionOut,
+    TaskIn,
+    TaskOut,
+    TaskPatch,
+    TaskRevision,
+    TokenIn,
+    TokenOut,
+    Version,
+)
 
 
 @asynccontextmanager
@@ -32,14 +45,13 @@ async def lifespan(app):
     if not settings.production:
         upgrade_local_database()
     stop = asyncio.Event()
-    worker = asyncio.create_task(reminder_loop(stop)) if web_ready() or apns_ready() else None
+    worker = asyncio.create_task(background_work(stop))
     try:
         async with mcp.session_manager.run():
             yield
     finally:
         stop.set()
-        if worker:
-            await worker
+        await worker
 
 
 app = FastAPI(
@@ -47,6 +59,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
     description="Private task management. Authenticate with a revocable personal access token or a session.",
+    # A personal server has no reason to publish its API. docs/openapi.json holds the same description.
+    docs_url=None if settings.production else "/docs",
+    redoc_url=None if settings.production else "/redoc",
+    openapi_url=None if settings.production else "/openapi.json",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -58,18 +74,62 @@ app.add_middleware(
 app.include_router(auth_router)
 api = APIRouter(prefix="/api/v1", tags=["Workspace"])
 rate_windows = defaultdict(deque)
+MAX_BODY_BYTES = 100_000
+
+
+class BodyLimit:
+    """Enforce the size limit on received bytes, because chunked requests declare no Content-Length."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        too_large = JSONResponse({"detail": "Request too large"}, 413)
+        declared = dict(scope["headers"]).get(b"content-length", b"0")
+        if len(declared) > 8 or (declared.isdigit() and int(declared) > MAX_BODY_BYTES):
+            await too_large(scope, receive, send)
+            return
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                return  # The client disconnected.
+            body += message.get("body", b"")
+            if len(body) > MAX_BODY_BYTES:
+                await too_large(scope, receive, send)
+                return
+            if not message.get("more_body"):
+                break
+        delivered = False
+
+        async def replay():
+            nonlocal delivered
+            if delivered:
+                return await receive()
+            delivered = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, replay, send)
+
+
+def client_address(request):
+    """Behind a proxy every connection comes from the proxy, so use the address it reports."""
+    if settings.client_ip_header:
+        # A proxy appends what it saw, so only the last entry cannot be supplied by the client.
+        reported = request.headers.get(settings.client_ip_header, "").split(",")[-1].strip()
+        if reported:
+            return reported
+    return request.client.host if request.client else "unknown"
 
 
 @app.middleware("http")
 async def protect(request: Request, call_next):
-    if len(request.headers.get("content-length", "")) > 8 or (
-        request.headers.get("content-length", "0").isdigit()
-        and int(request.headers.get("content-length", "0")) > 100_000
-    ):
-        return JSONResponse({"detail": "Request too large"}, 413)
     if request.url.path.startswith("/auth/") and request.url.path != "/auth/config":
         instant = time.monotonic()
-        key = request.client.host if request.client else "unknown"
+        key = client_address(request)
         if len(rate_windows) > 10000:
             rate_windows.clear()
         window = rate_windows[key]
@@ -106,6 +166,16 @@ async def protect(request: Request, call_next):
     if request.url.path.startswith(("/api/", "/auth/")):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# Added last so it runs first, before any other middleware or handler reads the body.
+app.add_middleware(BodyLimit)
+
+
+@app.exception_handler(DataError)
+def data_the_database_rejects(request: Request, error: DataError):
+    # For example, PostgreSQL text cannot contain NUL characters, wherever they appear in a request.
+    return JSONResponse({"detail": "The request contains text that cannot be stored."}, 422)
 
 
 @app.get("/health", tags=["Operations"])
@@ -151,9 +221,10 @@ def create_project(data: ProjectIn, user=Depends(authenticate), db: Session = De
 
 
 @api.patch("/projects/{project_id}", response_model=ProjectOut)
-def edit_project(project_id: str, data: ProjectIn, user=Depends(authenticate), db: Session = Depends(get_db)):
+def edit_project(project_id: str, data: ProjectPatch, user=Depends(authenticate), db: Session = Depends(get_db)):
     project = owned(db, Project, project_id, user)
-    project.name, project.color = data.name, data.color
+    for name, value in data.model_dump(exclude_unset=True).items():
+        setattr(project, name, value)
     db.commit()
     return project
 
@@ -168,6 +239,15 @@ def delete_project(project_id: str, user=Depends(authenticate), db: Session = De
     )
     db.delete(project)
     db.commit()
+
+
+@api.get("/tasks/revision", response_model=TaskRevision)
+def task_revision(user=Depends(authenticate), db: Session = Depends(get_db)):
+    """Changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list."""
+    count, latest = db.execute(
+        select(func.count(Task.id), func.max(Task.updated_at)).where(Task.user_id == user.id)
+    ).one()
+    return {"revision": f"{count}:{latest.isoformat() if latest else ''}"}
 
 
 @api.get("/tasks", response_model=list[TaskOut])
@@ -193,15 +273,16 @@ def tasks(
         query = query.where(Task.due_date <= due_before)
     query = query.order_by(Task.created_at, Task.id)
     if label:
-        # Portable across SQLite development and PostgreSQL production.
-        matches = [t for t in db.scalars(query) if label in t.labels]
+        # Portable across SQLite development and PostgreSQL production. Labels are stored in lowercase.
+        wanted = label.strip().lower()
+        matches = [t for t in db.scalars(query) if wanted in t.labels]
         return matches[offset : offset + limit]
     return db.scalars(query.offset(offset).limit(limit)).all()
 
 
 @api.post("/tasks", response_model=TaskOut, status_code=201)
 def create_task(data: TaskIn, user=Depends(authenticate), db: Session = Depends(get_db)):
-    if data.project_id:
+    if data.project_id is not None:
         owned(db, Project, data.project_id, user)
     task = Task(user_id=user.id, **data.model_dump())
     db.add(task)
@@ -209,27 +290,28 @@ def create_task(data: TaskIn, user=Depends(authenticate), db: Session = Depends(
     return task
 
 
-def next_date(value, recurrence):
+def next_date(value, recurrence, anchor_day=None):
     if recurrence == "daily":
         return value + timedelta(days=1)
     if recurrence == "weekly":
         return value + timedelta(days=7)
     month = value.month % 12 + 1
     year = value.year + (value.month == 12)
-    return date(year, month, min(value.day, calendar.monthrange(year, month)[1]))
+    return date(year, month, min(anchor_day or value.day, calendar.monthrange(year, month)[1]))
 
 
 def mutate(db, user, task_id, data):
     task = owned(db, Task, task_id, user)
     changes = data.model_dump(exclude_unset=True)
     version = changes.pop("version")
-    snapshot = TaskIn.model_validate(task).model_dump()
+    # Read the stored values without validating them, so a task that no longer passes can still be corrected.
+    snapshot = {name: getattr(task, name) for name in TaskIn.model_fields}
     snapshot.update({k: v for k, v in changes.items() if k != "completed"})
     try:
         validated = TaskIn.model_validate(snapshot)
     except ValidationError as error:
         raise HTTPException(422, "Invalid task: " + str(error.errors()[0]["msg"])) from error
-    if validated.project_id:
+    if validated.project_id is not None:
         owned(db, Project, validated.project_id, user)
     changes.update(validated.model_dump())
     complete = changes.get("completed", task.completed)
@@ -240,17 +322,26 @@ def mutate(db, user, task_id, data):
     if complete:
         changes["checklist"] = [{**item.model_dump(), "completed": True} for item in validated.checklist]
     changes["completed_at"] = (task.completed_at or now()) if complete else None
+    # Occurrences can be clamped to a short month or shifted by a DST gap. Keep the original day and
+    # time for the series until the user chooses a new schedule, so the shift does not become permanent.
+    same_series = validated.recurrence == task.recurrence
+    anchor_day = task.recurrence_day if same_series and validated.due_date == task.due_date else None
+    anchor_time = task.recurrence_time if same_series and validated.due_time == task.due_time else None
+    changes.update(recurrence_day=anchor_day, recurrence_time=anchor_time)
     successor = None
     if complete and not task.completed and validated.recurrence and not task.successor_id:
+        series_day = anchor_day or validated.due_date.day
+        series_time = anchor_time or validated.due_time
+        upcoming = next_date(validated.due_date, validated.recurrence, series_day)
         successor = Task(
             id=uid(),
             user_id=user.id,
+            recurrence_day=series_day,
+            recurrence_time=series_time,
             **{
                 **validated.model_dump(),
-                "due_date": next_date(validated.due_date, validated.recurrence),
-                "due_time": recurrence_clock(
-                    next_date(validated.due_date, validated.recurrence), validated.due_time, validated.time_zone
-                ),
+                "due_date": upcoming,
+                "due_time": recurrence_clock(upcoming, series_time, validated.time_zone),
                 "checklist": [{**item.model_dump(), "completed": False} for item in validated.checklist],
             },
         )
@@ -314,20 +405,59 @@ def delete_token(token_id: str, request: Request, user=Depends(authenticate), db
     db.commit()
 
 
+@api.get("/sessions", response_model=list[SessionOut])
+def sessions(request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
+    session_only(request)
+    rows = db.scalars(
+        select(Credential)
+        .where(Credential.user_id == user.id, Credential.kind != "api", Credential.expires_at > now())
+        .order_by(Credential.created_at.desc())
+    )
+    return [
+        SessionOut(
+            id=row.id,
+            kind=row.kind,
+            created_at=row.created_at,
+            expires_at=row.expires_at,
+            current=row.id == request.state.credential.id,
+        )
+        for row in rows
+    ]
+
+
+@api.delete("/sessions/{session_id}", status_code=204)
+def delete_session(session_id: str, request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
+    session_only(request)
+    session = owned(db, Credential, session_id, user)
+    if session.kind == "api":
+        raise HTTPException(404)
+    if session.id == request.state.credential.id:
+        raise HTTPException(422, "Use Sign out to end the session on this device.")
+    db.delete(session)
+    db.commit()
+
+
 app.include_router(push_router)
 app.include_router(quick_router)
 app.include_router(api)
-app.mount("/mcp", mcp.streamable_http_app())
+app.mount("/mcp", http_app(settings.public_url))
 static = Path(settings.static_directory).resolve()
 
 
 @app.get("/{path:path}", include_in_schema=False)
 def frontend(path: str):
-    if path.startswith(("api/", "auth/")):
+    if path.startswith(("api/", "auth/")) or "\x00" in path:
         raise HTTPException(404)
     requested = (static / path).resolve()
     if requested.is_relative_to(static) and requested.is_file():
-        return FileResponse(requested)
+        # Vite fingerprints everything in assets/. Other files keep their names and must revalidate.
+        fingerprinted = path.startswith("assets/")
+        return FileResponse(
+            requested, headers={"Cache-Control": "public, max-age=31536000, immutable" if fingerprinted else "no-cache"}
+        )
+    if path.startswith("assets/"):
+        # An HTML fallback here would be blocked as a script, leaving stale pages blank after a deploy.
+        raise HTTPException(404)
     if (static / "index.html").exists():
-        return FileResponse(static / "index.html")
+        return FileResponse(static / "index.html", headers={"Cache-Control": "no-cache"})
     raise HTTPException(404, "Build the web app or start the Vite development server")

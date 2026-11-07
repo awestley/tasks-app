@@ -567,7 +567,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectIn"
+                "$ref": "#/components/schemas/ProjectPatch"
               }
             }
           }
@@ -635,6 +635,36 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/tasks/revision": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Task Revision",
+        "description": "Changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list.",
+        "operationId": "task_revision_api_v1_tasks_revision_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRevision"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/v1/tasks": {
@@ -1119,6 +1149,82 @@
           }
         }
       }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Sessions",
+        "operationId": "sessions_api_v1_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionOut"
+                  },
+                  "type": "array",
+                  "title": "Response Sessions Api V1 Sessions Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}": {
+      "delete": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_api_v1_sessions__session_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1148,6 +1254,30 @@
           "title"
         ],
         "title": "ChecklistItem"
+      },
+      "ChecklistItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "completed"
+        ],
+        "title": "ChecklistItemOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1394,6 +1524,24 @@
         ],
         "title": "ProjectOut"
       },
+      "ProjectPatch": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProjectPatch"
+      },
       "PushConfigOut": {
         "properties": {
           "web_enabled": {
@@ -1424,6 +1572,42 @@
           "apns_enabled"
         ],
         "title": "PushConfigOut"
+      },
+      "SessionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "created_at",
+          "expires_at",
+          "current"
+        ],
+        "title": "SessionOut"
       },
       "SubscriptionIn": {
         "properties": {
@@ -1655,17 +1839,17 @@
       },
       "TaskOut": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
           "title": {
             "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
             "title": "Title"
           },
           "description": {
             "type": "string",
-            "maxLength": 10000,
-            "title": "Description",
-            "default": ""
+            "title": "Description"
           },
           "project_id": {
             "anyOf": [
@@ -1693,8 +1877,7 @@
           "due_time": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -1704,16 +1887,12 @@
           },
           "time_zone": {
             "type": "string",
-            "maxLength": 100,
-            "title": "Time Zone",
-            "default": "UTC"
+            "title": "Time Zone"
           },
           "reminder_minutes": {
             "anyOf": [
               {
-                "type": "integer",
-                "maximum": 10080.0,
-                "minimum": 0.0
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -1723,46 +1902,32 @@
           },
           "priority": {
             "type": "integer",
-            "maximum": 4.0,
-            "minimum": 1.0,
-            "title": "Priority",
-            "default": 4
+            "title": "Priority"
           },
           "labels": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "maxItems": 20,
             "title": "Labels"
           },
           "checklist": {
             "items": {
-              "$ref": "#/components/schemas/ChecklistItem"
+              "$ref": "#/components/schemas/ChecklistItemOut"
             },
             "type": "array",
-            "maxItems": 100,
             "title": "Checklist"
           },
           "recurrence": {
             "anyOf": [
               {
-                "type": "string",
-                "enum": [
-                  "daily",
-                  "weekly",
-                  "monthly"
-                ]
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Recurrence"
-          },
-          "id": {
-            "type": "string",
-            "title": "Id"
           },
           "completed": {
             "type": "boolean",
@@ -1798,15 +1963,26 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "title",
           "id",
+          "title",
+          "description",
+          "project_id",
+          "due_date",
+          "due_time",
+          "time_zone",
+          "reminder_minutes",
+          "priority",
+          "labels",
+          "checklist",
+          "recurrence",
           "completed",
           "completed_at",
           "created_at",
           "updated_at",
           "version"
         ],
-        "title": "TaskOut"
+        "title": "TaskOut",
+        "description": "Describes what is stored. Input rules and time zone data can change, and that must not make tasks unreadable."
       },
       "TaskPatch": {
         "properties": {
@@ -1977,6 +2153,20 @@
           "version"
         ],
         "title": "TaskPatch"
+      },
+      "TaskRevision": {
+        "properties": {
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "title": "TaskRevision"
       },
       "TokenIn": {
         "properties": {

@@ -26,6 +26,13 @@ export type Token = {
   created_at: string;
   expires_at: string;
 };
+export type Session = {
+  id: string;
+  kind: string;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
+};
 export class APIError extends Error {
   constructor(
     public status: number,
@@ -77,9 +84,13 @@ export function dateLabel(value: string | null) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (value === today) return "Today";
   if (value === localDate(tomorrow)) return "Tomorrow";
-  return new Date(value + "T12:00:00").toLocaleDateString(undefined, {
+  const date = new Date(value + "T12:00:00");
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
+    ...(date.getFullYear() !== new Date().getFullYear() && {
+      year: "numeric",
+    }),
   });
 }
 

@@ -5,7 +5,7 @@ services:
   - name: app
     github:
       repo: YOUR_GITHUB_OWNER/taskwell
-      branch: main
+      branch: dev
       deploy_on_push: true
     dockerfile_path: Dockerfile
     http_port: 8080
@@ -26,6 +26,10 @@ services:
         value: https://tasks.example.com
       - key: DEV_LOGIN
         value: 'false'
+      - key: CLIENT_IP_HEADER
+        value: do-connecting-ip
+      - key: ALLOWED_APPLE_ACCOUNTS
+        value: REPLACE_WITH_YOUR_APPLE_EMAIL
       - key: SECRET_KEY
         type: SECRET
         value: REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_CHARACTERS
@@ -45,7 +49,7 @@ jobs:
     kind: PRE_DEPLOY
     github:
       repo: YOUR_GITHUB_OWNER/taskwell
-      branch: main
+      branch: dev
     dockerfile_path: Dockerfile
     run_command: alembic upgrade head
     instance_size_slug: apps-s-1vcpu-1gb

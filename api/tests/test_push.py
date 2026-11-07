@@ -1,15 +1,21 @@
 import base64
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
+
 from taskwell.config import settings
-from taskwell.db import PushSubscription, ReminderDelivery
-from taskwell.reminders import tick
+from taskwell.db import Challenge, Credential, PushSubscription, ReminderDelivery, Task, now
+from taskwell.reminders import purge, tick
+from taskwell.scheduling import reminder_instant
+
+# A task saved after its reminder time never fires, so these dates must stay in the future.
+DUE = datetime(2099, 10, 30, 18, 45)
 
 
 def b64(value):
@@ -71,11 +77,9 @@ def test_subscription_ownership_validation_idempotence(workspace, push_config):
 
 
 @pytest.fixture
-def simulation(push_config, monkeypatch):
-    url = os.getenv("PUSH_SIMULATION_URL")
-    if not url:
-        pytest.skip("Start the local Postman push simulation and set PUSH_SIMULATION_URL")
-    monkeypatch.setattr(settings, "push_simulation_url", url)
+def simulation(push_config, monkeypatch, provider_url):
+    # Set PUSH_SIMULATION_URL to use the Postman simulation instead of the in-process fake.
+    monkeypatch.setattr(settings, "push_simulation_url", os.getenv("PUSH_SIMULATION_URL") or provider_url)
     return push_config
 
 
@@ -84,7 +88,7 @@ def create_due(client, **changes):
         "/api/v1/tasks",
         json={
             "title": "Reminder test",
-            "due_date": "2026-10-30",
+            "due_date": "2099-10-30",
             "due_time": "15:00",
             "time_zone": "America/New_York",
             "reminder_minutes": 15,
@@ -110,7 +114,7 @@ def test_real_http_apns_and_encrypted_webpush_delivery(workspace, simulation):
     register_apns(client)
     assert client.post("/api/v1/push/subscriptions", json=simulation).status_code == 201
     create_due(client)
-    due = datetime(2026, 10, 30, 18, 45)
+    due = DUE
     tick(sessions, due - timedelta(seconds=1))
     with sessions() as db:
         assert not db.scalars(select(ReminderDelivery)).all()
@@ -126,7 +130,7 @@ def test_retry_and_completed_task_cancels_pending_delivery(workspace, simulation
     client, _, sessions = workspace
     register_apns(client, "ff")
     task = create_due(client)
-    due = datetime(2026, 10, 30, 18, 45)
+    due = DUE
     tick(sessions, due)
     with sessions() as db:
         delivery = db.scalar(select(ReminderDelivery))
@@ -156,7 +160,7 @@ def test_expired_subscription_cleanup_and_permanent_errors(workspace, simulation
     expired = register_apns(client, "ee")
     register_apns(client, "bb")
     create_due(client)
-    tick(sessions, datetime(2026, 10, 30, 18, 45))
+    tick(sessions, DUE)
     with sessions() as db:
         assert db.get(PushSubscription, expired["id"]) is None
         delivery = db.scalar(select(ReminderDelivery))
@@ -167,7 +171,7 @@ def test_rescheduled_task_and_active_lease_suppress_delivery(workspace, simulati
     client, _, sessions = workspace
     subscription = register_apns(client)
     task = create_due(client)
-    due = datetime(2026, 10, 30, 18, 45)
+    due = DUE
     with sessions() as db:
         db.add(
             ReminderDelivery(
@@ -182,10 +186,139 @@ def test_rescheduled_task_and_active_lease_suppress_delivery(workspace, simulati
     tick(sessions, due)
     with sessions() as db:
         assert db.scalar(select(ReminderDelivery)).attempts == 0
-    assert client.patch("/api/v1/tasks/" + task["id"], json={"version": 1, "due_date": "2026-11-03"}).status_code == 200
+    assert client.patch("/api/v1/tasks/" + task["id"], json={"version": 1, "due_date": "2099-11-03"}).status_code == 200
     tick(sessions, due + timedelta(minutes=3))
     with sessions() as db:
         assert db.scalar(select(ReminderDelivery)).status == "cancelled"
     assert client.delete("/api/v1/tasks/" + task["id"] + "?version=2").status_code == 204
     with sessions() as db:
         assert not db.scalars(select(ReminderDelivery)).all()
+
+
+def statuses(sessions):
+    with sessions() as db:
+        return sorted(d.status for d in db.scalars(select(ReminderDelivery)))
+
+
+def test_reminder_instant_is_none_for_values_that_cannot_form_one():
+    bad = dict(completed=False, reminder_minutes=5, due_time="00:00")
+    assert reminder_instant(SimpleNamespace(due_date=date(1, 1, 1), time_zone="UTC", **bad)) is None
+    assert reminder_instant(SimpleNamespace(due_date=date(2099, 1, 1), time_zone="Removed/Zone", **bad)) is None
+
+
+@pytest.mark.parametrize(
+    "fields,instant",
+    [
+        # The earliest reminder: 7 days before a due time at the far east of the date line.
+        (
+            {
+                "due_date": "2099-11-20",
+                "due_time": "00:30",
+                "time_zone": "Pacific/Kiritimati",
+                "reminder_minutes": 10080,
+            },
+            datetime(2099, 11, 12, 10, 30),
+        ),
+        # The latest delivery: 1 day late, for a due time at the far west of the date line.
+        (
+            {"due_date": "2099-11-20", "due_time": "23:59", "time_zone": "Etc/GMT+12", "reminder_minutes": 0},
+            datetime(2099, 11, 22, 11, 59),
+        ),
+    ],
+)
+def test_loading_reminders_by_date_keeps_the_extreme_cases(workspace, simulation, fields, instant):
+    client, _, sessions = workspace
+    register_apns(client)
+    assert client.post("/api/v1/tasks", json={"title": "Edge", **fields}).status_code == 201
+    tick(sessions, instant)
+    assert statuses(sessions) == ["sent"]
+
+
+def test_purge_removes_only_what_can_no_longer_matter(workspace, simulation):
+    client, _, sessions = workspace
+    device = register_apns(client)
+    task = create_due(client)
+    instant = now()
+    with sessions() as db:
+        total = len(db.scalars(select(Credential)).all())
+        owner = db.scalars(select(Credential)).first().user_id
+        db.add(
+            Credential(user_id=owner, digest="expired", name="Old", kind="web", expires_at=instant - timedelta(days=1))
+        )
+        db.add(Challenge(id="old", nonce="n", client_id="c", kind="web", expires_at=instant - timedelta(days=1)))
+        for name, age in (("old", 31), ("recent", 29)):
+            db.add(
+                ReminderDelivery(
+                    task_id=task["id"],
+                    subscription_id=device["id"],
+                    scheduled_for=instant - timedelta(days=age),
+                    next_attempt=instant,
+                    status="sent",
+                    error=name,
+                )
+            )
+        db.commit()
+    purge(sessions, instant)
+    with sessions() as db:
+        assert len(db.scalars(select(Credential)).all()) == total
+        assert db.get(Challenge, "old") is None
+        assert [d.error for d in db.scalars(select(ReminderDelivery))] == ["recent"]
+    assert client.get("/api/v1/me").status_code == 200
+
+
+def test_one_bad_stored_task_does_not_stop_other_reminders(workspace, simulation):
+    client, _, sessions = workspace
+    register_apns(client)
+    owner = client.get("/api/v1/me").json()["id"]
+    bad = dict(user_id=owner, due_time="00:00", reminder_minutes=5)
+    with sessions() as db:
+        # Written directly, as the API now rejects the date and a time zone can disappear from the system.
+        db.add(Task(title="Overflow", due_date=date(1, 1, 1), time_zone="UTC", **bad))
+        db.add(Task(title="Removed zone", due_date=date(2099, 10, 30), time_zone="Removed/Zone", **bad))
+        db.commit()
+    create_due(client)
+    tick(sessions, DUE)
+    assert statuses(sessions) == ["sent"]
+
+
+def test_reminders_already_past_when_saved_do_not_fire(workspace, simulation):
+    client, _, sessions = workspace
+    register_apns(client)
+    earlier = now() - timedelta(hours=2)
+    response = client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Earlier today",
+            "due_date": earlier.date().isoformat(),
+            "due_time": earlier.strftime("%H:%M"),
+            "time_zone": "UTC",
+            "reminder_minutes": 0,
+        },
+    )
+    assert response.status_code == 201, response.text
+    tick(sessions)
+    assert statuses(sessions) == []
+    # Moving it to a time that is still ahead makes it due again.
+    later = now() + timedelta(hours=2)
+    response = client.patch(
+        "/api/v1/tasks/" + response.json()["id"],
+        json={"version": 1, "due_date": later.date().isoformat(), "due_time": later.strftime("%H:%M")},
+    )
+    assert response.status_code == 200, response.text
+    tick(sessions, later + timedelta(minutes=1))
+    assert statuses(sessions) == ["sent"]
+
+
+def test_new_device_does_not_receive_reminders_from_before_it_existed(workspace, simulation):
+    client, _, sessions = workspace
+    first = register_apns(client)
+    create_due(client)
+    tick(sessions, DUE)
+    second = register_apns(client)
+    with sessions() as db:
+        db.get(PushSubscription, second["id"]).created_at = DUE + timedelta(minutes=5)
+        db.commit()
+    tick(sessions, DUE + timedelta(minutes=6))
+    with sessions() as db:
+        deliveries = db.scalars(select(ReminderDelivery)).all()
+        assert [(d.subscription_id, d.status) for d in deliveries] == [(first["id"], "sent")]

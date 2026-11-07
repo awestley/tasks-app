@@ -9,46 +9,20 @@ import { createRoot } from "react-dom/client";
 import {
   ArrowDownWideNarrow,
   CalendarDays,
-  Check,
   CheckCheck,
-  ChevronDown,
+  CheckCircle2,
   ChevronRight,
-  Flag,
-  Inbox,
+  CircleAlert,
   Layers,
   ListFilter,
-  ListChecks,
   LoaderCircle,
   Menu,
-  MoreHorizontal,
+  Pencil,
   Plus,
+  RefreshCw,
   Search,
-  Settings,
-  Sun,
-  Tag,
   Trash2,
   X,
-  Repeat2,
-  LogOut,
-  Copy,
-  Pencil,
-  KeyRound,
-  Apple,
-  CheckCircle2,
-  CircleAlert,
-  Calendar,
-  Sunrise,
-  Sofa,
-  ArrowRightToLine,
-  CircleSlash,
-  Ellipsis,
-  Bell,
-  FolderInput,
-  CopyPlus,
-  Link,
-  ListTree,
-  RefreshCw,
-  ExternalLink,
 } from "lucide-react";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
 import {
@@ -60,89 +34,20 @@ import {
   type Task,
   type Project,
   type Profile,
-  type Token,
-  type ParsedTask,
 } from "./api";
 import "./glassive.css";
 import "./style.css";
-import { PushSettings, disableBrowserPush } from "./PushSettings";
-import { ChecklistEditor } from "./ChecklistEditor";
+import { disableBrowserPush } from "./PushSettings";
+import { Logo } from "./Logo";
+import { ProjectEditor } from "./ProjectEditor";
+import { SettingsPanel } from "./SettingsPanel";
+import { Sidebar } from "./Sidebar";
+import { SignIn } from "./SignIn";
+import { TaskEditor } from "./TaskEditor";
+import { TaskRow } from "./TaskRow";
+import { taskMenu } from "./taskMenu";
+import { priorityNames, type View } from "./tasks";
 
-type View =
-  | "today"
-  | "inbox"
-  | "upcoming"
-  | "all"
-  | "completed"
-  | `project:${string}`
-  | `label:${string}`;
-type Draft = Pick<
-  Task,
-  | "title"
-  | "description"
-  | "project_id"
-  | "due_date"
-  | "due_time"
-  | "time_zone"
-  | "reminder_minutes"
-  | "priority"
-  | "labels"
-  | "recurrence"
-  | "checklist"
->;
-const emptyDraft = (): Draft => ({
-  title: "",
-  description: "",
-  project_id: null,
-  due_date: null,
-  due_time: null,
-  time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  reminder_minutes: null,
-  priority: 4,
-  labels: [],
-  checklist: [],
-  recurrence: null,
-});
-const icons = {
-  today: Sun,
-  inbox: Inbox,
-  upcoming: CalendarDays,
-  all: Layers,
-  completed: CheckCheck,
-};
-function Logo() {
-  return (
-    <div className="brand" aria-hidden="true">
-      <span className="brand-mark">
-        <Check size={21} strokeWidth={3} />
-      </span>
-    </div>
-  );
-}
-const daysFromNow = (days: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return localDate(d);
-};
-const weekday = (value: string) =>
-  new Date(value + "T12:00:00").toLocaleDateString(undefined, {
-    weekday: "short",
-  });
-const priorityNames: Record<number, string> = {
-  1: "Urgent",
-  2: "High",
-  3: "Medium",
-  4: "Normal",
-};
-const reminderChoices: [number, string][] = [
-  [0, "At due time"],
-  [5, "5 minutes before"],
-  [15, "15 minutes before"],
-  [30, "30 minutes before"],
-  [60, "1 hour before"],
-  [1440, "1 day before"],
-];
-const taskLink = (task: Task) => `${location.origin}/?task=${task.id}`;
 const editable = "input,textarea,select,a[href],code,[contenteditable]";
 function App() {
   const [user, setUser] = useState<Profile | null>(null),
@@ -186,6 +91,7 @@ function App() {
       history.replaceState(null, "", location.pathname);
     }
     setProjects(nextProjects);
+    return nextTasks;
   }, []);
   useEffect(() => {
     Promise.all([api<Profile>("/me"), api<typeof config>("/auth/config")])
@@ -199,13 +105,33 @@ function App() {
         setConfig(await api("/auth/config"));
       })
       .finally(() => setLoading(false));
-    if (new URLSearchParams(location.search).has("auth_error"))
-      setError("Apple sign-in was interrupted or expired. Please try again.");
+    const authError = new URLSearchParams(location.search).get("auth_error");
+    if (authError) history.replaceState(null, "", location.pathname);
+    if (authError)
+      setError(
+        authError === "denied"
+          ? "This Apple account is not allowed on this server."
+          : "Apple sign-in was interrupted or expired. Please try again.",
+      );
+  }, [refresh]);
+  // Projects are small and always fetched. Tasks are downloaded only when their revision has changed.
+  const lastRevision = useRef("");
+  const poll = useCallback(async () => {
+    const [{ revision }, nextProjects] = await Promise.all([
+      api<{ revision: string }>("/tasks/revision"),
+      api<Project[]>("/projects"),
+    ]);
+    setProjects(nextProjects);
+    if (revision !== lastRevision.current) {
+      await refresh();
+      // Read before the download, so a change during it only causes one extra download.
+      lastRevision.current = revision;
+    }
   }, [refresh]);
   useEffect(() => {
     if (!user) return;
     const load = () =>
-      refresh().catch((e) => {
+      poll().catch((e) => {
         if (e.status === 401) setUser(null);
         else setError(e.message);
       });
@@ -215,7 +141,7 @@ function App() {
       clearInterval(timer);
       window.removeEventListener("focus", load);
     };
-  }, [user, refresh]);
+  }, [user, poll]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const input = (e.target as HTMLElement).matches("input,textarea,select");
@@ -223,9 +149,9 @@ function App() {
         e.preventDefault();
         searchRef.current?.focus();
       }
-      if (!input && e.key === "q" && user) setEditor("new");
-      else if (
+      if (
         !input &&
+        !e.repeat &&
         !e.metaKey &&
         !e.ctrlKey &&
         !e.altKey &&
@@ -241,7 +167,15 @@ function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [user]);
+  }, []);
+  useEffect(() => {
+    // The project may have been deleted on another device.
+    if (
+      view.startsWith("project:") &&
+      !projects.some((p) => p.id === view.slice(8))
+    )
+      setView("inbox");
+  }, [view, projects]);
   useEffect(() => {
     // Behave like an app: no browser context menu outside text and links.
     const native = (e: MouseEvent) => {
@@ -278,21 +212,21 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [notice]);
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
     try {
       await action();
     } catch (e) {
       setError((e as Error).message);
+      if ((e as APIError).status === 401) setUser(null);
       if ((e as APIError).status === 409) await refresh();
     } finally {
       setBusy(false);
     }
   };
   const today = localDate(),
-    active = tasks.filter((t) => !t.completed),
-    todayTasks = active.filter((t) => t.due_date && t.due_date <= today);
+    active = tasks.filter((t) => !t.completed);
   const labels = Array.from(new Set(tasks.flatMap((t) => t.labels))).sort();
   const selectedProject = view.startsWith("project:")
     ? projects.find((p) => p.id === view.slice(8))
@@ -309,7 +243,7 @@ function App() {
           completed: "Completed",
         } as Record<string, string>
       )[view] ||
-      view.slice(6);
+      (view.startsWith("label:") ? view.slice(6) : "Tasks");
   const shown = useMemo(
     () =>
       tasks
@@ -422,6 +356,22 @@ function App() {
     );
   const goToProject = (task: Task) =>
     navigate(task.project_id ? `project:${task.project_id}` : "inbox");
+  // The editor keeps its draft. Adopting the latest version lets the next attempt succeed on purpose.
+  async function editorWrite(
+    task: Task,
+    write: () => Promise<unknown>,
+    retry: string,
+  ) {
+    try {
+      await write();
+    } catch (e) {
+      if ((e as APIError).status !== 409) throw e;
+      const latest = (await refresh()).find((t) => t.id === task.id);
+      if (!latest) throw new Error("This task was deleted on another device.");
+      setEditor(latest);
+      throw new Error(`This task changed on another device. ${retry}`);
+    }
+  }
   const rescheduleOverdue = () =>
     run(async () => {
       for (const task of overdue)
@@ -432,173 +382,20 @@ function App() {
       await refresh();
       setNotice("Overdue tasks moved to today");
     });
-  function taskMenu(task: Task): MenuEntry[] {
-    const day = new Date().getDay(),
-      tomorrow = daysFromNow(1),
-      weekend = daysFromNow(day === 0 ? 0 : 6 - day),
-      nextWeek = daysFromNow((8 - day) % 7 || 7);
-    const dates: [string, string, React.ReactNode][] = [
-      [
-        today,
-        `Today · ${weekday(today)}`,
-        <span className="day-icon tone-green">
-          <Calendar size={20} />
-          <b>{new Date().getDate()}</b>
-        </span>,
-      ],
-      [
-        tomorrow,
-        `Tomorrow · ${weekday(tomorrow)}`,
-        <Sunrise size={20} className="tone-orange" />,
-      ],
-      [
-        weekend,
-        `This weekend · ${weekday(weekend)}`,
-        <Sofa size={20} className="tone-blue" />,
-      ],
-      [
-        nextWeek,
-        `Next week · ${weekday(nextWeek)}`,
-        <ArrowRightToLine size={20} className="tone-purple" />,
-      ],
-    ];
-    return [
-      {
-        label: "Edit",
-        icon: <Pencil size={16} />,
-        shortcut: "E",
-        key: "e",
-        action: () => setEditor(task),
-      },
-      {
-        label: "Go to project",
-        icon: <ListTree size={16} />,
-        shortcut: "G",
-        key: "g",
-        action: () => goToProject(task),
-      },
-      {
-        label: task.completed ? "Restore" : "Complete",
-        icon: <CheckCircle2 size={16} />,
-        shortcut: "C",
-        key: "c",
-        action: () => toggle(task),
-      },
-      "separator",
-      {
-        row: "Date",
-        options: [
-          ...dates
-            // Weekend can fall on today or tomorrow; keep one button per date.
-            .filter(([d], i) => dates.findIndex(([o]) => o === d) === i)
-            .map(([d, label, icon]) => ({
-              label,
-              icon,
-              selected: task.due_date === d,
-              action: () => schedule(task, d),
-            })),
-          {
-            label: "No date",
-            icon: <CircleSlash size={20} />,
-            selected: !task.due_date,
-            action: () => schedule(task, null),
-          },
-          {
-            label: "Pick a date",
-            icon: <Ellipsis size={20} />,
-            date: {
-              value: task.due_date,
-              change: (value) => schedule(task, value),
-            },
-          },
-        ],
-      },
-      {
-        row: "Priority",
-        shortcut: "1–4",
-        options: [1, 2, 3, 4].map((p) => ({
-          label: priorityNames[p],
-          icon: (
-            <Flag
-              size={20}
-              className={`flag-${p}`}
-              fill={p < 4 ? "currentColor" : "none"}
-            />
-          ),
-          selected: task.priority === p,
-          action: () => setPriority(task, p),
-        })),
-      },
-      "separator",
-      ...(task.due_time
-        ? [
-            {
-              label: "Reminder",
-              icon: <Bell size={16} />,
-              items: [
-                {
-                  label: "None",
-                  checked: task.reminder_minutes === null,
-                  action: () =>
-                    patch(task, { reminder_minutes: null }, "Reminder removed"),
-                },
-                ...reminderChoices.map(([minutes, label]) => ({
-                  label,
-                  checked: task.reminder_minutes === minutes,
-                  action: () =>
-                    patch(task, { reminder_minutes: minutes }, "Reminder set"),
-                })),
-              ],
-            },
-          ]
-        : []),
-      {
-        label: "Move to",
-        icon: <FolderInput size={16} />,
-        shortcut: "V",
-        key: "v",
-        items: [
-          {
-            label: "Inbox",
-            icon: <Inbox size={16} />,
-            checked: !task.project_id,
-            action: () => patch(task, { project_id: null }, "Moved to Inbox"),
-          },
-          ...projects.map((p) => ({
-            label: p.name,
-            icon: (
-              <span className="project-hash" style={{ color: p.color }}>
-                #
-              </span>
-            ),
-            checked: task.project_id === p.id,
-            action: () =>
-              patch(task, { project_id: p.id }, `Moved to ${p.name}`),
-          })),
-        ],
-      },
-      {
-        label: "Duplicate",
-        icon: <CopyPlus size={16} />,
-        shortcut: "D",
-        key: "d",
-        action: () => duplicate(task),
-      },
-      {
-        label: "Copy link to task",
-        icon: <Link size={16} />,
-        action: () => copy(taskLink(task), "Link copied"),
-      },
-      "separator",
-      {
-        label: "Delete task",
-        icon: <Trash2 size={16} />,
-        danger: true,
-        confirm: "Confirm delete",
-        action: () => removeTask(task),
-      },
-    ];
-  }
+  const taskEntries = (task: Task) =>
+    taskMenu(task, {
+      today,
+      projects,
+      edit: setEditor,
+      goToProject,
+      toggle,
+      schedule,
+      setPriority,
+      patch,
+      duplicate,
+      copy,
+      remove: removeTask,
+    });
   const addTaskIn = (next: View): MenuEntry[] => [
     {
       label: "Add task",
@@ -727,8 +524,13 @@ function App() {
     },
   });
   rowKeys.current = (key) => {
+    if (!user || editor || settings || projectEditor || menu) return false;
+    if (key === "q") {
+      setEditor("new");
+      return true;
+    }
     const task = shown.find((t) => t.id === hovered.current);
-    if (!task || editor || settings || projectEditor || menu) return false;
+    if (!task) return false;
     if (key === "e") setEditor(task);
     else if (key === "g") goToProject(task);
     else if (key === "c") toggle(task);
@@ -747,141 +549,26 @@ function App() {
     );
   if (!user)
     return (
-      <main className="auth-screen">
-        <section className="auth-card" aria-label="Sign in">
-          <Logo />
-          <h1>Sign in</h1>
-          <div className="auth-actions">
-            {config.apple_enabled && (
-              <a className="apple-button" href="/auth/apple/start">
-                <Apple size={20} /> Sign in with Apple
-              </a>
-            )}
-            {config.dev_login && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    await api("/auth/dev", "POST");
-                    setUser(await api("/me"));
-                    await refresh();
-                  })
-                }
-              >
-                {busy ? "Opening..." : "Open local workspace"}
-              </button>
-            )}
-            {!config.apple_enabled && (
-              <p className="auth-note">Apple sign-in is not configured.</p>
-            )}
-            {error && (
-              <div className="error" role="alert">
-                <CircleAlert className="error-icon" size={16} />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-        </section>
-      </main>
-    );
-  const taskRow = (task: Task) => (
-    <div
-      key={task.id}
-      className={`task-row ${task.completed ? "is-complete" : ""} ${menu?.target === task.id ? "menu-target" : ""}`}
-      onMouseEnter={() => (hovered.current = task.id)}
-      onMouseLeave={() => (hovered.current = null)}
-      onFocus={() => (hovered.current = task.id)}
-      {...menuFor(() => taskMenu(task), task.title, task.id)}
-    >
-      <button
-        className={`check-task priority-${task.priority}`}
-        aria-label={`${task.completed ? "Restore" : "Complete"} ${task.title}`}
-        disabled={busy}
-        onClick={() => toggle(task)}
-      >
-        {task.completed && <Check size={13} />}
-      </button>
-      <button className="task-body" onClick={() => setEditor(task)}>
-        <span className="task-title">{task.title}</span>
-        {task.description && (
-          <span className="task-description">{task.description}</span>
-        )}
-        <span className="task-meta">
-          {task.due_date && (
-            <span
-              className={
-                task.due_date < today && !task.completed
-                  ? "overdue"
-                  : task.due_date === today
-                    ? "due-today"
-                    : ""
-              }
-            >
-              <CalendarDays size={12} />
-              {dateLabel(task.due_date)}
-              {task.due_time ? ` · ${task.due_time} (${task.time_zone})` : ""}
-              {task.reminder_minutes !== null ? " · Reminder" : ""}
-              {task.recurrence && <Repeat2 size={12} />}
-            </span>
-          )}
-          {task.checklist.length > 0 && (
-            <span
-              className="checklist-progress"
-              aria-label={`${task.checklist.filter((item) => item.completed).length} of ${task.checklist.length} checklist items completed`}
-            >
-              <ListChecks size={13} />
-              {task.checklist.filter((item) => item.completed).length}/
-              {task.checklist.length}
-            </span>
-          )}
-          {task.labels.map((l) => (
-            <span key={l} className="label">
-              <Tag size={11} />
-              {l}
-            </span>
-          ))}
-        </span>
-      </button>
-      <button
-        className="task-project"
-        onClick={() =>
-          navigate(task.project_id ? `project:${task.project_id}` : "inbox")
+      <SignIn
+        config={config}
+        busy={busy}
+        error={error}
+        openLocalWorkspace={() =>
+          run(async () => {
+            await api("/auth/dev", "POST");
+            setUser(await api("/me"));
+            await refresh();
+          })
         }
-      >
-        {projects.find((p) => p.id === task.project_id)?.name || "Inbox"}
-        <span
-          style={{
-            color:
-              projects.find((p) => p.id === task.project_id)?.color ||
-              "var(--text-muted)",
-          }}
-        >
-          #
-        </span>
-      </button>
-      <button
-        className="icon-button row-menu"
-        aria-label={`More actions for ${task.title}`}
-        aria-haspopup="menu"
-        onClick={(e) => {
-          const box = e.currentTarget.getBoundingClientRect();
-          setMenu({
-            x: box.right,
-            y: box.bottom + 4,
-            entries: taskMenu(task),
-            title: task.title,
-            target: task.id,
-            sheet: false,
-          });
-        }}
-      >
-        <MoreHorizontal size={18} />
-      </button>
-    </div>
-  );
-  const group = (name: string, items: Task[], isOverdue = false) => (
-    <section className="task-section" key={name}>
+      />
+    );
+  const group = (
+    name: string,
+    items: Task[],
+    isOverdue = false,
+    key = name,
+  ) => (
+    <section className="task-section" key={key}>
       <h3 className={isOverdue ? "overdue" : ""}>
         {name}
         <span>{items.length}</span>
@@ -891,115 +578,54 @@ function App() {
           </button>
         )}
       </h3>
-      {items.map((task) => taskRow(task))}
+      {items.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          project={projects.find((p) => p.id === task.project_id)}
+          today={today}
+          busy={busy}
+          menuOpen={menu?.target === task.id}
+          pressProps={menuFor(() => taskEntries(task), task.title, task.id)}
+          setHovered={(id) => (hovered.current = id)}
+          toggle={toggle}
+          edit={setEditor}
+          goToProject={goToProject}
+          openMenu={(box) =>
+            setMenu({
+              x: box.right,
+              y: box.bottom + 4,
+              entries: taskEntries(task),
+              title: task.title,
+              target: task.id,
+              sheet: false,
+            })
+          }
+        />
+      ))}
     </section>
   );
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobile ? "open" : ""}`}>
-        <Logo />
-        <button className="workspace-switch" onClick={() => setSettings(true)}>
-          <span className="avatar">{user.name.slice(0, 1)}</span>
-          <span>
-            {user.name}
-            <small>Personal workspace</small>
-          </span>
-          <ChevronDown size={14} />
-        </button>
-        <button className="quick-add" onClick={() => setEditor("new")}>
-          <Plus size={18} /> Add task <kbd>Q</kbd>
-        </button>
-        <nav>
-          {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
-            (item) => {
-              const Icon = icons[item];
-              const count =
-                item === "today"
-                  ? todayTasks.length
-                  : item === "inbox"
-                    ? active.filter((t) => !t.project_id).length
-                    : item === "upcoming"
-                      ? active.filter((t) => t.due_date && t.due_date > today)
-                          .length
-                      : item === "completed"
-                        ? tasks.length - active.length
-                        : active.length;
-              return (
-                <button
-                  className={view === item && !search ? "active" : ""}
-                  onClick={() => navigate(item)}
-                  key={item}
-                  {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
-                >
-                  <Icon size={18} />
-                  <span>
-                    {
-                      {
-                        inbox: "Inbox",
-                        today: "Today",
-                        upcoming: "Upcoming",
-                        all: "All tasks",
-                        completed: "Completed",
-                      }[item]
-                    }
-                  </span>
-                  <small>{count || ""}</small>
-                </button>
-              );
-            },
-          )}
-        </nav>
-        <div className="sidebar-heading">
-          My projects
-          <button
-            className="icon-button"
-            aria-label="Add project"
-            onClick={() => setProjectEditor("new")}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-        <nav>
-          {projects.map((p) => (
-            <button
-              key={p.id}
-              className={view === `project:${p.id}` ? "active" : ""}
-              onClick={() => navigate(`project:${p.id}`)}
-              {...menuFor(() => projectMenu(p), p.name)}
-            >
-              <span className="project-hash" style={{ color: p.color }}>
-                #
-              </span>
-              <span>{p.name}</span>
-              <small>
-                {active.filter((t) => t.project_id === p.id).length || ""}
-              </small>
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-heading">
-          Labels
-          <Tag size={13} />
-        </div>
-        <nav>
-          {labels.map((l) => (
-            <button
-              key={l}
-              className={view === `label:${l}` ? "active" : ""}
-              onClick={() => navigate(`label:${l}`)}
-            >
-              <span className="label-dot" />
-              <span>{l}</span>
-            </button>
-          ))}
-          {!labels.length && <p className="sidebar-hint">No labels</p>}
-        </nav>
-        <div className="sidebar-bottom">
-          <button onClick={() => setSettings(true)}>
-            <Settings size={17} /> Settings & integrations
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        user={user}
+        mobile={mobile}
+        view={view}
+        search={search}
+        today={today}
+        active={active}
+        total={tasks.length}
+        projects={projects}
+        labels={labels}
+        navigate={navigate}
+        openSettings={() => setSettings(true)}
+        addTask={() => setEditor("new")}
+        addProject={() => setProjectEditor("new")}
+        taskListPress={(item) => menuFor(() => addTaskIn(item))}
+        projectPress={(project) =>
+          menuFor(() => projectMenu(project), project.name)
+        }
+      />
       {mobile && (
         <button
           className="mobile-shade"
@@ -1125,12 +751,16 @@ function App() {
             {overdue.length > 0 && group("Overdue", overdue, true)}
             {rest.length > 0 &&
               (view === "upcoming" && !search
-                ? Array.from(new Set(rest.map((t) => t.due_date))).map((d) =>
-                    group(
-                      dateLabel(d),
-                      rest.filter((t) => t.due_date === d),
-                    ),
-                  )
+                ? Array.from(new Set(rest.map((t) => t.due_date)))
+                    .sort()
+                    .map((d) =>
+                      group(
+                        dateLabel(d),
+                        rest.filter((t) => t.due_date === d),
+                        false,
+                        d ?? "",
+                      ),
+                    )
                 : group(
                     view === "today" && !search
                       ? "Today"
@@ -1200,6 +830,7 @@ function App() {
       )}
       {editor && (
         <TaskEditor
+          key={editor === "new" ? "new" : editor.id}
           task={editor === "new" ? null : editor}
           projects={projects}
           initialProject={selectedProject?.id || null}
@@ -1210,10 +841,15 @@ function App() {
             run(async () => {
               if (editor === "new") await api("/tasks", "POST", draft);
               else
-                await api(`/tasks/${editor.id}`, "PATCH", {
-                  ...draft,
-                  version: editor.version,
-                });
+                await editorWrite(
+                  editor,
+                  () =>
+                    api(`/tasks/${editor.id}`, "PATCH", {
+                      ...draft,
+                      version: editor.version,
+                    }),
+                  "Your edits are still here. Save again to replace that change, or cancel to keep it.",
+                );
               await refresh();
               setEditor(null);
               setNotice(editor === "new" ? "Task added" : "Task updated");
@@ -1224,9 +860,14 @@ function App() {
               ? undefined
               : () =>
                   run(async () => {
-                    await api(
-                      `/tasks/${editor.id}?version=${editor.version}`,
-                      "DELETE",
+                    await editorWrite(
+                      editor,
+                      () =>
+                        api(
+                          `/tasks/${editor.id}?version=${editor.version}`,
+                          "DELETE",
+                        ),
+                      "Confirm delete again to remove it anyway.",
                     );
                     await refresh();
                     setEditor(null);
@@ -1272,8 +913,11 @@ function App() {
           close={() => setSettings(false)}
           logout={() =>
             run(async () => {
-              await disableBrowserPush();
-              await api("/auth/logout", "POST");
+              // Push cleanup is best effort. An unreachable server fails the next request and reports it.
+              await disableBrowserPush().catch(() => undefined);
+              await api("/auth/logout", "POST").catch((e) => {
+                if (e.status !== 401) throw e;
+              });
               setUser(null);
               setSettings(false);
               setTasks([]);
@@ -1292,697 +936,6 @@ function App() {
         />
       )}
     </div>
-  );
-}
-function Modal({
-  children,
-  close,
-  label,
-}: {
-  children: React.ReactNode;
-  close: () => void;
-  label: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
-    ref.current?.querySelector<HTMLElement>("input,button,textarea")?.focus();
-    const trap = (e: KeyboardEvent) => {
-      if (e.key === "Tab") {
-        const controls = Array.from(
-          ref.current?.querySelectorAll<HTMLElement>(
-            "button:not(:disabled),input,textarea,select,a[href]",
-          ) || [],
-        );
-        if (e.shiftKey && document.activeElement === controls[0]) {
-          e.preventDefault();
-          controls.at(-1)?.focus();
-        } else if (!e.shiftKey && document.activeElement === controls.at(-1)) {
-          e.preventDefault();
-          controls[0]?.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", trap);
-    return () => {
-      document.removeEventListener("keydown", trap);
-      previous?.focus();
-    };
-  }, []);
-  return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
-      }}
-    >
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        ref={ref}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-function TaskEditor({
-  task,
-  projects,
-  initialProject,
-  initialDate,
-  busy,
-  close,
-  save,
-  remove,
-}: {
-  task: Task | null;
-  projects: Project[];
-  initialProject: string | null;
-  initialDate: string | null;
-  busy: boolean;
-  close: () => void;
-  save: (draft: Draft) => void;
-  remove?: () => void;
-}) {
-  const [draft, setDraft] = useState<Draft>(
-    task
-      ? {
-          title: task.title,
-          description: task.description,
-          project_id: task.project_id,
-          due_date: task.due_date,
-          due_time: task.due_time,
-          time_zone: task.time_zone,
-          reminder_minutes: task.reminder_minutes,
-          priority: task.priority,
-          labels: task.labels,
-          checklist: task.checklist,
-          recurrence: task.recurrence,
-        }
-      : { ...emptyDraft(), project_id: initialProject, due_date: initialDate },
-  );
-  const [labelText, setLabelText] = useState(draft.labels.join(", "));
-  const [confirm, setConfirm] = useState(false);
-  const [smart, setSmart] = useState(!task);
-  const [parsed, setParsed] = useState<{
-    input: string;
-    value: ParsedTask;
-  } | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [parseError, setParseError] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    setParsed(null);
-    setParseError("");
-    if (!smart || !draft.title.trim()) {
-      setParsing(false);
-      return;
-    }
-    setParsing(true);
-    const timer = setTimeout(() => {
-      api<ParsedTask>("/tasks/parse", "POST", {
-        text: draft.title,
-        time_zone: draft.time_zone,
-      })
-        .then((value) => {
-          if (!cancelled) setParsed({ input: draft.title, value });
-        })
-        .catch((e) => {
-          if (!cancelled) setParseError(e.message);
-        })
-        .finally(() => {
-          if (!cancelled) setParsing(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [draft.title, draft.time_zone, smart]);
-  const detected =
-    smart && parsed?.input === draft.title && parsed.value.recognized.length
-      ? parsed.value
-      : null;
-  const withDetails = (base: Draft): Draft =>
-    detected
-      ? {
-          ...base,
-          title: detected.title,
-          due_date: detected.due_date || base.due_date,
-          due_time: detected.due_time || base.due_time,
-          reminder_minutes: detected.due_time
-            ? detected.reminder_minutes
-            : base.reminder_minutes,
-          recurrence: detected.recurrence || base.recurrence,
-          priority: detected.priority || base.priority,
-          project_id: detected.project_id || base.project_id,
-          labels: [...new Set([...base.labels, ...detected.labels])],
-        }
-      : base;
-  return (
-    <Modal close={close} label={task ? "Edit task" : "Add task"}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (
-            busy ||
-            parsing ||
-            parseError ||
-            (smart && parsed?.input !== draft.title)
-          )
-            return;
-          save(
-            withDetails({
-              ...draft,
-              labels: labelText
-                .split(",")
-                .map((v) => v.trim())
-                .filter(Boolean),
-            }),
-          );
-        }}
-      >
-        <div className="modal-heading">
-          <h2>{task ? "Edit task" : "Add task"}</h2>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={close}
-            aria-label="Close editor"
-          >
-            <X />
-          </button>
-        </div>
-        <input
-          className="task-name-input"
-          aria-label="Task title"
-          placeholder="e.g. Order pizza Friday afternoon"
-          required
-          maxLength={500}
-          value={draft.title}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-        />
-        <label className="parse-controls">
-          <input
-            type="checkbox"
-            checked={smart}
-            onChange={(e) => setSmart(e.target.checked)}
-          />{" "}
-          Detect dates, times and details
-        </label>
-        {parsing && (
-          <p className="muted" role="status">
-            Reading details...
-          </p>
-        )}
-        {parseError && (
-          <p className="error-text" role="alert">
-            {parseError} Turn off detail detection to enter fields manually.
-          </p>
-        )}
-        {detected && (
-          <div className="parse-preview" role="status">
-            <strong>{detected.title}</strong>
-            <span>
-              {[
-                detected.due_date && dateLabel(detected.due_date),
-                detected.due_time,
-                detected.due_time && draft.time_zone,
-                detected.recurrence,
-                detected.priority && `Priority ${detected.priority}`,
-                ...detected.labels.map((l) => "@" + l),
-                projects.find((p) => p.id === detected.project_id)?.name,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-            {detected.due_time && (
-              <span>
-                Reminder:{" "}
-                {detected.reminder_minutes
-                  ? `${detected.reminder_minutes} minutes before`
-                  : "at due time"}
-              </span>
-            )}
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
-                const next = withDetails({
-                  ...draft,
-                  labels: labelText
-                    .split(",")
-                    .map((v) => v.trim())
-                    .filter(Boolean),
-                });
-                setDraft(next);
-                setLabelText(next.labels.join(", "));
-                setSmart(false);
-              }}
-            >
-              Use details and edit
-            </button>
-          </div>
-        )}
-        <textarea
-          aria-label="Description"
-          placeholder="Description"
-          maxLength={10000}
-          value={draft.description}
-          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-        />
-        <ChecklistEditor
-          items={draft.checklist}
-          locked={task?.completed}
-          onChange={(checklist) => setDraft({ ...draft, checklist })}
-        />
-        <div
-          className="form-grid"
-          onFocus={() => {
-            if (detected) {
-              const next = withDetails({
-                ...draft,
-                labels: labelText
-                  .split(",")
-                  .map((v) => v.trim())
-                  .filter(Boolean),
-              });
-              setDraft(next);
-              setLabelText(next.labels.join(", "));
-              setSmart(false);
-            }
-          }}
-        >
-          <label>
-            <Inbox size={14} /> Project
-            <select
-              value={draft.project_id || ""}
-              onChange={(e) =>
-                setDraft({ ...draft, project_id: e.target.value || null })
-              }
-            >
-              <option value="">Inbox</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <CalendarDays size={14} /> Due date
-            <input
-              type="date"
-              value={draft.due_date || ""}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  due_date: e.target.value || null,
-                  due_time: e.target.value ? draft.due_time : null,
-                  reminder_minutes: e.target.value
-                    ? draft.reminder_minutes
-                    : null,
-                  recurrence: e.target.value ? draft.recurrence : null,
-                })
-              }
-            />
-          </label>
-          <label>
-            Due time
-            <input
-              type="time"
-              disabled={!draft.due_date}
-              value={draft.due_time || ""}
-              onChange={(e) => {
-                setSmart(false);
-                setDraft({
-                  ...draft,
-                  due_time: e.target.value || null,
-                  reminder_minutes: e.target.value
-                    ? draft.reminder_minutes
-                    : null,
-                });
-              }}
-            />
-          </label>
-          <label>
-            Time zone
-            <input
-              aria-label="Time zone"
-              value={draft.time_zone}
-              onChange={(e) =>
-                setDraft({ ...draft, time_zone: e.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Reminder
-            <select
-              aria-label="Reminder"
-              disabled={!draft.due_time}
-              value={draft.reminder_minutes ?? ""}
-              onChange={(e) => {
-                setSmart(false);
-                setDraft({
-                  ...draft,
-                  reminder_minutes:
-                    e.target.value === "" ? null : Number(e.target.value),
-                });
-              }}
-            >
-              <option value="">None</option>
-              <option value="0">At due time</option>
-              <option value="5">5 minutes before</option>
-              <option value="15">15 minutes before</option>
-              <option value="30">30 minutes before</option>
-              <option value="60">1 hour before</option>
-              <option value="1440">1 day before</option>
-              {draft.reminder_minutes !== null &&
-                ![0, 5, 15, 30, 60, 1440].includes(draft.reminder_minutes) && (
-                  <option value={draft.reminder_minutes}>
-                    {draft.reminder_minutes} minutes before
-                  </option>
-                )}
-            </select>
-          </label>
-          <label>
-            <Flag size={14} /> Priority
-            <select
-              value={draft.priority}
-              onChange={(e) =>
-                setDraft({ ...draft, priority: Number(e.target.value) })
-              }
-            >
-              <option value="4">Normal</option>
-              <option value="3">Medium</option>
-              <option value="2">High</option>
-              <option value="1">Urgent</option>
-            </select>
-          </label>
-          <label>
-            <Repeat2 size={14} /> Repeat
-            <select
-              value={draft.recurrence || ""}
-              disabled={!draft.due_date}
-              onChange={(e) =>
-                setDraft({ ...draft, recurrence: e.target.value || null })
-              }
-            >
-              <option value="">Does not repeat</option>
-              <option value="daily">Every day</option>
-              <option value="weekly">Every week</option>
-              <option value="monthly">Every month</option>
-            </select>
-          </label>
-        </div>
-        <label className="field-label">
-          Labels
-          <input
-            aria-label="Labels"
-            placeholder="work, personal, someday"
-            value={labelText}
-            onChange={(e) => setLabelText(e.target.value)}
-          />
-        </label>
-        <div className="modal-actions">
-          {remove && (
-            <button
-              type="button"
-              className={`danger-button ${confirm ? "mod-cta" : ""}`}
-              disabled={busy}
-              onClick={() => (confirm ? remove() : setConfirm(true))}
-            >
-              <Trash2 size={15} />
-              {confirm ? "Confirm delete" : "Delete"}
-            </button>
-          )}
-          <span />
-          <button type="button" className="secondary" onClick={close}>
-            Cancel
-          </button>
-          <button
-            className="primary"
-            disabled={
-              busy ||
-              parsing ||
-              Boolean(parseError) ||
-              (smart && parsed?.input !== draft.title) ||
-              !draft.title.trim() ||
-              draft.checklist.some((item) => !item.title.trim())
-            }
-          >
-            {busy ? "Saving..." : task ? "Save changes" : "Add task"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-function ProjectEditor({
-  project,
-  busy,
-  close,
-  save,
-  remove,
-}: {
-  project: Project | null;
-  busy: boolean;
-  close: () => void;
-  save: (name: string, color: string) => void;
-  remove?: () => void;
-}) {
-  const [name, setName] = useState(project?.name || ""),
-    [color, setColor] = useState(project?.color || "#2563eb"),
-    [confirm, setConfirm] = useState(false);
-  return (
-    <Modal close={close} label="Project editor">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          save(name, color);
-        }}
-      >
-        <div className="modal-heading">
-          <h2>{project ? "Edit project" : "New project"}</h2>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={close}
-            aria-label="Close project editor"
-          >
-            <X />
-          </button>
-        </div>
-        <label className="field-label">
-          Project name
-          <input
-            required
-            maxLength={100}
-            placeholder="Project name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label className="field-label">
-          Project color
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
-        </label>
-        {confirm && (
-          <p className="muted">Tasks in this project will move to Inbox.</p>
-        )}
-        <div className="modal-actions">
-          {remove && (
-            <button
-              type="button"
-              className={`danger-button ${confirm ? "mod-cta" : ""}`}
-              disabled={busy}
-              onClick={() => (confirm ? remove() : setConfirm(true))}
-            >
-              {confirm ? "Confirm delete" : "Delete project"}
-            </button>
-          )}
-          <span />
-          <button type="button" className="secondary" onClick={close}>
-            Cancel
-          </button>
-          <button className="primary" disabled={busy || !name.trim()}>
-            Save project
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-function SettingsPanel({
-  user,
-  close,
-  logout,
-  deleteAccount,
-}: {
-  user: Profile;
-  close: () => void;
-  logout: () => void;
-  deleteAccount: () => void;
-}) {
-  const [tokens, setTokens] = useState<Token[]>([]),
-    [name, setName] = useState(""),
-    [created, setCreated] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [confirm, setConfirm] = useState("");
-  const load = () => api<Token[]>("/tokens").then(setTokens);
-  useEffect(() => {
-    load().catch((e) => setError(e.message));
-  }, []);
-  const perform = async (fn: () => Promise<void>) => {
-    setBusy(true);
-    try {
-      await fn();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal close={close} label="Settings and integrations">
-      <div className="modal-heading">
-        <h2>Your workspace</h2>
-        <button
-          className="icon-button"
-          onClick={close}
-          aria-label="Close settings"
-        >
-          <X />
-        </button>
-      </div>
-      <div className="profile-card">
-        <span className="avatar">{user.name.slice(0, 1)}</span>
-        <div>
-          <strong>{user.name}</strong>
-          <p>{user.email}</p>
-        </div>
-        <button className="secondary" onClick={logout}>
-          <LogOut size={14} /> Sign out
-        </button>
-      </div>
-      <PushSettings />
-      <section className="token-group">
-        <div className="settings-title">
-          <KeyRound size={18} />
-          <div>
-            <h3>API & MCP access</h3>
-            <p>Connect your tools with a personal access token.</p>
-          </div>
-        </div>
-        <form
-          className="token-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            perform(async () => {
-              const result = await api<{ token: string }>("/tokens", "POST", {
-                name,
-              });
-              setCreated(result.token);
-              setName("");
-              await load();
-            });
-          }}
-        >
-          <input
-            aria-label="Token name"
-            placeholder="Token name, e.g. Desktop AI"
-            required
-            maxLength={100}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button className="primary" disabled={busy}>
-            Create token
-          </button>
-        </form>
-        {created && (
-          <div className="token-created">
-            <strong>Copy this token now. It is shown only once.</strong>
-            <code>{created}</code>
-            <button
-              className="secondary"
-              onClick={() =>
-                navigator.clipboard
-                  .writeText(created)
-                  .catch(() => setError("Select and copy the token above."))
-              }
-            >
-              <Copy size={13} /> Copy token
-            </button>
-          </div>
-        )}
-        {tokens.map((t) => (
-          <div className="token-row" key={t.id}>
-            <div>
-              <strong>{t.name}</strong>
-              <small>
-                Expires {new Date(t.expires_at).toLocaleDateString()}
-              </small>
-            </div>
-            <button
-              className="danger-button"
-              disabled={busy}
-              onClick={() =>
-                perform(async () => {
-                  await api(`/tokens/${t.id}`, "DELETE");
-                  await load();
-                })
-              }
-            >
-              Revoke
-            </button>
-          </div>
-        ))}
-      </section>
-      <div className="integration-note">
-        <strong>Connection details</strong>
-        <p>
-          REST API: <code>{location.origin}/api/v1</code>
-          <br />
-          Use the included MCP adapter with your server URL and a token. Tokens
-          expire after 90 days and can be revoked here.
-        </p>
-      </div>
-      {error && (
-        <div className="error" role="alert">
-          <CircleAlert className="error-icon" size={16} />
-          <span>{error}</span>
-        </div>
-      )}
-      <details className="account-delete">
-        <summary>Delete account</summary>
-        <p>
-          Permanently remove your tasks, projects, tokens, and Apple
-          authorization. Type DELETE to confirm.
-        </p>
-        <input
-          aria-label="Confirm account deletion"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
-        <button
-          className="danger-button mod-cta"
-          disabled={confirm !== "DELETE"}
-          onClick={deleteAccount}
-        >
-          Permanently delete my account
-        </button>
-      </details>
-    </Modal>
   );
 }
 createRoot(document.getElementById("root")!).render(

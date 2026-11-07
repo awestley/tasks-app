@@ -28,9 +28,10 @@ def reminder_instant(task):
         return None
     try:
         due = due_instant(task.due_date, task.due_time, task.time_zone)
-    except ValueError:
+        return due - timedelta(minutes=task.reminder_minutes) if due else None
+    except (ValueError, OverflowError, LookupError, TypeError):
+        # A removed time zone or an extreme date must only cost this task its reminder, never everyone else's.
         return None
-    return due - timedelta(minutes=task.reminder_minutes) if due else None
 
 
 def recurrence_clock(day, clock, zone):
