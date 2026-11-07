@@ -1,7 +1,9 @@
 import base64
 import os
+import threading
 import uuid
 from datetime import date, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
@@ -76,6 +78,69 @@ def test_subscription_ownership_validation_idempotence(workspace, push_config):
     assert client.delete("/api/v1/push/subscriptions/" + subscription["id"]).status_code == 204
 
 
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        # urllib.parse reads these as hosts on a push service; the HTTP client connects elsewhere.
+        "https://attacker.example\\.push.apple.com/x",
+        "https://fcm.googleapis.com\\@attacker.example/x",
+        "https://attacker.example%2f.push.apple.com/x",
+        "https://attacker.example\t.push.apple.com/x",
+        "https://attacker.example#.push.apple.com/x",
+        "https://attacker.example?.push.apple.com/x",
+        "https://user@fcm.googleapis.com/x",
+        "https://[::1].push.apple.com/x",
+        "https://fcm.googleapis.com/x y",
+        "https://fcm.googleapis.com/café",
+    ],
+)
+def test_web_endpoints_that_could_reach_another_host_are_rejected(workspace, push_config, endpoint):
+    client, _, _ = workspace
+    assert client.post("/api/v1/push/subscriptions", json={**push_config, "endpoint": endpoint}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://fcm.googleapis.com/fcm/send/abc:DEF-_1",
+        "https://fcm.googleapis.com:443/fcm/send/abc",
+        "https://updates.push.services.mozilla.com/wpush/v2/gAAAAA-_=",
+        "https://web.push.apple.com/QHn_abc",
+        "https://wns2-bl2p.notify.windows.com/w/?token=BQYAAAB%2f%3d",
+    ],
+)
+def test_web_endpoints_from_real_push_services_are_accepted(workspace, push_config, endpoint):
+    client, _, _ = workspace
+    response = client.post("/api/v1/push/subscriptions", json={**push_config, "endpoint": endpoint})
+    assert response.status_code == 201, response.text
+
+
+@pytest.fixture
+def redirecting_provider(monkeypatch):
+    """A provider that answers everything with a redirect and records each request's path."""
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def answer(self):
+            seen.append(self.path)
+            self.send_response(302)
+            self.send_header("Location", "/redirected")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_GET = do_POST = answer
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(settings, "push_simulation_url", f"http://127.0.0.1:{server.server_port}")
+    yield seen
+    server.shutdown()
+    server.server_close()
+
+
 @pytest.fixture
 def simulation(push_config, monkeypatch, provider_url):
     # Set PUSH_SIMULATION_URL to use the Postman simulation instead of the in-process fake.
@@ -124,6 +189,34 @@ def test_real_http_apns_and_encrypted_webpush_delivery(workspace, simulation):
         deliveries = db.scalars(select(ReminderDelivery)).all()
         assert len(deliveries) == 2
         assert [(d.status, d.attempts, d.error) for d in deliveries] == [("sent", 1, None), ("sent", 1, None)]
+
+
+def test_web_push_does_not_follow_redirects(workspace, push_config, redirecting_provider):
+    client, _, sessions = workspace
+    assert client.post("/api/v1/push/subscriptions", json=push_config).status_code == 201
+    create_due(client)
+    tick(sessions, DUE)
+    assert redirecting_provider == ["/web/send"]
+    with sessions() as db:
+        delivery = db.scalar(select(ReminderDelivery))
+        assert (delivery.status, delivery.error) == ("pending", "Push transport failed")
+
+
+def test_stored_web_endpoint_that_fails_the_check_is_removed_without_sending(
+    workspace, push_config, redirecting_provider
+):
+    client, _, sessions = workspace
+    subscription = client.post("/api/v1/push/subscriptions", json=push_config).json()
+    with sessions() as db:
+        # Written directly: a row saved before the check existed can still hold this address.
+        row = db.get(PushSubscription, subscription["id"])
+        row.details = {**row.details, "endpoint": "https://attacker.example\\.push.apple.com/x"}
+        db.commit()
+    create_due(client)
+    tick(sessions, DUE)
+    assert redirecting_provider == []
+    with sessions() as db:
+        assert db.get(PushSubscription, subscription["id"]) is None
 
 
 def test_retry_and_completed_task_cancels_pending_delivery(workspace, simulation):

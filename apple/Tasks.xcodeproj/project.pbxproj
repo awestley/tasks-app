@@ -37,11 +37,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tasks-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0C6EE6D5EED823D267D5F408 /* Tasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		161722AE826B5946D2C5EACA /* TasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksApp.swift; sourceTree = "<group>"; };
 		4FDB566A7386BC67932EE76A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5AC922748A69D7D2C0182D07 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
-		633FDF56BFA4232166EC588D /* Tasks-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Tasks-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		633FDF56BFA4232166EC588D /* Tasks.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Tasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6FE3FABC1290F825794D5131 /* Glassive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glassive.swift; sourceTree = "<group>"; };
 		A0254C94402F74BD0B2F94FF /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		BFE1C1DCE819054534FBEA0A /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
@@ -88,8 +88,8 @@
 			isa = PBXGroup;
 			children = (
 				D10738125098136CE3FDF210 /* Tasks-iOS-UITests.xctest */,
-				633FDF56BFA4232166EC588D /* Tasks-iOS.app */,
-				0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */,
+				633FDF56BFA4232166EC588D /* Tasks.app */,
+				0C6EE6D5EED823D267D5F408 /* Tasks.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,8 +111,8 @@
 			name = "Tasks-macOS";
 			packageProductDependencies = (
 			);
-			productName = "Tasks-macOS";
-			productReference = 0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */;
+			productName = Tasks;
+			productReference = 0C6EE6D5EED823D267D5F408 /* Tasks.app */;
 			productType = "com.apple.product-type.application";
 		};
 		C4D184200B6723D20B5328F4 /* Tasks-iOS-UITests */ = {
@@ -147,8 +147,8 @@
 			name = "Tasks-iOS";
 			packageProductDependencies = (
 			);
-			productName = "Tasks-iOS";
-			productReference = 633FDF56BFA4232166EC588D /* Tasks-iOS.app */;
+			productName = Tasks;
+			productReference = 633FDF56BFA4232166EC588D /* Tasks.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -337,6 +337,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.macos;
+				PRODUCT_NAME = Tasks;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -444,6 +445,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.ios;
+				PRODUCT_NAME = Tasks;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -464,6 +466,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.ios;
+				PRODUCT_NAME = Tasks;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -497,6 +500,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.macos;
+				PRODUCT_NAME = Tasks;
 				SDKROOT = macosx;
 			};
 			name = Debug;
