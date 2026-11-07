@@ -109,6 +109,8 @@ class Task(Base):
     labels: Mapped[list] = mapped_column(JSON, default=list)
     checklist: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     recurrence: Mapped[str | None] = mapped_column(String(20))
+    recurrence_day: Mapped[int | None] = mapped_column(Integer)
+    recurrence_time: Mapped[str | None] = mapped_column(String(5))
     successor_id: Mapped[str | None] = mapped_column(String(36))
     completed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)

@@ -26,6 +26,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://taskwell:${POSTGRES_PASSWORD}@db:5432/taskwell
+      # Caddy replaces any client-supplied value, and the app is reachable only through Caddy.
+      CLIENT_IP_HEADER: x-forwarded-for
     depends_on:
       migrate:
         condition: service_completed_successfully

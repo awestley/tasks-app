@@ -7,7 +7,8 @@
 3. Register a Services ID for the website and enable Sign in with Apple. Configure the domain and this exact return URL: `https://YOUR_DOMAIN/auth/apple/callback`.
 4. Create a Sign in with Apple private key associated with the primary App ID. Store its `.p8` value in the deployment secret named `APPLE_PRIVATE_KEY`. Never add the key to the repository.
 5. Set `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_WEB_CLIENT_ID`, and comma-separated `APPLE_NATIVE_CLIENT_IDS` on the backend. The web ID is the Services ID; native IDs are the bundle identifiers. Set `PUBLIC_URL` to the HTTPS origin with no trailing slash.
-6. Add your signing team in Xcode. Regenerate provisioning profiles after enabling Sign in with Apple. Test a first-time login and returning login on each platform, including Apple's private email relay option.
+6. Set `ALLOWED_APPLE_ACCOUNTS` to the comma-separated Apple accounts that may use this server. Each entry is an Apple subject or a verified email address. Production refuses to start without it, unless the app runs inside the Personal Command shell, where the shell decides who can sign in. Apple's private relay gives a different email address, so prefer the subject if you hide your email: a refused sign-in writes its subject to the application log, ready to copy. Removing an entry stops new sign-ins, while existing sessions and tokens last until they expire or are revoked.
+7. Add your signing team in Xcode. Regenerate provisioning profiles after enabling Sign in with Apple. Test a first-time login and returning login on each platform, including Apple's private email relay option.
 
 Web sign-in requires a registered HTTPS domain. The browser-binding cookie is Secure and SameSite=None because Apple sends the callback as a cross-site form POST. The application session is HttpOnly, Secure in production, and SameSite=Lax. Browser mutations additionally require the configured Origin.
 

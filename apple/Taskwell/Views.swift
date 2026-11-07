@@ -131,7 +131,8 @@ struct WorkspaceView: View {
         return ["today":"Today", "inbox":"Inbox", "upcoming":"Upcoming", "all":"All tasks", "completed":"Completed"][selection ?? "today"] ?? "Today"
     }
     var filtered: [TodoTask] {
-        store.tasks.filter { task in
+        let today = today
+        return store.tasks.filter { task in
             if !search.isEmpty { return (task.title + " " + task.description + " " + task.labels.joined(separator: " ")).localizedCaseInsensitiveContains(search) }
             if selection == "completed" { return task.completed }
             guard !task.completed else { return false }
@@ -247,8 +248,11 @@ struct WorkspaceView: View {
                     Button { editor = TaskEditorSelection(task: nil) } label: { Label("Add task", systemImage: "plus") }.keyboardShortcut("n", modifiers: .command)
                 }
         }
-        .onChange(of: notifications.selectedTaskID) { _, id in
-            if let target = store.tasks.first(where: { $0.id == id }) { editor = TaskEditorSelection(task: target); notifications.selectedTaskID = nil }
+        // Initial covers a tap that launched the app, which arrives before this view exists.
+        .onChange(of: notifications.selectedTaskID, initial: true) { _, id in
+            guard let id else { return }
+            if let target = store.tasks.first(where: { $0.id == id }) { editor = TaskEditorSelection(task: target) }
+            notifications.selectedTaskID = nil
         }
         .sheet(item: $editor) { destination in TaskEditorView(task: destination.task, initialProject: store.projects.contains(where: { $0.id == selection }) ? selection : nil, initialDate: selection == "today" ? Date() : nil) }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -358,6 +362,11 @@ struct TaskEditorView: View {
     @State private var clock = Date()
     @State private var hasTime = false
     var detected: ParsedTask? { smart && parsedInput == draft.title && !(parsed?.recognized.isEmpty ?? true) ? parsed : nil }
+    /// Apple's list has no "UTC", the default for tasks from the API and MCP, so keep the task's own zone selectable.
+    var timeZones: [String] {
+        let known = TimeZone.knownTimeZoneIdentifiers
+        return known.contains(draft.time_zone) ? known : [draft.time_zone] + known
+    }
     func resolvedDraft() -> TaskDraft {
         var result = draft
         result.due_date = hasDate ? DateOnly.string(date) : nil
@@ -377,6 +386,15 @@ struct TaskEditorView: View {
             result.labels = Array(Set(result.labels + value.labels)).sorted()
         }
         return result
+    }
+    /// Keeps the draft and adopts the latest version, so the next attempt succeeds on purpose.
+    func conflict(_ retry: String) async throws -> APIError {
+        try await store.refresh()
+        guard let latest = store.tasks.first(where: { $0.id == task?.id }) else {
+            return APIError(message: "This task was deleted on another device.")
+        }
+        draft.version = latest.version
+        return APIError(message: "This task changed on another device. " + retry)
     }
     func loadTime(_ value: String?) {
         hasTime = value != nil
@@ -434,7 +452,7 @@ struct TaskEditorView: View {
                     if hasTime {
                         DatePicker("Time", selection: $clock, displayedComponents: .hourAndMinute)
                         Picker("Time zone", selection: $draft.time_zone) {
-                            ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) }
+                            ForEach(timeZones, id: \.self) { Text($0).tag($0) }
                         }
                         Picker("Reminder", selection: $draft.reminder_minutes) {
                             Text("None").tag(nil as Int?)
@@ -461,7 +479,10 @@ struct TaskEditorView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") { Task { await store.perform {
-                            try await store.save(resolvedDraft(), id: task?.id)
+                            do { try await store.save(resolvedDraft(), id: task?.id) }
+                            catch let error as APIError where error.status == 409 {
+                                throw try await conflict("Your edits are still here. Save again to replace that change, or cancel to keep it.")
+                            }
                             dismiss()
                         } } }.disabled(store.busy || parsing || !parseError.isEmpty || (smart && parsedInput != draft.title) || draft.title.trimmingCharacters(in: .whitespaces).isEmpty || draft.checklist.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
                     }
@@ -492,7 +513,15 @@ struct TaskEditorView: View {
                 }
             }
             .confirmationDialog("Permanently delete this task?", isPresented: $deleteConfirmation) {
-                Button("Delete task", role: .destructive) { if let task { Task { await store.perform { try await store.delete(task); dismiss() } } } }
+                Button("Delete task", role: .destructive) { if let task { Task { await store.perform {
+                    var target = task
+                    target.version = draft.version ?? task.version
+                    do { try await store.delete(target) }
+                    catch let error as APIError where error.status == 409 {
+                        throw try await conflict("Confirm delete again to remove it anyway.")
+                    }
+                    dismiss()
+                } } } }
             }
     }
 }
@@ -541,6 +570,7 @@ struct SettingsView: View {
     @State private var tokenName = ""
     @State private var newToken = ""
     @State private var tokens: [PersonalToken] = []
+    @State private var sessions: [DeviceSession] = []
     @State private var confirmation = ""
     var body: some View {
         NavigationStack {
@@ -549,13 +579,28 @@ struct SettingsView: View {
                     Text(store.profile?.email ?? "")
                     Text(store.server).font(.caption).foregroundStyle(.secondary)
                     Button("Sign out") { Task { await store.perform { try await store.signOut(); dismiss() } } }
-                    Button("Remove local session") { Task { await store.perform { try await notifications.disable(); try store.forgetSession(); dismiss() } } }
+                    // Best effort on the server. Unregistering below makes APNs retire this device's token anyway.
+                    Button("Remove local session") { Task { await store.perform { try? await notifications.disable(); try store.forgetSession(); dismiss() } } }
                 }
                 Section("Reminders & notifications") {
                     Text("Set a due time and reminder on a task, then enable notifications on each device.").font(.caption)
                     Button("Enable notifications") { Task { await store.perform { try await notifications.enable() } } }
                     Button("Disable on this device") { Task { await store.perform { try await notifications.disable() } } }
                     if !notifications.status.isEmpty { Text(notifications.status).font(.caption) }
+                }
+                Section("Signed-in devices") {
+                    ForEach(sessions) { session in
+                        HStack {
+                            Text(session.current ? "This device" : session.kind == "web" ? "Browser" : "Apple app")
+                            Spacer()
+                            if !session.current {
+                                Button("End session", role: .destructive) { Task { await store.perform {
+                                    try await store.api.send("/api/v1/sessions/\(session.id)", method: "DELETE")
+                                    try await loadSessions()
+                                } } }
+                            }
+                        }
+                    }
                 }
                 Section("API & MCP access") {
                     Text("Tokens expire after 90 days. Keep them private.").font(.caption)
@@ -586,7 +631,8 @@ struct SettingsView: View {
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }.frame(idealWidth: 530, idealHeight: 600)
             .taskwellErrorAlert()
-            .task { do { try await loadTokens() } catch { store.error = error.localizedDescription } }
+            .task { do { try await loadTokens(); try await loadSessions() } catch { store.report(error) } }
     }
     func loadTokens() async throws { tokens = try await store.api.request("/api/v1/tokens") }
+    func loadSessions() async throws { sessions = try await store.api.request("/api/v1/sessions") }
 }

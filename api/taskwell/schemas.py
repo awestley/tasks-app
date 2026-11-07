@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .scheduling import due_instant, zone_name
 
+# Far from the limits of datetime, so time zone and reminder arithmetic cannot overflow.
+MIN_DUE_YEAR, MAX_DUE_YEAR = 1900, 2999
+
 
 class Model(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid", str_strip_whitespace=True)
@@ -19,6 +22,12 @@ class ProjectIn(Model):
 class ProjectCreate(ProjectIn):
     # Clients may choose the id (a UUID), so an item can be referenced before it reaches the server.
     id: UUID | None = None
+
+
+class ProjectPatch(Model):
+    # Omit a field to keep it. Null is invalid, so these defaults only mark the fields as optional.
+    name: str = Field(default=None, min_length=1, max_length=100)
+    color: str = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
 
 
 class ProjectOut(ProjectIn):
@@ -44,6 +53,13 @@ class TaskIn(Model):
     labels: list[str] = Field(default_factory=list, max_length=20)
     checklist: list[ChecklistItem] = Field(default_factory=list, max_length=100)
     recurrence: Literal["daily", "weekly", "monthly"] | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def plausible_due_date(cls, value):
+        if value and not MIN_DUE_YEAR <= value.year <= MAX_DUE_YEAR:
+            raise ValueError(f"Use a due date between the years {MIN_DUE_YEAR} and {MAX_DUE_YEAR}")
+        return value
 
     @field_validator("checklist")
     @classmethod
@@ -95,13 +111,36 @@ class TaskPatch(Model):
     undo: bool | None = None
 
 
-class TaskOut(TaskIn):
+class ChecklistItemOut(Model):
     id: str
+    title: str
+    completed: bool
+
+
+class TaskOut(Model):
+    """Describes what is stored. Input rules and time zone data can change, and that must not make tasks unreadable."""
+
+    id: str
+    title: str
+    description: str
+    project_id: str | None
+    due_date: date | None
+    due_time: str | None
+    time_zone: str
+    reminder_minutes: int | None
+    priority: int
+    labels: list[str]
+    checklist: list[ChecklistItemOut]
+    recurrence: str | None
     completed: bool
     completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
     version: int
+
+
+class TaskRevision(Model):
+    revision: str
 
 
 class Version(Model):
@@ -117,6 +156,14 @@ class TokenOut(Model):
     name: str
     created_at: datetime
     expires_at: datetime
+
+
+class SessionOut(Model):
+    id: str
+    kind: str
+    created_at: datetime
+    expires_at: datetime
+    current: bool
 
 
 class Profile(Model):

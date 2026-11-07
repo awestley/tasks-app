@@ -7,10 +7,9 @@ import sys
 from pathlib import Path
 
 import httpx
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
-
-from mcp import ClientSession, StdioServerParameters
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = os.environ.get("TASKWELL_API_URL", "http://127.0.0.1:8000")

@@ -1,13 +1,50 @@
 name: Verify Taskwell
 on: [push, pull_request]
 jobs:
-  server-and-web:
+  api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgresql+psycopg://postgres:ci@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --directory api --python 3.12 --frozen
-      - run: cd api && .venv/bin/pytest -q
+      - name: Lint
+        working-directory: api
+        run: |
+          .venv/bin/ruff check . ../scripts
+          .venv/bin/ruff format --check . ../scripts
+      - name: Migrations match the models on PostgreSQL
+        working-directory: api
+        run: |
+          DATABASE_URL="$POSTGRES_URL" .venv/bin/alembic upgrade head
+          DATABASE_URL="$POSTGRES_URL" .venv/bin/alembic check
+      - name: Tests on SQLite
+        working-directory: api
+        run: .venv/bin/pytest -q
+      - name: Tests on PostgreSQL
+        working-directory: api
+        run: TEST_DATABASE_URL="$POSTGRES_URL" .venv/bin/pytest -q
+  web:
+    runs-on: ubuntu-latest
+    env:
+      TASKWELL_API_URL: http://127.0.0.1:8000
+      TASKWELL_WEB_URL: http://127.0.0.1:8000
+      PUBLIC_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --directory api --python 3.12 --frozen
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -15,6 +52,23 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci
       - run: npm --prefix web run build
+      - run: npm --prefix web run test:unit
+      - run: cd web && npx playwright install --with-deps chromium
+      - name: Start the API with the built web app
+        working-directory: api
+        run: |
+          DEV_LOGIN=true DATABASE_URL="sqlite:///$RUNNER_TEMP/ci.db" STATIC_DIRECTORY=../web/dist \
+            .venv/bin/uvicorn taskwell.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl --silent --fail http://127.0.0.1:8000/health > /dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: Browser tests
+        run: cd web && npm test
+      - name: MCP transports
+        run: api/.venv/bin/python scripts/check_mcp.py
       - run: docker build -t taskwell:ci .
   apple:
     runs-on: macos-latest

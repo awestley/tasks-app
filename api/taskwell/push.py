@@ -29,10 +29,7 @@ def web_ready():
 
 def apns_ready():
     return bool(
-        settings.apns_private_key
-        and settings.apns_key_id
-        and settings.apns_team_id
-        and settings.apple_native_client_ids
+        settings.apns_private_key and settings.apns_key_id and settings.apns_team_id and settings.native_client_ids
     )
 
 
@@ -89,11 +86,7 @@ class SubscriptionIn(Model):
                 raise ValueError("Invalid Web Push encryption keys") from error
             self.token, self.topic, self.sandbox = None, None, False
         else:
-            if (
-                not self.token
-                or not self.topic
-                or self.topic not in [v.strip() for v in settings.apple_native_client_ids.split(",")]
-            ):
+            if not self.token or not self.topic or self.topic not in settings.native_client_ids:
                 raise ValueError("Invalid APNs token or app identifier")
             self.token = self.token.lower()
             self.endpoint, self.p256dh, self.auth = None, None, None

@@ -6,6 +6,7 @@
 - A GitHub repository containing this source, if using App Platform.
 - The production domain and DNS access.
 - Apple Developer Team ID, key ID, private key, web Services ID, and grouped native bundle IDs.
+- The Apple accounts allowed to sign in, for `ALLOWED_APPLE_ACCOUNTS`, unless the app runs inside the Personal Command shell. See [Apple setup](apple-auth.md).
 
 `doctl` may have multiple saved contexts. Select the intended context explicitly; do not assume the current account is the right one. No deployment or resource creation has been performed.
 
@@ -19,7 +20,7 @@
 6. The PRE_DEPLOY job runs `alembic upgrade head`. The application does not auto-create tables in production. Deploying multiple instances is safe for credential consumption and task version checks because those operations are atomic in PostgreSQL.
 7. Configure DNS and verify HTTPS before enabling Apple's return URL. Check `/health`, sign in, create a task on one client and read it from another, and verify token revocation through MCP.
 
-The service uses one application process per container and a per-process sign-in rate limiter. Add edge rate limiting or a shared limiter before scaling to multiple instances. `TASKWELL_API_URL` inside the container points to its own loopback API for HTTP MCP tool calls. The platform terminates TLS.
+The service uses one application process per container and a per-process sign-in rate limiter. Add edge rate limiting or a shared limiter before scaling to multiple instances. `CLIENT_IP_HEADER` tells the limiter which header holds the client address. The spec sets [`do-connecting-ip`](https://docs.digitalocean.com/support/where-can-i-find-the-client-ip-address-of-a-request-connecting-to-my-app); after deploying, confirm in your logs or with a test request that it holds the real client address, because without it every client shares one limit. `TASKWELL_API_URL` inside the container points to its own loopback API for HTTP MCP tool calls. The platform terminates TLS.
 
 ## Option B: Ubuntu Droplet with Docker
 
@@ -31,7 +32,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The migration service must succeed before the app starts. Caddy obtains HTTPS certificates and proxies to the app. PostgreSQL and Caddy data are persisted in named volumes. Use an alphanumeric database password in the template URL, or percent-encode special characters in a custom `DATABASE_URL`.
+The migration service must succeed before the app starts. Caddy obtains HTTPS certificates and proxies to the app, which trusts the client address Caddy reports (`CLIENT_IP_HEADER` in `compose.yaml`). Do not publish the app's port directly, since a client could then choose its own address. PostgreSQL and Caddy data are persisted in named volumes. Use an alphanumeric database password in the template URL, or percent-encode special characters in a custom `DATABASE_URL`.
 
 ```sh
 docker compose logs --tail=100 app migrate caddy
@@ -43,6 +44,9 @@ Set up database backups to separate storage and test restoration. Before updatin
 ## Operational behavior
 
 - `/health` checks database connectivity. Configure uptime monitoring against the deployed HTTPS endpoint.
+- The API description (`/docs`, `/redoc`, `/openapi.json`) is not served in production.
+- The API process removes expired sessions, tokens and sign-in challenges every hour, along with reminder delivery records older than 30 days.
+- Request bodies are limited to 100 KB, including chunked requests. Fingerprinted files in `/assets/` are cached permanently, and everything else served to browsers revalidates, so a deploy reaches open and returning browsers without blank pages.
 - API and auth responses use `Cache-Control: no-store`. Web sessions are HttpOnly and Secure in production.
 - Personal access tokens and sessions are revocable database credentials. Keep the database connection string, Apple key and secret key private.
 - The `.env` files, database files, build caches, and native signing material are excluded from Git and Docker build context.

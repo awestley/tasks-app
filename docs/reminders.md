@@ -10,9 +10,9 @@ Other details: `p1` through `p4`, `@label`, `#Project name` (typing `#` suggests
 
 The API stores `due_date`, `due_time` (`HH:MM`), an IANA `time_zone`, and `reminder_minutes` (null disables reminders, 0 means at due time, positive values mean before). The web and native editors use the device time zone initially and preserve the task's selected zone during edits. There is one reminder per occurrence, delivered to every enabled device.
 
-The server checks every 15 seconds while push is configured. A durable delivery record and atomic lease prevent normal duplicate sends across workers. Failed transport requests and temporary provider errors retry with exponential backoff, up to eight attempts. After an outage, reminders can arrive up to 24 hours late. Expired device subscriptions are removed. Invalid credentials and permanent errors stop that delivery and are recorded in the database. Push is best effort; provider acceptance is not proof that a notification appeared on a device, and a crash after acceptance but before recording success can produce a duplicate. Matching notification tags/collapse IDs limit duplicates on devices.
+The server checks every 15 seconds while push is configured. A durable delivery record and atomic lease prevent normal duplicate sends across workers. Failed transport requests and temporary provider errors retry with exponential backoff, up to eight attempts. After an outage, reminders can arrive up to 24 hours late. A reminder whose time had already passed when the task was last saved does not fire, and a device enabled after a reminder came due does not receive it. Expired device subscriptions are removed. Invalid credentials and permanent errors stop that delivery and are recorded in the database. Push is best effort; provider acceptance is not proof that a notification appeared on a device, and a crash after acceptance but before recording success can produce a duplicate. Matching notification tags/collapse IDs limit duplicates on devices.
 
-Completion, deletion, removing a reminder, or rescheduling suppresses pending deliveries when the worker next checks them. A delivery already accepted by a provider cannot be recalled. Editing a title does not resend a delivered reminder. Reopening the same occurrence does not resend its already-delivered reminder; changing the reminder time creates a new delivery. Recurring successors retain the time zone, time, and reminder offset, with a fresh date. A recurring time in a spring-forward gap shifts forward by that gap. An explicitly entered nonexistent time is rejected; an ambiguous fall-back time uses its first occurrence.
+Completion, deletion, removing a reminder, or rescheduling suppresses pending deliveries when the worker next checks them. A delivery already accepted by a provider cannot be recalled. Editing a title does not resend a delivered reminder. Reopening the same occurrence does not resend its already-delivered reminder; changing the reminder time creates a new delivery. Recurring successors retain the time zone, time, and reminder offset, with a fresh date. A recurring time in a spring-forward gap shifts forward by that gap for that date only, and later occurrences return to the original time. Monthly tasks clamp to the end of a short month and then return to their original day. Choosing a new date, time or recurrence starts a new series from those values. An explicitly entered nonexistent time is rejected; an ambiguous fall-back time uses its first occurrence.
 
 ## Browser push
 
@@ -41,9 +41,11 @@ Configure these backend values when your Apple Developer setup is available:
 
 The Sign in with Apple key is not assumed to have APNs permission. Enable Push Notifications for both app identifiers and regenerate provisioning profiles. The XcodeGen project includes the platform-specific push entitlements and uses development APNs for Debug and production APNs for Release. Make sure the build configuration matches its provisioning environment.
 
-Native settings let you enable or disable notifications for that device. The app registers with APNs, refreshes its device token on launch, and uploads the token for the signed-in account. Notification taps refresh the workspace and open the matching task. Apple signing, provisioning and real-device delivery remain required release checks. See [Apple's APNs request contract](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns).
+Native settings let you enable or disable notifications for that device. The app registers with APNs, refreshes its device token on launch, and uploads the token for the signed-in account. Notification taps refresh the workspace and open the matching task, including a tap that launches the app. Apple signing, provisioning and real-device delivery remain required release checks. See [Apple's APNs request contract](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns).
 
 ## Local provider verification
+
+The API tests include an in-process fake provider (`api/tests/fake_providers.py`), so they need no setup. To run them against the Postman simulation instead:
 
 ```sh
 postman simulation run postman/simulations/push/push.sim.yaml --port 4902 --output ndjson
@@ -51,4 +53,4 @@ postman simulation run postman/simulations/push/push.sim.yaml --port 4902 --outp
 PUSH_SIMULATION_URL=http://127.0.0.1:4902/push PYTHONPATH=api api/.venv/bin/pytest api/tests -q
 ```
 
-The fixtures exercise real HTTP requests with ephemeral signing/encryption keys, including success, a transient 503, expired-token 410, and invalid-provider-token 403. This proves local integration and recovery behavior, not live APNs/Web Push delivery. `PUSH_SIMULATION_URL` is rejected in production. Never configure it on a deployed service.
+Both exercise real HTTP requests with ephemeral signing/encryption keys, including success, a transient 503, expired-token 410, and invalid-provider-token 403. This proves local integration and recovery behavior, not live APNs/Web Push delivery. `PUSH_SIMULATION_URL` is rejected in production. Never configure it on a deployed service.

@@ -8,9 +8,10 @@ import uuid
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
+
 from taskwell import auth, events
 from taskwell.config import settings
-from taskwell.search import fold, make_snippet, parse_params, score_match, search_docs, SearchError
+from taskwell.search import SearchError, fold, make_snippet, parse_params, score_match, search_docs
 
 SHELL = "http://shell.test"
 
@@ -170,7 +171,10 @@ def test_base_path_frames_and_manifest(shell):
     assert all(p["url"].startswith("/apps/tasks/#/") for p in manifest["panes"])
     assert {e["embed"] for e in manifest["entities"]} == {"tasks-task", "tasks-project"}
     companion = manifest["companion"]
-    assert companion["url"] == "/apps/tasks/companion.html#today" and companion["badge"] == "/apps/tasks/api/v1/companion/badge"
+    assert (
+        companion["url"] == "/apps/tasks/companion.html#today"
+        and companion["badge"] == "/apps/tasks/api/v1/companion/badge"
+    )
     assert companion["quickAdd"] in {c["id"] for c in manifest["commands"]}
     assert {p["id"] for p in manifest["panes"]} >= {"today", "inbox", "upcoming", "completed"}
     assert manifest["offline"]["precache"] == ["/apps/tasks/", "/apps/tasks/companion.html", "/apps/tasks/embed.js"]

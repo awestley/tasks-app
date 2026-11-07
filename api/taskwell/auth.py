@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import secrets
 from datetime import timedelta
 from functools import cache
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 COOKIE = "taskwell_session"
 SHELL_COOKIE = "pc_session"
 SHELL_AUDIENCE = "personal-command"
+log = logging.getLogger(__name__)
 
 
 def digest(value):
@@ -36,7 +38,10 @@ def trusted_origin(request):
     origin = request.headers.get("origin")
     if origin == settings.public_url:
         return True
-    return not settings.production and origin == f"{request.url.scheme}://{request.url.netloc}"
+    if settings.production or origin != f"{request.url.scheme}://{request.url.netloc}":
+        return False
+    # The API's own origin comes from the Host header, so DNS rebinding could otherwise pose as it.
+    return request.url.hostname in {"localhost", "127.0.0.1", "::1"}
 
 
 @cache
@@ -219,7 +224,22 @@ def consume(db, challenge_id, kind, binding=""):
     return challenge
 
 
+def account_allowed(claims):
+    allowlist = settings.apple_account_allowlist
+    if not allowlist:
+        return not settings.production
+    if claims["sub"].lower() in allowlist:
+        return True
+    # Apple sends email_verified as either a boolean or the string "true".
+    email = str(claims.get("email", "")).lower()
+    return email in allowlist and str(claims.get("email_verified", "")).lower() == "true"
+
+
 def apple_user(db, claims, tokens, client_id):
+    if not account_allowed(claims):
+        # The subject is opaque, and logging it lets the owner add their own account after a first attempt.
+        log.warning("Refused Apple sign-in for subject %s", claims["sub"])
+        raise HTTPException(403, "This Apple account is not allowed on this server.")
     user = db.scalar(select(User).where(User.apple_sub == claims["sub"]))
     if not user:
         user = User(apple_sub=claims["sub"], email=claims.get("email", ""), name="My workspace")
@@ -256,9 +276,6 @@ def dev(response: Response, request: Request, db: Session = Depends(get_db)):
     if not user:
         user = User(apple_sub="local-demo", name="Local workspace", email="")
         db.add(user)
-        db.commit()
-    elif user.name == "Alex Morgan" and user.email == "alex@example.test":
-        user.name, user.email = "Local workspace", ""
         db.commit()
     token, _ = issue(db, user)
     set_cookie(response, token)
@@ -299,8 +316,9 @@ async def apple_callback(request: Request, db: Session = Depends(get_db)):
         token, _ = issue(db, user)
         response = RedirectResponse(settings.public_url, status_code=303)
         set_cookie(response, token)
-    except HTTPException:
-        response = RedirectResponse(settings.public_url + "/?auth_error=1", status_code=303)
+    except HTTPException as error:
+        reason = "denied" if error.status_code == 403 else "1"
+        response = RedirectResponse(settings.public_url + "/?auth_error=" + reason, status_code=303)
     response.delete_cookie("apple_binding", secure=True, httponly=True, samesite="none")
     return response
 
@@ -317,7 +335,7 @@ class NativeExchange(Model):
 @router.post("/apple/challenge")
 def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
     own_sign_in()
-    if not settings.apple_ready or data.client_id not in settings.apple_native_client_ids.split(","):
+    if not settings.apple_ready or data.client_id not in settings.native_client_ids:
         raise HTTPException(400, "Unknown Apple application")
     challenge = new_challenge(db, "native", data.client_id)
     return {"challenge_id": challenge.id, "nonce": challenge.nonce}
