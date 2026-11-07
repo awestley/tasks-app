@@ -195,6 +195,8 @@ const store = (key: string, value: string) => {
   }
 };
 
+const COMPACT_BELOW = 480;
+
 type Toast = { id: number; text: string; undo?: () => void; error?: boolean };
 
 export function App({ companion = false }: { companion?: boolean }) {
@@ -212,6 +214,16 @@ export function App({ companion = false }: { companion?: boolean }) {
     if ("serviceWorker" in navigator && location.protocol !== "file:")
       navigator.serviceWorker.register("./sw.js").catch(() => {});
   }, []);
+  // On a Smithy rail or in a small float (smithy-app docs/desk.md), the full app shows its compact
+  // layout, the same one companion.html uses, and goes back to full size when it has room again.
+  const compact =
+    companion ||
+    ((surface.kind === "docked" || surface.kind === "floating") &&
+      surface.width > 0 &&
+      surface.width < COMPACT_BELOW);
+  useEffect(() => {
+    document.documentElement.classList.toggle("is-companion", compact);
+  }, [compact]);
   if (phase === "loading")
     return (
       <div className="loading">
@@ -221,7 +233,7 @@ export function App({ companion = false }: { companion?: boolean }) {
   if (phase === "signed-out") return <SignIn hosted={hosted} />;
   return (
     <Workspace
-      companion={companion}
+      companion={compact}
       hosted={hosted}
       width={surface.width}
       surfaceKind={surface.kind}
