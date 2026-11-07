@@ -3,9 +3,9 @@
 import base64
 import hashlib
 import json
+import re
 import time
 from datetime import UTC
-from urllib.parse import urlsplit
 
 import httpx
 import jwt
@@ -14,6 +14,8 @@ from pydantic import Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from urllib3.exceptions import LocationParseError
+from urllib3.util import parse_url
 
 from .auth import authenticate
 from .config import settings
@@ -21,6 +23,9 @@ from .db import PushSubscription, get_db
 from .schemas import Model
 
 router = APIRouter(prefix="/api/v1/push", tags=["Push"])
+
+WEB_PUSH_HOSTS = {"fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"}
+WEB_PUSH_HOST_SUFFIXES = (".push.apple.com", ".notify.windows.com")
 
 
 def web_ready():
@@ -30,6 +35,29 @@ def web_ready():
 def apns_ready():
     return bool(
         settings.apns_private_key and settings.apns_key_id and settings.apns_team_id and settings.native_client_ids
+    )
+
+
+def web_endpoint_allowed(endpoint):
+    """Whether a Web Push endpoint is an HTTPS URL on a known push service.
+
+    The URL is read with urllib3 because the HTTP client that sends the push uses it. urllib.parse disagrees on some
+    input: with a backslash before ".push.apple.com" it reports a push.apple.com host, but the request goes elsewhere.
+    """
+    if not endpoint or "\\" in endpoint or not re.fullmatch(r"[!-~]+", endpoint):
+        return False
+    try:
+        url = parse_url(endpoint)
+    except LocationParseError:
+        return False
+    host = url.host or ""
+    return bool(
+        url.scheme == "https"
+        and not url.auth
+        and url.port in (None, 443)
+        and not url.fragment
+        and re.fullmatch(r"[a-z0-9.-]+", host)
+        and (host in WEB_PUSH_HOSTS or host.endswith(WEB_PUSH_HOST_SUFFIXES))
     )
 
 
@@ -58,21 +86,7 @@ class SubscriptionIn(Model):
     @model_validator(mode="after")
     def validate_destination(self):
         if self.kind == "web":
-            parsed = urlsplit(self.endpoint or "")
-            host = parsed.hostname or ""
-            allowed = (
-                host in {"fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"}
-                or host.endswith(".push.apple.com")
-                or host.endswith(".notify.windows.com")
-            )
-            if (
-                not allowed
-                or parsed.scheme != "https"
-                or parsed.username
-                or parsed.password
-                or parsed.port not in (None, 443)
-                or parsed.fragment
-            ):
+            if not web_endpoint_allowed(self.endpoint):
                 raise ValueError("Unsupported Web Push endpoint")
             try:
                 public = base64.urlsafe_b64decode((self.p256dh or "") + "=" * (-len(self.p256dh or "") % 4))
@@ -180,26 +194,34 @@ def send_push(subscription, task, delivery_id, tag=None):
     # Limit payload size. Never include notes, checklist text or credentials.
     title = task.title[:160]
     if subscription.kind == "web":
+        import requests
         from pywebpush import WebPushException, webpush
 
         endpoint = details["endpoint"]
+        # A row saved before this check existed can hold an address it rejects: remove it without sending.
+        if not web_endpoint_allowed(endpoint):
+            raise DeliveryError(400, invalid=True)
         if settings.push_simulation_url:
             endpoint = settings.push_simulation_url.rstrip("/") + "/web/" + details.get("token", "send")
         try:
-            webpush(
-                subscription_info={
-                    "endpoint": endpoint,
-                    "keys": {"p256dh": details["p256dh"], "auth": details["auth"]},
-                },
-                data=json.dumps(
-                    {"title": "Task reminder", "body": title, "task_id": task.id, "tag": tag or delivery_id}
-                ),
-                vapid_private_key=settings.vapid_private_key.replace("\\n", "\n"),
-                vapid_claims={"sub": settings.vapid_subject},
-                ttl=3600,
-                timeout=10,
-                headers={"Urgency": "high", "Topic": delivery_id.replace("-", "")[:32]},
-            )
+            with requests.Session() as session:
+                # The address was checked above; a redirect could lead anywhere, so it fails the delivery.
+                session.max_redirects = 0
+                webpush(
+                    subscription_info={
+                        "endpoint": endpoint,
+                        "keys": {"p256dh": details["p256dh"], "auth": details["auth"]},
+                    },
+                    data=json.dumps(
+                        {"title": "Task reminder", "body": title, "task_id": task.id, "tag": tag or delivery_id}
+                    ),
+                    vapid_private_key=settings.vapid_private_key.replace("\\n", "\n"),
+                    vapid_claims={"sub": settings.vapid_subject},
+                    ttl=3600,
+                    timeout=10,
+                    headers={"Urgency": "high", "Topic": delivery_id.replace("-", "")[:32]},
+                    requests_session=session,
+                )
         except WebPushException as error:
             status = error.response.status_code if error.response is not None else 503
             raise DeliveryError(status, status in (404, 410)) from error
