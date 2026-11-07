@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -90,6 +90,19 @@ class TaskIn(Model):
 
 class TaskCreate(TaskIn):
     id: UUID | None = None
+    # Undoing the delete of a completed task restores it as it was.
+    completed: bool = False
+    completed_at: datetime | None = None
+
+    @field_validator("completed_at")
+    @classmethod
+    def stored_as_utc(cls, value):
+        if value is None or value.tzinfo is None:
+            return value
+        try:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        except OverflowError:
+            raise ValueError("Invalid completion time") from None
 
 
 class TaskPatch(Model):

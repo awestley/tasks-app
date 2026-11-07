@@ -45,6 +45,8 @@ WEEKDAYS = [
     ["saturday"],
     ["sunday"],
 ]
+# "Today's report" is about a report, not due today.
+NOT_POSSESSIVE = r"(?!['’]\w)"
 WEEKDAY = "|".join(name for names in WEEKDAYS for name in names)
 MONTHS = [
     "jan(?:uary)?",
@@ -140,7 +142,7 @@ def parse_task(text, zone, projects=(), instant=None):
         except ValueError:
             pass
     if due is None:
-        match = take(r"\b(day after tomorrow|tomorrow|tmrw|tmr|today|tod|tonight|yesterday)\b")
+        match = take(r"\b(day after tomorrow|tomorrow|tmrw|tmr|today|tod|tonight|yesterday)\b" + NOT_POSSESSIVE)
         if match:
             word = match[1].lower()
             due = today + timedelta(
@@ -164,7 +166,7 @@ def parse_task(text, zone, projects=(), instant=None):
                 else today + timedelta(days=n * (7 if unit.startswith("week") else 1))
             )
     if due is None:
-        match = take(r"\b(next week|next month|next weekend|this weekend|weekend)\b")
+        match = take(r"\b(next week|next month|next weekend|this weekend|weekend)\b" + NOT_POSSESSIVE)
         if match:
             word = match[1].lower()
             if word == "next week":
@@ -191,7 +193,7 @@ def parse_task(text, zone, projects=(), instant=None):
             except ValueError:
                 untake()  # "Feb 31" is not a date; the words stay in the title.
     if due is None:
-        match = take(rf"\b(?:on\s+)?(next\s+)?({WEEKDAY})\b")
+        match = take(rf"\b(?:on\s+)?(?:this\s+)?(next\s+)?({WEEKDAY})\b" + NOT_POSSESSIVE)
         if match:
             target = weekday_index(match[2])
             days = 7 - today.weekday() + target if match[1] else (target - today.weekday()) % 7
@@ -213,15 +215,15 @@ def parse_task(text, zone, projects=(), instant=None):
         if match:
             result.due_time = f"{int(match[1]):02}:{match[2]}"
     if not result.due_time:
-        match = take(r"\b(?:at\s+|in the\s+|this\s+)?(morning|afternoon|evening|noon|midnight)\b")
+        match = take(r"\b(?:at\s+|in the\s+|this\s+)?(morning|afternoon|evening|noon|midnight)\b" + NOT_POSSESSIVE)
         if match:
             result.due_time = TIMES[match[1].lower()]
 
     # A reminder needs a time to count from; without one the words stay in the title.
     reminder = None
     if result.due_time:
-        match = take(r"(?<!\S)!(\d{1,4})\s*(m|mins?|minutes?|h|hrs?|hours?)\s*(?:b|before)(?!\w)") or take(
-            r"\bremind(?: me)?\s+(\d{1,4})\s+(minutes?|hours?)\s+before\b"
+        match = take(r"(?<!\S)!(\d{1,5})\s*(m|mins?|minutes?|h|hrs?|hours?)\s*(?:b|before)(?!\w)") or take(
+            r"\bremind(?: me)?\s+(\d{1,5})\s+(minutes?|hours?)\s+before\b"
         )
         if match:
             reminder = int(match[1]) * (60 if match[2].lower().startswith("h") else 1)

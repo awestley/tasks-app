@@ -15,7 +15,7 @@ LIMIT_MAX = 50
 QUERY_MAX = 200
 _TERMS = re.compile(r'"([^"]+)"|(\S+)')
 _TYPE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
-_CURSOR = re.compile(r"^o[0-9a-z]+$")
+_CURSOR = re.compile(r"^o[0-9a-z]{1,12}$")
 
 
 class SearchError(ValueError):
@@ -64,10 +64,9 @@ def parse_params(q=None, types=None, limit=None, cursor=None, updated_after=None
     after = None
     if updated_after:
         try:
-            after = datetime.fromisoformat(updated_after)
-        except ValueError:
+            after = _utc(datetime.fromisoformat(updated_after))
+        except (ValueError, OverflowError):  # Near the limits of datetime, converting to UTC overflows.
             raise SearchError("bad_updated_after") from None
-        after = _utc(after)
     return Params(raw, terms, kinds, min(size, LIMIT_MAX), cursor or None, after)
 
 

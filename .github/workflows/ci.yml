@@ -67,6 +67,13 @@ jobs:
           exit 1
       - name: Browser tests
         run: cd web && npm test
+      - name: Keep browser test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: web/test-results
+          retention-days: 7
       - name: MCP transports
         run: api/.venv/bin/python scripts/check_mcp.py
       - run: docker build -t tasks:ci .

@@ -4,13 +4,18 @@ import asyncio
 import json
 import time
 import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
+from fastapi import HTTPException
+from sqlalchemy import delete, select
 
-from tasks import auth, events
-from tasks.config import settings
+from tasks import auth, events, main
+from tasks.config import Settings, settings
+from tasks.db import Credential, User
 from tasks.search import SearchError, fold, make_snippet, parse_params, score_match, search_docs
 
 SHELL = "http://shell.test"
@@ -56,6 +61,8 @@ def test_search_params_validate_and_split_terms():
         ({"q": "x" * 201}, "q_too_long"),
         ({"q": "a", "limit": "0"}, "bad_limit"),
         ({"q": "a", "updated_after": "nope"}, "bad_updated_after"),
+        ({"q": "a", "updated_after": "0001-01-01T00:00:00+14:00"}, "bad_updated_after"),
+        ({"q": "a", "updated_after": "9999-12-31T23:59:59-14:00"}, "bad_updated_after"),
     ]:
         with pytest.raises(SearchError, match=code):
             parse_params(**kwargs)
@@ -317,3 +324,109 @@ def test_events_stream(client):
             "kind": "updated",
             "version": 1,
         }
+
+
+def test_events_stream_ends_with_its_session(workspace):
+    client, _, session = workspace
+    token = client.headers["Authorization"].removeprefix("Bearer ")
+    with session() as db:
+        owner = db.scalar(select(User).where(User.apple_sub == "owner"))
+        other_device, _ = auth.issue(db, owner, "native")
+    with client.stream("GET", "/api/v1/events") as response:
+        lines = response.iter_lines()
+        assert next(lines) == ": connected"
+        with session() as db:
+            db.execute(delete(Credential).where(Credential.digest == auth.digest(token)))
+            db.commit()
+        # Another device's change reaches the stream, which ends instead of passing it on.
+        written = client.post(
+            "/api/v1/tasks",
+            json={"title": "After the session ended"},
+            headers={"Authorization": "Bearer " + other_device},
+        )
+        assert written.status_code == 201
+        assert [line for line in lines if line.startswith("data:")] == []
+
+
+def test_a_shell_token_counts_for_a_stream_only_until_it_expires():
+    alive = SimpleNamespace(kind="shell", id=None, expires=time.time() + 60)
+    expired = SimpleNamespace(kind="shell", id=None, expires=time.time() - auth.SHELL_LEEWAY - 1)
+    assert auth.still_signed_in(None, alive)
+    assert not auth.still_signed_in(None, expired)
+
+
+def test_revision_can_be_worked_out_from_the_tasks(client):
+    # web/src/store.ts compares this with its own copy, to skip downloading what it already has.
+    assert client.get("/api/v1/tasks/revision").json()["revision"] == "0:"
+    create(client)
+    create(client, title="Another")
+    tasks = client.get("/api/v1/tasks").json()
+    latest = max(task["updated_at"] for task in tasks)
+    assert client.get("/api/v1/tasks/revision").json()["revision"] == f"{len(tasks)}:{latest}"
+
+
+def test_search_survives_an_absurd_cursor_and_refuses_an_absurd_date(client):
+    create(client, title="Findable")
+    assert client.get("/api/v1/search", params={"q": "findable", "cursor": "o" + "z" * 5000}).status_code == 200
+    assert client.get("/api/v1/search", params={"q": "findable", "cursor": "o" + "z" * 30}).status_code == 200
+    response = client.get("/api/v1/search", params={"q": "findable", "updated_after": "0001-01-01T00:00:00+14:00"})
+    assert (response.status_code, response.json()) == (422, {"error": "bad_updated_after"})
+
+
+def test_production_publishes_the_api_description_only_inside_the_shell():
+    assert main.openapi_path(Settings(environment="production", shell_url="https://shell.example")) == "/openapi.json"
+    assert main.openapi_path(Settings(environment="production", shell_url="")) is None
+    assert main.openapi_path(Settings(environment="development", shell_url="")) == "/openapi.json"
+
+
+def test_several_first_requests_for_a_shell_user_share_one_user(workspace, monkeypatch):
+    _, _, session = workspace
+    with session() as db:
+        first = auth.shell_user(db, {"sub": "new-sub"}).id
+    with session() as db:
+        real, calls = db.scalar, []
+
+        def scalar(query):
+            # As if another request created the user just after this one looked.
+            calls.append(query)
+            return None if len(calls) == 1 else real(query)
+
+        monkeypatch.setattr(db, "scalar", scalar)
+        assert auth.shell_user(db, {"sub": "new-sub"}).id == first
+        assert len(calls) == 2
+
+
+def test_unreachable_shell_keys_do_not_look_like_a_signed_out_session(shell, monkeypatch):
+    client, sign = shell
+
+    class Unreachable:
+        def get_signing_key_from_jwt(self, token):
+            raise jwt.PyJWKClientConnectionError("unreachable")
+
+    monkeypatch.setattr(auth, "shell_keys", lambda: Unreachable())
+    response = client.get("/apps/tasks/api/v1/me", headers={"Authorization": "Bearer " + sign()})
+    assert response.status_code == 503
+
+
+def test_mcp_credentials_are_checked_off_the_event_loop(client, monkeypatch):
+    checked = []
+
+    def check(request, db):
+        try:
+            asyncio.get_running_loop()
+            checked.append("on the loop")
+        except RuntimeError:
+            checked.append("off the loop")
+        raise HTTPException(401, "Refused")
+
+    monkeypatch.setattr(main, "authenticate", check)
+    assert client.post("/mcp/").status_code == 401
+    assert checked == ["off the loop"]
+
+
+def test_summaries_show_the_year_only_outside_this_one(client):
+    year = datetime.now(timezone.utc).year
+    for due, shown in [(f"{year}-06-15", "Due Jun 15"), (f"{year + 1}-06-15", f"Due Jun 15, {year + 1}")]:
+        task = create(client, due_date=due, time_zone="UTC")
+        resolved = client.get("/api/v1/resolve", params={"ref": f"pc://tasks/task/{task['id']}"}).json()
+        assert resolved["subtitle"] == shown + " · Inbox"

@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from . import events
-from .auth import authenticate
+from .auth import authenticate, still_signed_in
 from .config import settings
 from .db import Project, Task, get_db
 from .search import SearchError, iso, parse_params, search_docs
@@ -100,6 +101,8 @@ def due_text(task):
     if not task.due_date:
         return None
     text = "Due " + task.due_date.strftime("%b ") + str(task.due_date.day)
+    if task.due_date.year != local_today(task.time_zone).year:
+        text += f", {task.due_date.year}"
     return text + (" " + task.due_time if task.due_time else "")
 
 
@@ -243,8 +246,14 @@ def companion_badge(user=Depends(authenticate), db: Session = Depends(get_db)):
 async def stream_events(request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
     """Server-sent events { ref, kind: updated|deleted, version } for this user's tasks and projects."""
     user_id = user.id
+    credential = request.state.credential
+    bind = db.get_bind()
     db.close()  # Don't hold a database connection for the life of the stream.
     entry = events.subscribe(user_id)
+
+    def signed_in():
+        with Session(bind) as check:
+            return still_signed_in(check, credential)
 
     async def stream():
         try:
@@ -252,11 +261,15 @@ async def stream_events(request: Request, user=Depends(authenticate), db: Sessio
             while True:
                 try:
                     data = await asyncio.wait_for(entry[1].get(), timeout=25)
-                    yield f"data: {data}\n\n"
                 except TimeoutError:
+                    data = None
                     if await request.is_disconnected():
                         break
-                    yield ": ping\n\n"
+                # Checked before anything is sent, so a stream ends with the session that opened it. A client
+                # that still has a valid session reconnects.
+                if not await run_in_threadpool(signed_in):
+                    break
+                yield f"data: {data}\n\n" if data else ": ping\n\n"
         finally:
             events.unsubscribe(user_id, entry)
 

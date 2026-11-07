@@ -152,6 +152,7 @@ function Workspace({
   const projects = S.useStore((s) => s.projects);
   const online = S.useStore((s) => s.online);
   const pending = S.useStore((s) => s.pending);
+  const retrying = S.useStore((s) => s.retrying);
   const expired = S.useStore((s) => s.expired);
   const problem = S.useStore((s) => s.problem);
   const permission = usePermission();
@@ -449,6 +450,8 @@ function Workspace({
         labels: task.labels,
         recurrence: task.recurrence,
         checklist: task.checklist,
+        completed: task.completed,
+        completed_at: task.completed_at,
       }),
     );
   };
@@ -890,22 +893,26 @@ function Workspace({
     </button>
   );
 
+  const waiting = `${pending} change${pending === 1 ? "" : "s"} will sync`;
+  const saving = online && !retrying;
   const status =
     !online || pending ? (
       <div
-        className={`sync-status ${online ? "" : "is-offline"}`}
+        className={`sync-status ${saving ? "" : "is-offline"}`}
         role="status"
       >
-        {online ? (
+        {saving ? (
           <RefreshCw size={12} className="spin" />
         ) : (
           <CloudOff size={12} />
         )}
-        {online
+        {saving
           ? "Saving…"
-          : pending
-            ? `Offline · ${pending} change${pending === 1 ? "" : "s"} will sync`
-            : "Offline"}
+          : !online
+            ? pending
+              ? `Offline · ${waiting}`
+              : "Offline"
+            : `Server problem · ${waiting}`}
       </div>
     ) : null;
 
@@ -1049,6 +1056,7 @@ function Workspace({
         <SettingsPanel
           user={user}
           shell={!!config.shell || hosted}
+          unsent={pending}
           close={() => setSettings(false)}
           openShortcuts={() => {
             setSettings(false);

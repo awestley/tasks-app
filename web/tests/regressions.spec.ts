@@ -93,6 +93,9 @@ test("An ended session returns to sign-in from an action or from sign out", asyn
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
   await signIn(page);
+  // Sent again now, and its own change event refreshes the list: let that finish.
+  await expect(page.locator(".sync-status")).toHaveCount(0);
+  await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Open settings" }).click();
   await endSession(page);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -245,5 +248,276 @@ test("A reminder fires on time, but not if it was already past when saved", asyn
   await page.reload();
   await expect(toast.filter({ hasText: ontime })).toBeVisible();
   await expect(toast.filter({ hasText: late })).toHaveCount(0);
+  await cleanUp(page);
+});
+
+async function addTask(page: Page, title: string) {
+  await page.locator(".quick-add").click();
+  const input = page.getByRole("dialog").getByLabel("Task name");
+  await input.fill(title);
+  await input.press("Enter");
+  await page.keyboard.press("Escape");
+}
+
+test("A server error keeps a change and sends it later", async ({ page }) => {
+  await signIn(page);
+  await inbox(page);
+  const title = `${prefix} server error`;
+  let failed = false;
+  await page.route("**/api/v1/tasks", async (route) => {
+    if (route.request().method() === "POST" && !failed) {
+      failed = true;
+      await route.fulfill({ status: 500, body: "Internal Server Error" });
+    } else await route.continue();
+  });
+  await addTask(page, title);
+  await expect(page.locator(".sync-status")).toContainText(
+    "Server problem · 1 change will sync",
+  );
+  await expect(page.locator(".task-body", { hasText: title })).toBeVisible();
+  expect(await matching(page, title)).toHaveLength(0);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(async () => (await matching(page, title)).length).toBe(1);
+  await expect(page.locator(".sync-status")).toHaveCount(0);
+  await cleanUp(page);
+});
+
+test("A change is still sent when browser storage is full", async ({
+  page,
+}) => {
+  await signIn(page);
+  await inbox(page);
+  await page.evaluate(() => {
+    let size = 1024 * 1024;
+    let i = 0;
+    while (size >= 1) {
+      try {
+        localStorage.setItem("test.fill." + i++, "x".repeat(size));
+      } catch {
+        size = Math.floor(size / 2);
+      }
+    }
+  });
+  const title = `${prefix} full storage`;
+  await addTask(page, title);
+  await expect.poll(async () => (await matching(page, title)).length).toBe(1);
+  await expect(page.locator(".task-body", { hasText: title })).toBeVisible();
+  await page.evaluate(() => localStorage.clear());
+  await cleanUp(page);
+});
+
+test("Live updates start right after a fresh sign-in", async ({ page }) => {
+  const streams: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/v1/events")) streams.push(r.url());
+  });
+  await signIn(page);
+  await inbox(page);
+  await expect.poll(() => streams.length).toBe(1);
+  const title = `${prefix} live`;
+  await create(page, { title });
+  await expect(page.locator(".task-body", { hasText: title })).toBeVisible();
+  await cleanUp(page);
+});
+
+test("A session ended elsewhere returns to sign-in when the next change arrives", async ({
+  page,
+  browser,
+}) => {
+  await signIn(page);
+  await page.waitForTimeout(500);
+  const context = await browser.newContext();
+  const device = await context.newPage();
+  await signIn(device);
+  await endSession(page);
+  await create(device, { title: `${prefix} after the session ended` });
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible({
+    timeout: 15000,
+  });
+  await cleanUp(device);
+  await context.close();
+});
+
+test("Signing out warns about changes not yet sent", async ({ page }) => {
+  await signIn(page);
+  await inbox(page);
+  await page.route("**/api/v1/tasks", (route) =>
+    route.request().method() === "POST" ? route.abort() : route.continue(),
+  );
+  await addTask(page, `${prefix} unsent`);
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("1 change not synced");
+  await expect(page.locator(".quick-add")).toBeVisible();
+  await page.getByRole("button", { name: "Sign out anyway" }).click();
+  await expect(
+    page.getByRole("button", { name: /Open local workspace/ }),
+  ).toBeVisible();
+});
+
+test("Reminders say push is set up only when this browser is subscribed", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let permission = "default";
+    let subscription: unknown = null;
+    Object.defineProperty(Notification, "permission", {
+      get: () => permission,
+    });
+    Notification.requestPermission = async () => {
+      permission = "granted";
+      return "granted";
+    };
+    PushManager.prototype.getSubscription = async () =>
+      subscription as PushSubscription | null;
+    PushManager.prototype.subscribe = async () => {
+      const allowed = (window as unknown as { allowPush?: boolean }).allowPush;
+      if (!allowed) throw new DOMException("No push service", "AbortError");
+      subscription = {
+        toJSON: () => ({
+          endpoint: "https://fcm.googleapis.com/fcm/send/test",
+          keys: { p256dh: "key", auth: "secret" },
+        }),
+      };
+      return subscription as PushSubscription;
+    };
+  });
+  await page.route("**/api/v1/push/config", (route) =>
+    route.fulfill({
+      json: {
+        web_enabled: true,
+        vapid_public_key:
+          "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U",
+      },
+    }),
+  );
+  await page.route("**/api/v1/push/subscriptions", (route) =>
+    route.fulfill({ json: { id: "device" } }),
+  );
+  await signIn(page);
+  await page.locator(".bell-button").first().click();
+  await page.getByRole("button", { name: "Turn on notifications" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Push could not be turned on",
+  );
+  await expect(page.locator(".bell-note")).not.toContainText("Push is set up");
+  await page.evaluate(() => {
+    (window as unknown as { allowPush?: boolean }).allowPush = true;
+  });
+  await page.getByRole("button", { name: "Turn on push" }).click();
+  await expect(page.locator(".bell-note")).toContainText("Push is set up");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("Undoing the delete of a completed task keeps it completed", async ({
+  page,
+}) => {
+  await signIn(page);
+  const title = `${prefix} undo completed`;
+  const task = await create(page, { title });
+  const done = await page.request.patch(`api/v1/tasks/${task.id}`, {
+    headers: headers(page),
+    data: { version: task.version, completed: true },
+  });
+  expect(done.status()).toBe(200);
+  const { completed_at } = await done.json();
+  await page.reload();
+  await page.locator(".sidebar nav button", { hasText: "Completed" }).click();
+  await page.getByRole("button", { name: `More actions for ${title}` }).click();
+  await page.getByRole("menuitem", { name: "Delete task" }).click();
+  await page.getByRole("menuitem", { name: "Confirm delete" }).click();
+  await expect.poll(async () => (await matching(page, title)).length).toBe(0);
+  await page.locator(".toast-undo").click();
+  await expect.poll(async () => (await matching(page, title)).length).toBe(1);
+  const [restored] = await matching(page, title);
+  expect(restored.completed).toBe(true);
+  expect(restored.completed_at).toBe(completed_at);
+  await expect(page.locator(".task-body", { hasText: title })).toBeVisible();
+  await cleanUp(page);
+});
+
+test("A change made here does not download every task", async ({ page }) => {
+  await signIn(page);
+  await page.reload();
+  await inbox(page);
+  await page.waitForTimeout(500);
+  const downloads: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/v1/tasks?")) downloads.push(r.url());
+  });
+  const checked = page.waitForResponse((r) =>
+    r.url().endsWith("/api/v1/tasks/revision"),
+  );
+  const title = `${prefix} own change`;
+  await addTask(page, title);
+  await checked;
+  await expect(page.locator(".sync-status")).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+  await cleanUp(page);
+});
+
+test("Signing out in one tab signs out the others", async ({
+  page,
+  context,
+}) => {
+  await signIn(page);
+  await inbox(page);
+  const title = `${prefix} other tab`;
+  await create(page, { title });
+  const other = await context.newPage();
+  await other.goto("/");
+  await other.locator(".sidebar nav button", { hasText: "Inbox" }).click();
+  await expect(other.locator(".task-body", { hasText: title })).toBeVisible();
+  await cleanUp(page);
+  await page.bringToFront();
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(
+    other.getByRole("button", { name: /Open local workspace/ }),
+  ).toBeVisible();
+  await expect(other.locator(".task-body")).toHaveCount(0);
+});
+
+test("Checklist edits on two devices both stay", async ({ page }) => {
+  await signIn(page);
+  await inbox(page);
+  const title = `${prefix} checklist merge`;
+  const first = { id: "first", title: "First", completed: false };
+  const second = { id: "second", title: "Second", completed: false };
+  const task = await create(page, { title, checklist: [first, second] });
+  await page.reload();
+  await inbox(page);
+  await page.locator(".task-body", { hasText: title }).click();
+  const item = page
+    .getByLabel("Task details")
+    .getByLabel("Checklist item 1", { exact: true });
+  await item.click();
+  // While this device edits the first item, another ticks the second and adds a third.
+  const changed = await page.request.patch(`api/v1/tasks/${task.id}`, {
+    headers: headers(page),
+    data: {
+      version: task.version,
+      checklist: [
+        first,
+        { ...second, completed: true },
+        { id: "third", title: "Third", completed: false },
+      ],
+    },
+  });
+  expect(changed.status()).toBe(200);
+  await item.fill("First, edited");
+  await item.blur();
+  await expect
+    .poll(async () =>
+      (await matching(page, title))[0].checklist.map(
+        (i: { title: string; completed: boolean }) => [i.title, i.completed],
+      ),
+    )
+    .toEqual([
+      ["First, edited", false],
+      ["Second", true],
+      ["Third", false],
+    ]);
   await cleanUp(page);
 });

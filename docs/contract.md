@@ -1,12 +1,12 @@
 # Tasks API contract
 
-All application resources live under `/api/v1` and belong to the authenticated user. Bearer credentials or an HttpOnly session cookie are required. Cookie writes require the configured Origin. Invalid credentials return 401, missing or other-user resources 404, invalid input 422, stale task versions 409, request bodies over 100 KB 413. No cross-user IDs are accepted. Due dates must fall between the years 1900 and 2999. Responses describe what is stored: a task whose schedule no longer validates, for example after a time zone rule change, stays readable, and PATCH returns 422 until the schedule is corrected.
+All application resources live under `/api/v1` and belong to the authenticated user. Bearer credentials or an HttpOnly session cookie are required. Cookie writes require the configured Origin. Invalid credentials return 401, missing or other-user resources 404, invalid input 422, stale task versions 409, request bodies over 300 KB 413. No cross-user IDs are accepted. Due dates must fall between the years 1900 and 2999. Responses describe what is stored: a task whose schedule no longer validates, for example after a time zone rule change, stays readable, and PATCH returns 422 until the schedule is corrected.
 
 - GET /me: profile.
 - GET/POST /projects; PATCH/DELETE /projects/{id}: project management. PATCH changes only the fields it receives. Deleting a project moves its tasks into Inbox.
 - GET /tasks: paginated tasks, with `offset`, `limit` (max 200), optional `q`, `project_id`, `completed`, `label`, `due_before`. Dates use ISO calendar dates, interpreted in the user's local calendar.
-- GET /tasks/revision: a value that changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list.
-- POST /tasks: title, description, project_id, due_date, priority (1 urgent through 4 normal), labels, checklist, recurrence (daily, weekly, monthly or null).
+- GET /tasks/revision: a value that changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list. It is the task count and the latest `updated_at`, which a client can also work out from the tasks it holds.
+- POST /tasks: title, description, project_id, due_date, priority (1 urgent through 4 normal), labels, checklist, recurrence (daily, weekly, monthly or null). `completed` and `completed_at` restore a deleted task as it was.
 - PATCH /tasks/{id}: edits require `version` from the last read. Atomic compare-and-swap prevents lost updates.
 - POST /tasks/{id}/complete: requires version, completes once and creates the next occurrence when recurring. Restoring an occurrence does not recreate its already generated successor.
 - DELETE /tasks/{id}?version=N: version-checked permanent deletion.
@@ -19,7 +19,7 @@ All application resources live under `/api/v1` and belong to the authenticated u
 - POST /auth/apple/challenge; POST /auth/apple/native: native one-time nonce + authorization code exchange. Token returned only to native client. An account outside `ALLOWED_APPLE_ACCOUNTS` receives 403, or `auth_error=denied` in the browser flow.
 - POST /auth/logout: revoke current credential and clear cookie.
 
-OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web app follows server-sent events and refreshes when focused, downloading tasks only when the revision has changed. Native clients refresh on activation. The API description is served in development only; `docs/openapi.json` holds the same schema.
+OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web app follows server-sent events and refreshes when focused, downloading tasks only when the revision has changed. An event stream ends when the session or shell token that opened it ends, and a client with a valid session reconnects. Native clients refresh on activation. The API description is served in development and, because the app contract requires it, inside the shell; `docs/openapi.json` holds the same schema.
 
 ## MCP transport
 

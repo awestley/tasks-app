@@ -53,14 +53,25 @@ export function ContextMenu({
     const outside = (e: Event) => {
       if (!inMenu(e.target)) close();
     };
+    // A scrolling page would leave the menu behind its target. A text field scrolling its own text, as
+    // the search field does when the menu takes focus from it, moves nothing.
+    const scrolled = (e: Event) => {
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      )
+        return;
+      outside(e);
+    };
     if (!request.sheet) {
       document.addEventListener("pointerdown", outside, true);
-      document.addEventListener("scroll", outside, true);
+      document.addEventListener("scroll", scrolled, true);
     }
     window.addEventListener("resize", close);
     return () => {
       document.removeEventListener("pointerdown", outside, true);
-      document.removeEventListener("scroll", outside, true);
+      document.removeEventListener("scroll", scrolled, true);
       window.removeEventListener("resize", close);
       // Return focus without drawing a keyboard focus ring after a pointer menu.
       previous?.focus?.({

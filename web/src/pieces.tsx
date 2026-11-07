@@ -13,8 +13,10 @@ import { PcEmbed, usePc } from "@awestley/pc-runtime/react";
 import { api, type Task } from "./api";
 import {
   enableNotifications,
+  pushSubscribed,
   reminderAt,
   showReminder,
+  subscribePush,
   usePermission,
   autoReminder,
   setAutoReminder,
@@ -115,11 +117,24 @@ export function BellPanel({
   const [auto, setAuto] = useState(autoReminder());
   const [busy, setBusy] = useState(false);
   const [push, setPush] = useState<boolean | null>(null);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushFailed, setPushFailed] = useState(false);
   useEffect(() => {
     api<{ web_enabled: boolean }>("/push/config")
       .then((c) => setPush(c.web_enabled))
       .catch(() => setPush(false));
+    pushSubscribed().then(setPushOn);
   }, []);
+  const checkPush = async () => {
+    const on = await pushSubscribed();
+    setPushOn(on);
+    setPushFailed(!on);
+  };
+  const whenClosed = push
+    ? "Turn on push to get them when it's closed."
+    : hosted
+      ? "Set up push in Tasks settings to get them when it's closed."
+      : "Set up push in Settings to get them when it's closed.";
   const upcoming = tasks
     .map((t) => ({ t, at: reminderAt(t) }))
     .filter(
@@ -155,7 +170,8 @@ export function BellPanel({
             disabled={busy}
             onClick={async () => {
               setBusy(true);
-              await enableNotifications().catch(() => "default");
+              const result = await enableNotifications().catch(() => "default");
+              if (push && result === "granted") await checkPush();
               setBusy(false);
             }}
           >
@@ -198,12 +214,31 @@ export function BellPanel({
             ))}
           </div>
         )}
+        {permission === "granted" && push && !pushOn && (
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await subscribePush().catch(() => false);
+              await checkPush();
+              setBusy(false);
+            }}
+          >
+            <Bell size={15} /> Turn on push
+          </button>
+        )}
+        {pushFailed && (
+          <p role="alert" className="error-text">
+            Push could not be turned on in this browser.
+          </p>
+        )}
         <p className="bell-note">
-          {push
+          {push && pushOn
             ? "Push is set up, so reminders also arrive when Tasks is closed."
             : hosted
-              ? "Reminders fire while Personal Command is open (the companion counts). Set up push in Tasks settings to get them when it's closed."
-              : "Reminders fire while Tasks is open. Set up push in Settings to get them when it's closed."}
+              ? `Reminders fire while Personal Command is open (the companion counts). ${whenClosed}`
+              : `Reminders fire while Tasks is open. ${whenClosed}`}
         </p>
         {permission === "granted" && (
           <button
