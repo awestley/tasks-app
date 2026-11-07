@@ -19,7 +19,7 @@ All application resources live under `/api/v1` and belong to the authenticated u
 - POST /auth/apple/challenge; POST /auth/apple/native: native one-time nonce + authorization code exchange. Token returned only to native client. An account outside `ALLOWED_APPLE_ACCOUNTS` receives 403, or `auth_error=denied` in the browser flow.
 - POST /auth/logout: revoke current credential and clear cookie.
 
-OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web UI refreshes after mutations, and on focus and periodically when the task revision has changed. Native clients refresh on activation. First release is online-first, without collaboration, attachments, or offline conflict merging. The API description is served in development only; `docs/openapi.json` holds the same schema.
+OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web app follows server-sent events and refreshes when focused, downloading tasks only when the revision has changed. Native clients refresh on activation. The API description is served in development only; `docs/openapi.json` holds the same schema.
 
 ## MCP transport
 

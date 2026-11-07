@@ -3,7 +3,7 @@ import React, { useMemo } from "react";
 import { localDate, type Project, type Task } from "./api";
 import type { QuickDefaults } from "./QuickAdd";
 import type { View } from "./routes";
-import { daysFromNow, dueLabel, isOverdue, weekday } from "./ui";
+import { daysFromNow, dueLabel, isOverdue, shortDate, weekday } from "./ui";
 
 export type Group = {
   key: string;
@@ -107,10 +107,7 @@ export function useTaskGroups({
           key: d,
           title: (
             <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {shortDate(d)}
               <span className="group-sub">
                 {" "}
                 ·{" "}
@@ -123,7 +120,9 @@ export function useTaskGroups({
         });
       }
       const later = rest.filter((t) => t.due_date! > daysFromNow(6));
-      const laterDays = Array.from(new Set(later.map((t) => t.due_date!)));
+      const laterDays = Array.from(
+        new Set(later.map((t) => t.due_date!)),
+      ).sort();
       return [
         ...lead,
         ...days,
@@ -131,10 +130,7 @@ export function useTaskGroups({
           key: d,
           title: (
             <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
+              {shortDate(d)}
               <span className="group-sub"> · {weekday(d, "long")}</span>
             </>
           ),

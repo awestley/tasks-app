@@ -312,6 +312,16 @@ function Workspace({
       viewNames[view] ||
       (view.startsWith("label:") ? "@" + view.slice(6) : "Tasks");
   const openTask = openId ? tasks.find((t) => t.id === openId) || null : null;
+  // A link can name a project before the list has loaded, so only leave one that was really there.
+  const projectSeen = useRef(false);
+  useEffect(() => {
+    if (!view.startsWith("project:")) projectSeen.current = false;
+    else if (selectedProject) projectSeen.current = true;
+    else if (projectSeen.current) {
+      projectSeen.current = false;
+      setView("inbox");
+    }
+  }, [view, selectedProject]);
   usePaneTitle(
     openTask && !detailBeside ? openTask.title : companion ? null : title,
   );
@@ -1047,7 +1057,10 @@ function Workspace({
           logout={() =>
             S.signOut(async () => {
               await disableBrowserPush().catch(() => {});
-              await api("/auth/logout", "POST");
+              await api("/auth/logout", "POST").catch((e) => {
+                // Already ended on the server, so there is nothing left to revoke there.
+                if (e.status !== 401) throw e;
+              });
             }).then(
               () => setSettings(false),
               (e) => setToast({ id: Date.now(), text: e.message, error: true }),

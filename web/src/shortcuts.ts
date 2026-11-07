@@ -87,6 +87,8 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
   }
   if (typing || mod || e.altKey || modalOpen) return;
   const key = e.key;
+  // Holding a key may keep moving through the list, but must not keep duplicating or completing tasks.
+  if (e.repeat && !["j", "k", "ArrowDown", "ArrowUp"].includes(key)) return;
   if (Date.now() - gPending.current < 900) {
     gPending.current = 0;
     const go = {

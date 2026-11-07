@@ -233,6 +233,10 @@ function claim(tag: string) {
  * Keep timers for the reminders coming up. `announce` also shows it inside the app (the shell's
  * notice, or the app's toast). Returns a function that stops the schedule.
  */
+/** Saved after its reminder time, so it was already late when scheduled. The server skips these too. */
+const savedAfter = (task: Task, at: number) =>
+  Date.parse(task.updated_at + (task.updated_at.endsWith("Z") ? "" : "Z")) > at;
+
 export function scheduleReminders(
   tasks: Task[],
   announce: (task: Task) => void,
@@ -242,7 +246,7 @@ export function scheduleReminders(
     .map((task) => ({ task, at: reminderAt(task) }))
     .filter(
       (r): r is { task: Task; at: number } =>
-        r.at !== null && r.at > now - MISSED_GRACE,
+        r.at !== null && r.at > now - MISSED_GRACE && !savedAfter(r.task, r.at),
     )
     .sort((a, b) => a.at - b.at);
   const fire = () => {

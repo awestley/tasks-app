@@ -76,25 +76,13 @@ Result: `apple/DerivedData-iOS/Logs/Test/Test-Taskwell-iOS-2026.10.31_22-54-48--
 
 ## Code review fixes, November 6, 2026
 
-Fixed the High and Medium findings from a full code review: open sign-up, the shared rate limit behind a proxy, the chunked body limit bypass, one task stopping all reminders, ended sessions trapping native users, unresolvable version conflicts, MCP path traversal, the Q shortcut replacing an open editor, past reminders firing, unreadable stored tasks, recurrence drift, cold-launch notification taps, stale assets after a deploy, skipped provider tests, tests touching the development database, and native actions dropped while busy.
+Fixed the findings from a full code review, on top of the rebuilt web app and Personal Command support. The review itself covered the code before that rebuild. Each web finding was then rechecked against the rebuilt app and fixed there, or dropped where the rebuild had already fixed it. `contract.py`, `events.py`, `search.py` and the rebuilt web code as a whole have not had a review of their own.
 
-- 96 API tests passed on SQLite and on PostgreSQL 17, with none skipped. Apple sign-in and push delivery now run against in-process fake providers over real HTTP. The Apple and push tests also passed against the Postman mock scripts run directly with Node, not through the Postman CLI.
-- `alembic check` reported no differences on SQLite and PostgreSQL 17, through revision 0004. The OpenAPI snapshot is now compared by a test.
-- Nine browser tests passed against the built web app, including new regressions for shortcuts, conflicts, ended sessions and refused accounts. Both MCP transports passed the smoke script, and a crafted task ID no longer reaches other routes.
-- The production image ran behind real Caddy through Compose, on a loopback port: migrations reached 0004, requests with spoofed `X-Forwarded-For` values shared one limit, a second client kept its own limit, a 5 MB chunked request received 413, and caching headers were correct. Production startup refused an empty or placeholder `ALLOWED_APPLE_ACCOUNTS`. A chunked 30 MB request to the API process directly received 413 with memory unchanged.
-- macOS Debug and iOS Simulator builds passed. Four iOS UI tests passed on an iPhone 18 Pro simulator, covering a session ended on activation, sign-out and local removal with push enabled, and a conflict that keeps the draft.
-- Two one-off simulator checks compared fixed and previous code. A notification delivered with `simctl push` and tapped while the app was not running opened the task only with the fix. A swipe to complete during a slowed refresh took effect only with the fix.
+- 154 API tests passed on SQLite, with one PostgreSQL-only test skipped, and 155 passed on PostgreSQL 17, with none needing a running simulation. Apple sign-in and push delivery run against in-process fake providers over real HTTP. The Apple and push tests also passed against the Postman mock scripts run directly with Node, not through the Postman CLI.
+- `alembic check` reported no differences on PostgreSQL 17 through revision 0005. A test now compares the OpenAPI snapshot with the running API.
+- 18 browser tests and 27 parser unit tests passed against the built web app, and both MCP transports passed the smoke script. A crafted task ID no longer reaches other routes.
+- The production image ran behind real Caddy through Compose, on a loopback port. Migrations reached 0005, requests with spoofed `X-Forwarded-For` values shared one limit, a second client kept its own limit, a 5 MB chunked request received 413, caching headers were correct, the API schema was not served, MCP rejected missing and invalid tokens, `/%00` returned 404, and the background worker logged no failures on PostgreSQL. Production startup refused a standalone server with no `ALLOWED_APPLE_ACCOUNTS`, and accepted one inside the shell without it.
+- macOS Debug and iOS Simulator builds passed, and six iOS UI tests passed on an iPhone 18 Pro simulator, covering a session ended on activation, sign-out and local removal with push enabled, a conflict that keeps the draft, a task in UTC, and ending another device's session.
+- Three one-off simulator checks compared fixed and previous code. A notification delivered with `simctl push` and tapped while the app was not running opened the task only with the fix. A swipe to complete during a slowed refresh took effect only with the fix. Across seven refreshes, the app registered for push once with the fix and six times without it. These ran before moving onto the rebuild, whose Apple code is unchanged.
 
-Not verified: `do-connecting-ip` on a real App Platform deployment, the updated GitHub Actions workflow on GitHub, live Apple sign-in, live APNs or Web Push, and physical devices.
-
-## Remaining review fixes, November 6, 2026
-
-Fixed the Low findings from the same review: unhandled server errors on bad input, repeated native date formatters and push registrations, full task downloads on every poll, unbounded expired data, label filter case, project PATCH resetting color, inconsistent configuration parsing, the service worker's notification click, Upcoming grouping across years, a garbled heading after a project is deleted elsewhere, the UTC time zone picker, API docs in production, session listing and revocation, Host-based origin trust in development, dead code, stale documentation, and the size of `web/src/main.tsx`.
-
-- 108 API tests passed on SQLite, with one PostgreSQL-only test skipped, and 109 passed on PostgreSQL 17. The Apple and push tests also passed against the Postman mock scripts run directly with Node.
-- 16 browser tests passed against the built web app, and both MCP transports passed the smoke script.
-- The production image ran behind real Caddy through Compose: the API schema was not served, MCP rejected missing and invalid tokens, `/%00` returned 404, and the background worker logged no failures on PostgreSQL.
-- macOS Debug and iOS Simulator builds passed, and six iOS UI tests passed on an iPhone 18 Pro simulator.
-- A one-off simulator check counted push registrations across seven refreshes: one with the fix, six with the previous code.
-
-Not verified: the purge running on its hourly schedule in a long-lived process (tests call it directly and it ran once at startup), the macOS app's interface, and everything listed as not verified in the previous section.
+Not verified: `do-connecting-ip` on a real App Platform deployment, the updated GitHub Actions workflow on GitHub, sign-in through a real Personal Command shell, live Apple sign-in, live APNs or Web Push, physical devices, the macOS interface, and the hourly purge in a long-lived process (tests call it directly and it runs once at startup).
