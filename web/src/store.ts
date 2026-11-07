@@ -388,7 +388,6 @@ function coalesce() {
   }
 }
 
-let sending: string | null = null;
 let flushing = false;
 export function flush() {
   if (flushing || !queue.length || !state.user) return;
@@ -398,7 +397,6 @@ export function flush() {
       queue = storedQueue();
       const op = queue[0];
       if (!op) break;
-      sending = op.op;
       try {
         await send(op);
       } catch (e) {
@@ -423,8 +421,6 @@ export function flush() {
         });
         refreshSoon(0);
         continue;
-      } finally {
-        sending = null;
       }
       drop(op);
       saveReplica();
