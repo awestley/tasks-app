@@ -17,51 +17,21 @@ import {
   ArrowDownWideNarrow,
   Bell,
   BellOff,
-  BellRing,
   CalendarDays,
-  Check,
   CheckCheck,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
   CircleAlert,
   CloudOff,
-  Copy,
-  CopyPlus,
   ExternalLink,
-  FolderInput,
-  Inbox,
-  Layers,
-  Link,
-  ListChecks,
   ListFilter,
-  ListTree,
   LoaderCircle,
-  Menu,
   MoreHorizontal,
-  PanelLeft,
   Pencil,
   Plus,
   RefreshCw,
-  Repeat2,
-  Search,
-  Settings,
-  Sun,
-  Tag,
   Trash2,
-  Undo2,
-  X,
-  Apple,
-  CircleSlash,
-  Ellipsis,
-  Calendar,
-  Sunrise,
-  Sofa,
-  ArrowRightToLine,
 } from "lucide-react";
-import { findShortRefs } from "@awestley/pc-runtime";
+
 import {
-  PcEmbed,
   useCommands,
   useHosted,
   usePaneTitle,
@@ -71,7 +41,25 @@ import {
 import { api, localDate, type Project, type Task } from "./api";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
 import { disableBrowserPush } from "./PushSettings";
+import { MainColumn, PhonePage } from "./layouts";
+import { BellPanel, Linked, ToastView, type Toast } from "./pieces";
 import { QuickAdd, type NewTask, type QuickDefaults } from "./QuickAdd";
+import {
+  hashFor,
+  read,
+  readRoute,
+  store,
+  viewNames,
+  type View,
+} from "./routes";
+import { handleShortcut } from "./shortcuts";
+import { Sidebar } from "./Sidebar";
+import { SignIn } from "./SignIn";
+import { dateOptions, moveMenu, priorityMenu, taskMenu } from "./taskMenus";
+import { TaskRow } from "./TaskRow";
+import { usePressMenu } from "./usePressMenu";
+import { useTaskGroups } from "./useTaskGroups";
+import type { W } from "./workspaceContext";
 import { TaskDetail } from "./TaskDetail";
 import {
   Modal,
@@ -79,19 +67,9 @@ import {
   SettingsPanel,
   ShortcutsDialog,
 } from "./dialogs";
-import { isoDate, nextWeekDate, weekendDate } from "./parse";
-import {
-  autoReminder,
-  enableNotifications,
-  reminderAt,
-  scheduleReminders,
-  setAutoReminder,
-  showReminder,
-  usePermission,
-} from "./reminders";
+import { autoReminder, scheduleReminders, usePermission } from "./reminders";
 import * as S from "./store";
 import {
-  BrowseScreen,
   holdKeyboard,
   swipeRow,
   TabBar,
@@ -101,103 +79,13 @@ import {
 } from "./phone";
 import {
   DatePicker,
-  daysFromNow,
   dueLabel,
-  dueTone,
   formatTime,
-  isOverdue,
-  Popover,
   priorityNames,
-  PriorityFlag,
   recurrenceLabel,
-  reminderChoices,
-  reminderLabel,
-  weekday,
 } from "./ui";
 
-type View =
-  | "today"
-  | "inbox"
-  | "upcoming"
-  | "all"
-  | "completed"
-  | `project:${string}`
-  | `label:${string}`;
-const LISTS = ["today", "inbox", "upcoming", "all", "completed"] as const;
-const viewNames: Record<string, string> = {
-  today: "Today",
-  inbox: "Inbox",
-  upcoming: "Upcoming",
-  all: "All tasks",
-  completed: "Completed",
-};
-const viewIcons = {
-  today: Sun,
-  inbox: Inbox,
-  upcoming: CalendarDays,
-  all: Layers,
-  completed: CheckCheck,
-};
-
-// Routes: #/today, #/inbox, #/upcoming, #/all, #/completed, #/project/<id>, #/label/<name>, each
-// optionally followed by /task/<id>; #/task/<id> alone opens the task in its own list.
-function readRoute(): { view: View | null; taskId: string | null } {
-  const raw = location.hash.replace(/^#\/?/, "");
-  const [head, taskPart] = raw.split(/\/?task\//);
-  let taskId: string | null = null;
-  try {
-    taskId = taskPart ? decodeURIComponent(taskPart) : null;
-  } catch {
-    /* malformed */
-  }
-  const [kind, ...rest] = head.split("/");
-  let arg = "";
-  try {
-    arg = decodeURIComponent(rest.join("/"));
-  } catch {
-    return { view: null, taskId };
-  }
-  const legacy = new URLSearchParams(location.search).get("task");
-  if (legacy) taskId = legacy;
-  if (kind === "project" && arg) return { view: `project:${arg}`, taskId };
-  if (kind === "label" && arg) return { view: `label:${arg}`, taskId };
-  if ((LISTS as readonly string[]).includes(kind))
-    return { view: kind as View, taskId };
-  return { view: null, taskId };
-}
-function hashFor(view: View, taskId?: string | null) {
-  const base = view.startsWith("project:")
-    ? "#/project/" + encodeURIComponent(view.slice(8))
-    : view.startsWith("label:")
-      ? "#/label/" + encodeURIComponent(view.slice(6))
-      : "#/" + view;
-  return taskId ? `${base}/task/${encodeURIComponent(taskId)}` : base;
-}
-// Which app owns each short reference type ([[note:…]], ![[task:…]]) in task descriptions.
-const TYPE_OWNERS = { task: "tasks", project: "tasks", note: "notes" };
-const taskLink = (task: Task) =>
-  location.pathname.startsWith("/apps/")
-    ? `${location.origin}/?open=${encodeURIComponent(`pc://tasks/task/${task.id}`)}`
-    : `${location.origin}${location.pathname}#/task/${encodeURIComponent(task.id)}`;
-const editable = "input,textarea,select,a[href],code,[contenteditable]";
-const read = (key: string) => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-const store = (key: string, value: string) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
-};
-
 const COMPACT_BELOW = 480;
-
-type Toast = { id: number; text: string; undo?: () => void; error?: boolean };
 
 export function App({ companion = false }: { companion?: boolean }) {
   const pc = usePc();
@@ -240,85 +128,6 @@ export function App({ companion = false }: { companion?: boolean }) {
       detent={surface.detent}
       pc={pc}
     />
-  );
-}
-
-function Logo() {
-  return (
-    <div className="brand" aria-hidden="true">
-      <span className="brand-mark">
-        <Check size={21} strokeWidth={3} />
-      </span>
-    </div>
-  );
-}
-
-function SignIn({ hosted }: { hosted: boolean }) {
-  const config = S.useStore((s) => s.config);
-  const bootError = S.useStore((s) => s.bootError);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const shell = config.shell || hosted;
-  return (
-    <main className="auth-screen">
-      <section className="auth-card" aria-label="Sign in">
-        <Logo />
-        <h1>Sign in</h1>
-        <div className="auth-actions">
-          {shell && (
-            <a
-              className="primary"
-              target="_top"
-              href={
-                "/login?next=" +
-                encodeURIComponent(location.pathname + location.hash)
-              }
-            >
-              Sign in
-            </a>
-          )}
-          {config.apple_enabled && (
-            <a className="apple-button" href="auth/apple/start">
-              <Apple size={20} /> Sign in with Apple
-            </a>
-          )}
-          {config.dev_login && (
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await api("/auth/dev", "POST");
-                  await S.signedIn();
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? "Opening..." : "Open local workspace"}
-            </button>
-          )}
-          {!config.apple_enabled && !shell && !config.dev_login && (
-            <p className="auth-note">Apple sign-in is not configured.</p>
-          )}
-          {(error || bootError) && (
-            <div className="error" role="alert">
-              <CircleAlert className="error-icon" size={16} />
-              <span>{error || bootError}</span>
-            </div>
-          )}
-          {bootError && !error && (
-            <button className="secondary" onClick={() => location.reload()}>
-              <RefreshCw size={14} /> Try again
-            </button>
-          )}
-        </div>
-      </section>
-    </main>
   );
 }
 
@@ -381,9 +190,7 @@ function Workspace({
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hovered = useRef<string | null>(null);
-  const press = useRef({ timer: 0, x: 0, y: 0, active: false, until: 0 });
-  const pointerType = useRef("mouse");
-  const claimed = useRef<Event | null>(null);
+  const { press, pointerType, menuFor } = usePressMenu(setMenu);
   const gPending = useRef(0);
   const lastEscape = useRef(0);
 
@@ -505,153 +312,30 @@ function Workspace({
       viewNames[view] ||
       (view.startsWith("label:") ? "@" + view.slice(6) : "Tasks");
   const openTask = openId ? tasks.find((t) => t.id === openId) || null : null;
+  // A link can name a project before the list has loaded, so only leave one that was really there.
+  const projectSeen = useRef(false);
+  useEffect(() => {
+    if (!view.startsWith("project:")) projectSeen.current = false;
+    else if (selectedProject) projectSeen.current = true;
+    else if (projectSeen.current) {
+      projectSeen.current = false;
+      setView("inbox");
+    }
+  }, [view, selectedProject]);
   usePaneTitle(
     openTask && !detailBeside ? openTask.title : companion ? null : title,
   );
 
-  const visible = (t: Task) => !t.completed || finishing.has(t.id);
-  const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = tasks.filter((t) => {
-      if (q)
-        return (t.title + " " + t.description + " " + t.labels.join(" "))
-          .toLowerCase()
-          .includes(q);
-      if (view === "completed") return t.completed;
-      if (!visible(t)) return false;
-      if (view === "today") return !!t.due_date && t.due_date <= today;
-      if (view === "inbox") return !t.project_id;
-      if (view === "upcoming") return !!t.due_date;
-      if (view.startsWith("project:")) return t.project_id === view.slice(8);
-      if (view.startsWith("label:")) return t.labels.includes(view.slice(6));
-      return true;
-    });
-    const byDue = (a: Task, b: Task) =>
-      (a.due_date || "9999").localeCompare(b.due_date || "9999") ||
-      (a.due_time || "99").localeCompare(b.due_time || "99") ||
-      a.priority - b.priority ||
-      a.created_at.localeCompare(b.created_at);
-    return list
-      .filter((t) => !priorityFilter || t.priority <= 2)
-      .sort((a, b) =>
-        view === "completed" && !q
-          ? (b.completed_at || "").localeCompare(a.completed_at || "")
-          : sort === "name"
-            ? a.title.localeCompare(b.title)
-            : sort === "priority"
-              ? a.priority - b.priority || byDue(a, b)
-              : byDue(a, b),
-      );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, view, search, sort, priorityFilter, today, finishing]);
-  const overdue = shown.filter((t) => isOverdue(t) && !search);
-
-  type Group = {
-    key: string;
-    title: React.ReactNode;
-    tasks: Task[];
-    add?: QuickDefaults;
-    overdue?: boolean;
-  };
-  const groups: Group[] = useMemo(() => {
-    const defaultsFor = (): QuickDefaults => ({
-      project_id: selectedProject?.id ?? null,
-      due_date: view === "today" ? today : null,
-      labels: view.startsWith("label:") ? [view.slice(6)] : [],
-    });
-    if (search)
-      return [{ key: "search", title: `${shown.length} found`, tasks: shown }];
-    if (view === "completed") {
-      const out = new Map<string, Task[]>();
-      for (const t of shown) {
-        const day = t.completed_at
-          ? localDate(
-              new Date(
-                t.completed_at + (t.completed_at.endsWith("Z") ? "" : "Z"),
-              ),
-            )
-          : "";
-        out.set(day, [...(out.get(day) || []), t]);
-      }
-      return [...out].map(([day, items]) => ({
-        key: day || "earlier",
-        title: day ? dueLabel(day) : "Earlier",
-        tasks: items,
-      }));
-    }
-    const rest = shown.filter((t) => !overdue.includes(t));
-    const lead: Group[] = overdue.length
-      ? [{ key: "overdue", title: "Overdue", tasks: overdue, overdue: true }]
-      : [];
-    if (view === "upcoming") {
-      const days: Group[] = [];
-      for (let i = 0; i < 7; i++) {
-        const d = daysFromNow(i);
-        days.push({
-          key: d,
-          title: (
-            <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-              <span className="group-sub">
-                {" "}
-                ·{" "}
-                {i === 0 ? "Today" : i === 1 ? "Tomorrow" : weekday(d, "long")}
-              </span>
-            </>
-          ),
-          tasks: rest.filter((t) => t.due_date === d),
-          add: { due_date: d },
-        });
-      }
-      const later = rest.filter((t) => t.due_date! > daysFromNow(6));
-      const laterDays = Array.from(new Set(later.map((t) => t.due_date!)));
-      return [
-        ...lead,
-        ...days,
-        ...laterDays.map((d) => ({
-          key: d,
-          title: (
-            <>
-              {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-              <span className="group-sub"> · {weekday(d, "long")}</span>
-            </>
-          ),
-          tasks: later.filter((t) => t.due_date === d),
-          add: { due_date: d },
-        })),
-      ];
-    }
-    return [
-      ...lead,
-      {
-        key: "main",
-        title:
-          view === "today" ? (
-            <>
-              Today
-              <span className="group-sub">
-                {" · "}
-                {new Date().toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
-            </>
-          ) : null,
-        tasks: rest,
-        add: defaultsFor(),
-      },
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, view, search, today, selectedProject?.id]);
-  const flat = useMemo(() => groups.flatMap((g) => g.tasks), [groups]);
+  const { shown, overdue, groups, flat } = useTaskGroups({
+    tasks,
+    view,
+    search,
+    sort,
+    priorityFilter,
+    today,
+    finishing,
+    selectedProject,
+  });
 
   /* ---------- actions ---------- */
 
@@ -834,181 +518,6 @@ function Workspace({
   /* ---------- menus ---------- */
 
   const sheet = () => phone || pointerType.current === "touch";
-  const dateOptions = (task: Task) => {
-    const now = new Date();
-    const dates: [string, string, React.ReactNode][] = [
-      [
-        today,
-        `Today · ${weekday(today)}`,
-        <span className="day-icon tone-green">
-          <Calendar size={20} />
-          <b>{now.getDate()}</b>
-        </span>,
-      ],
-      [
-        daysFromNow(1),
-        `Tomorrow · ${weekday(daysFromNow(1))}`,
-        <Sunrise size={20} className="tone-orange" />,
-      ],
-      [
-        isoDate(weekendDate(now)),
-        `This weekend · ${weekday(isoDate(weekendDate(now)))}`,
-        <Sofa size={20} className="tone-blue" />,
-      ],
-      [
-        isoDate(nextWeekDate(now)),
-        `Next week · ${weekday(isoDate(nextWeekDate(now)))}`,
-        <ArrowRightToLine size={20} className="tone-purple" />,
-      ],
-    ];
-    return [
-      ...dates
-        .filter(([d], i) => dates.findIndex(([o]) => o === d) === i)
-        .map(([d, label, icon]) => ({
-          label,
-          icon,
-          selected: task.due_date === d,
-          action: () => schedule(task, d),
-        })),
-      {
-        label: "No date",
-        icon: <CircleSlash size={20} />,
-        selected: !task.due_date,
-        action: () => schedule(task, null),
-      },
-      {
-        label: "More dates",
-        icon: <Ellipsis size={20} />,
-        action: () =>
-          setPicker({
-            task,
-            anchor: { x: menu?.x ?? innerWidth / 2, y: menu?.y ?? 120 },
-          }),
-      },
-    ];
-  };
-  const moveMenu = (task: Task): MenuEntry[] => [
-    {
-      label: "Inbox",
-      icon: <Inbox size={16} />,
-      checked: !task.project_id,
-      action: () => patch(task, { project_id: null }, "Moved to Inbox"),
-    },
-    ...projects.map((p) => ({
-      label: p.name,
-      icon: (
-        <span className="project-hash" style={{ color: p.color }}>
-          #
-        </span>
-      ),
-      checked: task.project_id === p.id,
-      action: () => patch(task, { project_id: p.id }, `Moved to ${p.name}`),
-    })),
-  ];
-  const priorityMenu = (task: Task): MenuEntry[] =>
-    [1, 2, 3, 4].map((p) => ({
-      label: priorityNames[p],
-      icon: <PriorityFlag priority={p} />,
-      checked: task.priority === p,
-      action: () => setPriority(task, p),
-    }));
-  function taskMenu(task: Task): MenuEntry[] {
-    return [
-      {
-        label: "Edit",
-        icon: <Pencil size={16} />,
-        shortcut: "E",
-        key: "e",
-        action: () => openDetail(task),
-      },
-      ...(hosted && !companion
-        ? []
-        : hosted
-          ? [
-              {
-                label: "Open in a column",
-                icon: <ExternalLink size={16} />,
-                action: () => openInColumn(task),
-              },
-            ]
-          : []),
-      {
-        label: "Go to project",
-        icon: <ListTree size={16} />,
-        shortcut: "⇧G",
-        action: () => goToProject(task),
-      },
-      {
-        label: task.completed ? "Restore" : "Complete",
-        icon: <CheckCircle2 size={16} />,
-        shortcut: "C",
-        key: "c",
-        action: () => toggle(task),
-      },
-      "separator",
-      { row: "Date", shortcut: "T", options: dateOptions(task) },
-      {
-        row: "Priority",
-        shortcut: "1–4",
-        options: [1, 2, 3, 4].map((p) => ({
-          label: priorityNames[p],
-          icon: <PriorityFlag priority={p} size={20} />,
-          selected: task.priority === p,
-          action: () => setPriority(task, p),
-        })),
-      },
-      "separator",
-      ...(task.due_time
-        ? [
-            {
-              label: "Reminder",
-              icon: <Bell size={16} />,
-              items: [
-                {
-                  label: "None",
-                  checked: task.reminder_minutes === null,
-                  action: () =>
-                    patch(task, { reminder_minutes: null }, "Reminder removed"),
-                },
-                ...reminderChoices.map(([minutes, label]) => ({
-                  label,
-                  checked: task.reminder_minutes === minutes,
-                  action: () =>
-                    patch(task, { reminder_minutes: minutes }, "Reminder set"),
-                })),
-              ],
-            } as MenuEntry,
-          ]
-        : []),
-      {
-        label: "Move to",
-        icon: <FolderInput size={16} />,
-        shortcut: "V",
-        key: "v",
-        items: moveMenu(task),
-      },
-      {
-        label: "Duplicate",
-        icon: <CopyPlus size={16} />,
-        shortcut: "D",
-        key: "d",
-        action: () => duplicate(task),
-      },
-      {
-        label: "Copy link to task",
-        icon: <Link size={16} />,
-        action: () => copy(taskLink(task), "Link copied"),
-      },
-      "separator",
-      {
-        label: "Delete task",
-        icon: <Trash2 size={16} />,
-        danger: true,
-        confirm: "Confirm delete",
-        action: () => removeTask(task),
-      },
-    ];
-  }
   const addTaskIn = (next: View): MenuEntry[] => [
     {
       label: "Add task",
@@ -1091,57 +600,6 @@ function Workspace({
       action: () => S.refresh(),
     },
   ];
-  // Right-click opens a menu at the pointer; a touch long-press opens it as a sheet.
-  const menuFor = (
-    entries: () => MenuEntry[],
-    title?: string,
-    target?: string,
-  ) => ({
-    onContextMenu: (e: React.MouseEvent) => {
-      if ((e.target as Element).closest(editable)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      clearTimeout(press.current.timer);
-      if (press.current.active) return;
-      const touch = pointerType.current === "touch";
-      press.current.active = touch;
-      let { clientX: x, clientY: y } = e;
-      if (!x && !y) {
-        const box = e.currentTarget.getBoundingClientRect();
-        x = box.left + 24;
-        y = box.bottom;
-      }
-      setMenu({ x, y, entries: entries(), title, target, sheet: touch });
-    },
-    onPointerDown: (e: React.PointerEvent) => {
-      pointerType.current = e.pointerType;
-      if (e.pointerType !== "touch" || claimed.current === e.nativeEvent)
-        return;
-      claimed.current = e.nativeEvent;
-      clearTimeout(press.current.timer);
-      press.current.x = e.clientX;
-      press.current.y = e.clientY;
-      press.current.timer = window.setTimeout(() => {
-        press.current.active = true;
-        navigator.vibrate?.(10);
-        getSelection()?.removeAllRanges();
-        setMenu({
-          x: press.current.x,
-          y: press.current.y,
-          entries: entries(),
-          title,
-          target,
-          sheet: true,
-        });
-      }, 450);
-    },
-    onPointerMove: (e: React.PointerEvent) => {
-      if (
-        Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8
-      )
-        clearTimeout(press.current.timer);
-    },
-  });
   const openMenuAt = (
     e: React.MouseEvent,
     entries: MenuEntry[],
@@ -1160,37 +618,6 @@ function Workspace({
   };
 
   /* ---------- page behaviour ---------- */
-
-  useEffect(() => {
-    // Behave like an app: no browser context menu outside text and links.
-    const native = (e: MouseEvent) => {
-      const target = e.target as Element;
-      if (!target.closest?.(editable) && !getSelection()?.toString())
-        e.preventDefault();
-    };
-    const released = () => {
-      clearTimeout(press.current.timer);
-      if (press.current.active) press.current.until = Date.now() + 400;
-      press.current.active = false;
-    };
-    const swallow = (e: MouseEvent) => {
-      if (Date.now() < press.current.until) {
-        e.preventDefault();
-        e.stopPropagation();
-        press.current.until = 0;
-      }
-    };
-    document.addEventListener("contextmenu", native);
-    document.addEventListener("pointerup", released, true);
-    document.addEventListener("pointercancel", released, true);
-    document.addEventListener("click", swallow, true);
-    return () => {
-      document.removeEventListener("contextmenu", native);
-      document.removeEventListener("pointerup", released, true);
-      document.removeEventListener("pointercancel", released, true);
-      document.removeEventListener("click", swallow, true);
-    };
-  }, []);
 
   useCommands(
     [
@@ -1222,154 +649,6 @@ function Workspace({
     bell
   );
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
-  keyRef.current = (e: KeyboardEvent) => {
-    const typing = (e.target as HTMLElement).matches?.(
-      "input,textarea,select,[contenteditable]",
-    );
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "z" && !typing && toast?.undo) {
-      e.preventDefault();
-      toast.undo();
-      setToast({ id: Date.now(), text: "Undone" });
-      return;
-    }
-    if (mod && e.key.toLowerCase() === "k" && !hosted) {
-      e.preventDefault();
-      searchRef.current?.focus();
-      return;
-    }
-    if (mod && e.key === "Enter" && companion && !typing) {
-      const t = target();
-      if (t) openInColumn(t);
-      return;
-    }
-    if (e.key === "Escape") {
-      if (modalOpen) return; // the dialog or menu closes itself
-      if (typing) return;
-      if (openId) {
-        setOpenId(null);
-        return;
-      }
-      if (inlineAdd) return setInlineAdd(null);
-      if (search) return setSearch("");
-      if (drawer) return setDrawer(false);
-      if (selected) return setSelected(null);
-      if (companion && hosted) {
-        if (Date.now() - lastEscape.current < 600) pc.companion.hide();
-        lastEscape.current = Date.now();
-        (document.activeElement as HTMLElement | null)?.blur();
-      }
-      return;
-    }
-    if (typing || mod || e.altKey || modalOpen) return;
-    const key = e.key;
-    if (Date.now() - gPending.current < 900) {
-      gPending.current = 0;
-      const go = {
-        t: "today",
-        i: "inbox",
-        u: "upcoming",
-        c: "completed",
-        a: "all",
-      }[key.toLowerCase()];
-      if (go) {
-        e.preventDefault();
-        navigate(go as View);
-        return;
-      }
-    }
-    if (key === "g") {
-      gPending.current = Date.now();
-      return;
-    }
-    if (key === "q") {
-      e.preventDefault();
-      return openQuick();
-    }
-    if (key === "a" && !companion) {
-      e.preventDefault();
-      const last = groups.filter((g) => g.add).at(-1);
-      if (last) setInlineAdd(last.key);
-      return;
-    }
-    if (key === "/") {
-      e.preventDefault();
-      if (companion) setFocusKey(Date.now());
-      else searchRef.current?.focus();
-      return;
-    }
-    if (key === "?") return setShortcuts(true);
-    if (key === "m" && !companion && !phone) {
-      if (wide) {
-        setSidebarPref(!sidebarPref);
-        store("tasks.sidebar", sidebarPref ? "hidden" : "shown");
-      } else setDrawer(!drawer);
-      return;
-    }
-    if (
-      key === "j" ||
-      key === "k" ||
-      key === "ArrowDown" ||
-      key === "ArrowUp"
-    ) {
-      e.preventDefault();
-      const i = flat.findIndex((t) => t.id === selected);
-      const next =
-        flat[
-          Math.max(
-            0,
-            Math.min(
-              flat.length - 1,
-              i + (key === "j" || key === "ArrowDown" ? 1 : -1),
-            ),
-          )
-        ];
-      if (next) {
-        setSelected(next.id);
-        if (openId && detailBeside) setOpenId(next.id);
-        requestAnimationFrame(() =>
-          (
-            listRef.current?.querySelector(
-              `[data-id="${CSS.escape(next.id)}"]`,
-            ) as HTMLElement | null
-          )?.focus(),
-        );
-      }
-      return;
-    }
-    const t = target();
-    if (!t) return;
-    if (key === "Enter" || key === "e") openDetail(t);
-    else if (key === "c" || (key === " " && companion)) toggle(t);
-    else if (key === "d") duplicate(t);
-    else if (key === "G") goToProject(t);
-    else if (key === "t") {
-      const row = listRef.current?.querySelector(
-        `[data-id="${CSS.escape(t.id)}"]`,
-      );
-      const box = row?.getBoundingClientRect();
-      setPicker({
-        task: t,
-        anchor: box ? { x: box.left + 40, y: box.bottom } : { x: 100, y: 100 },
-      });
-    } else if (key === "T") schedule(t, null);
-    else if (key === "v") {
-      const row = listRef.current?.querySelector(
-        `[data-id="${CSS.escape(t.id)}"]`,
-      );
-      const box = row?.getBoundingClientRect() || new DOMRect(100, 100, 0, 0);
-      setMenu({
-        x: box.left + 40,
-        y: box.bottom,
-        entries: moveMenu(t),
-        title: "Move to",
-        target: t.id,
-        sheet: false,
-      });
-    } else if (["1", "2", "3", "4"].includes(key)) setPriority(t, Number(key));
-    else return;
-    e.preventDefault();
-  };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => keyRef.current(e);
     window.addEventListener("keydown", handler);
@@ -1380,7 +659,7 @@ function Workspace({
 
   // On a phone a row also swipes: right completes, left schedules.
   const rowHandlers = (task: Task) => {
-    const menuProps = menuFor(() => taskMenu(task), task.title, task.id);
+    const menuProps = menuFor(() => taskMenu(task, w), task.title, task.id);
     if (!phone) return menuProps;
     const swipe = swipeRow({
       right: () => toggle(task),
@@ -1388,7 +667,7 @@ function Workspace({
         setMenu({
           x: innerWidth / 2,
           y: innerHeight / 2,
-          entries: dateOptions(task),
+          entries: dateOptions(task, w),
           title: "Schedule",
           target: task.id,
           sheet: true,
@@ -1409,176 +688,93 @@ function Workspace({
     };
   };
 
-  const taskRow = (task: Task, inGroup?: string) => {
-    const project = projects.find((p) => p.id === task.project_id);
-    const done = task.completed;
-    const checklistDone = task.checklist.filter((i) => i.completed).length;
-    const showDate =
-      task.due_date &&
-      !(
-        view === "today" &&
-        task.due_date === today &&
-        !task.due_time &&
-        inGroup !== "search"
-      ) &&
-      !(view === "upcoming" && inGroup === task.due_date && !task.due_time);
-    const meta = (
-      <span className="task-meta">
-        {showDate && (
-          <span className={`due ${dueTone(task.due_date, done)}`}>
-            <CalendarDays size={12} />
-            {view === "upcoming" && inGroup === task.due_date && task.due_time
-              ? formatTime(task.due_time)
-              : view === "today" && task.due_date === today && task.due_time
-                ? formatTime(task.due_time)
-                : dueLabel(task.due_date, task.due_time)}
-            {task.recurrence && (
-              <Repeat2
-                size={12}
-                aria-label={recurrenceLabel[task.recurrence]}
-              />
-            )}
-          </span>
-        )}
-        {!showDate && task.recurrence && (
-          <span className="due tone-muted">
-            <Repeat2 size={12} aria-label={recurrenceLabel[task.recurrence]} />
-          </span>
-        )}
-        {task.reminder_minutes !== null && task.due_time && !done && (
-          <span
-            className="has-reminder"
-            title={reminderLabel(task.reminder_minutes)}
-          >
-            <Bell size={11} />
-          </span>
-        )}
-        {task.checklist.length > 0 && (
-          <span
-            className="checklist-progress"
-            aria-label={`${checklistDone} of ${task.checklist.length} checklist items completed`}
-          >
-            <ListChecks size={13} />
-            {checklistDone}/{task.checklist.length}
-          </span>
-        )}
-        {task.labels.map((l) => (
-          <span key={l} className="label">
-            <Tag size={11} />
-            {l}
-          </span>
-        ))}
-        {(companion || phone) &&
-          view !== `project:${task.project_id}` &&
-          (project || view !== "inbox") && (
-            <span className="row-project">
-              <span style={{ color: project?.color || "var(--text-faint)" }}>
-                #
-              </span>
-              {project?.name || "Inbox"}
-            </span>
-          )}
-      </span>
-    );
-    return (
-      <div
-        key={task.id}
-        data-id={task.id}
-        tabIndex={
-          selected === task.id || (!selected && flat[0]?.id === task.id)
-            ? 0
-            : -1
-        }
-        className={`task-row ${done ? "is-complete" : ""} ${finishing.has(task.id) ? "is-finishing" : ""} ${menu?.target === task.id ? "menu-target" : ""} ${selected === task.id ? "is-selected" : ""} ${openId === task.id ? "is-open" : ""}`}
-        onMouseEnter={() => (hovered.current = task.id)}
-        onMouseLeave={() => (hovered.current = null)}
-        onFocus={(e) => {
-          if (e.target === e.currentTarget) setSelected(task.id);
-        }}
-        {...rowHandlers(task)}
-      >
-        {phone && (
-          <>
-            <span className="swipe-act is-done" aria-hidden="true">
-              <Check size={22} strokeWidth={2.5} />
-            </span>
-            <span className="swipe-act is-date" aria-hidden="true">
-              <CalendarDays size={22} />
-            </span>
-          </>
-        )}
-        <button
-          className={`check-task priority-${task.priority}`}
-          aria-label={`${done ? "Restore" : "Complete"} ${task.title}`}
-          tabIndex={-1}
-          onClick={() => toggle(task)}
-        >
-          <Check size={12} strokeWidth={3} />
-        </button>
-        <button
-          className="task-body"
-          tabIndex={-1}
-          onClick={() => openDetail(task)}
-        >
-          <span className="task-title">{task.title}</span>
-          {task.description && !companion && (
-            <span className="task-description">{task.description}</span>
-          )}
-          {meta}
-        </button>
-        {!companion && (
-          <div className="row-actions">
-            <button
-              className="icon-button"
-              tabIndex={-1}
-              aria-label={`Edit ${task.title}`}
-              title="Edit"
-              onClick={() => openDetail(task)}
-            >
-              <Pencil size={15} />
-            </button>
-            <button
-              className="icon-button"
-              tabIndex={-1}
-              aria-label={`Set date for ${task.title}`}
-              title="Date"
-              onClick={(e) =>
-                setPicker({
-                  task,
-                  anchor: (
-                    e.currentTarget as HTMLElement
-                  ).getBoundingClientRect(),
-                })
-              }
-            >
-              <CalendarDays size={15} />
-            </button>
-          </div>
-        )}
-        {!companion && !view.startsWith("project:") && (
-          <button
-            className="task-project"
-            tabIndex={-1}
-            onClick={() => goToProject(task)}
-          >
-            {project?.name || "Inbox"}
-            <span style={{ color: project?.color || "var(--text-muted)" }}>
-              #
-            </span>
-          </button>
-        )}
-        <button
-          className="icon-button row-menu"
-          tabIndex={-1}
-          aria-label={`More actions for ${task.title}`}
-          aria-haspopup="menu"
-          onClick={(e) => openMenuAt(e, taskMenu(task), task.title, task.id)}
-        >
-          <MoreHorizontal size={18} />
-        </button>
-      </div>
-    );
+  const counts = {
+    today: active.filter((t) => t.due_date && t.due_date <= today).length,
+    inbox: active.filter((t) => !t.project_id).length,
+    upcoming: active.filter((t) => t.due_date && t.due_date > today).length,
+    all: active.length,
+    completed: tasks.length - active.length,
   };
+
+  const w: W = {
+    companion,
+    hosted,
+    phone,
+    wide,
+    narrow,
+    detailBeside,
+    sidebarDocked,
+    coarse,
+    pc,
+    user,
+    projects,
+    active,
+    labels,
+    counts,
+    permission,
+    view,
+    search,
+    setSearch,
+    today,
+    title,
+    selectedProject,
+    sort,
+    setSort,
+    priorityFilter,
+    setPriorityFilter,
+    shown,
+    flat,
+    groups,
+    openId,
+    setOpenId,
+    selected,
+    setSelected,
+    inlineAdd,
+    setInlineAdd,
+    drawer,
+    setDrawer,
+    sidebarPref,
+    setSidebarPref,
+    phoneScreen,
+    setPhoneScreen,
+    menu,
+    setMenu,
+    setPicker,
+    finishing,
+    hovered,
+    searchRef,
+    listRef,
+    lastEscape,
+    gPending,
+    toast,
+    setToast,
+    modalOpen,
+    target,
+    navigate,
+    openQuick,
+    openDetail,
+    openInColumn,
+    toggle,
+    schedule,
+    setPriority,
+    patch,
+    duplicate,
+    copy,
+    removeTask,
+    goToProject,
+    menuFor,
+    openMenuAt,
+    rowHandlers,
+    addTaskIn,
+    projectMenu,
+    listMenu,
+    setProjectEditor,
+    setSettings,
+    setShortcuts,
+    setBell,
+    setFocusKey,
+  };
+  keyRef.current = (e: KeyboardEvent) => handleShortcut(e, w);
 
   const sections = (
     <div className="task-groups" ref={listRef} role="list">
@@ -1610,7 +806,9 @@ function Workspace({
                 )}
               </h3>
             )}
-            {g.tasks.map((t) => taskRow(t, g.key))}
+            {g.tasks.map((t) => (
+              <TaskRow key={t.id} task={t} inGroup={g.key} w={w} />
+            ))}
             {g.add &&
               view !== "completed" &&
               !search &&
@@ -1729,130 +927,7 @@ function Workspace({
     </div>
   );
 
-  const counts = {
-    today: active.filter((t) => t.due_date && t.due_date <= today).length,
-    inbox: active.filter((t) => !t.project_id).length,
-    upcoming: active.filter((t) => t.due_date && t.due_date > today).length,
-    all: active.length,
-    completed: tasks.length - active.length,
-  };
-
-  const sidebar = !companion && (
-    <aside
-      className={`sidebar ${drawer ? "open" : ""}`}
-      aria-label="Navigation"
-    >
-      <div className="sidebar-top">
-        {!hosted ? <Logo /> : <span />}
-        {wide && (
-          <button
-            className="icon-button"
-            aria-label="Hide sidebar"
-            title="Hide sidebar (M)"
-            onClick={() => {
-              setSidebarPref(false);
-              store("tasks.sidebar", "hidden");
-            }}
-          >
-            <PanelLeft size={17} />
-          </button>
-        )}
-      </div>
-      {!hosted && (
-        <button className="workspace-switch" onClick={() => setSettings(true)}>
-          <span className="avatar">{user.name.slice(0, 1)}</span>
-          <span>
-            {user.name}
-            <small>Personal workspace</small>
-          </span>
-          <ChevronDown size={14} />
-        </button>
-      )}
-      <button className="quick-add" onClick={() => openQuick()}>
-        <Plus size={18} /> Add task <kbd>Q</kbd>
-      </button>
-      <nav>
-        {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
-          (item) => {
-            const Icon = viewIcons[item];
-            return (
-              <button
-                className={view === item && !search ? "active" : ""}
-                onClick={() => navigate(item)}
-                key={item}
-                {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
-              >
-                <Icon size={18} className={`nav-${item}`} />
-                <span>{viewNames[item]}</span>
-                <small>{counts[item] || ""}</small>
-              </button>
-            );
-          },
-        )}
-      </nav>
-      <div className="sidebar-heading">
-        My projects
-        <button
-          className="icon-button"
-          aria-label="Add project"
-          onClick={() => setProjectEditor("new")}
-        >
-          <Plus size={16} />
-        </button>
-      </div>
-      <nav>
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            className={view === `project:${p.id}` ? "active" : ""}
-            onClick={() => navigate(`project:${p.id}`)}
-            {...menuFor(() => projectMenu(p), p.name)}
-          >
-            <span className="project-hash" style={{ color: p.color }}>
-              #
-            </span>
-            <span>{p.name}</span>
-            <small>
-              {active.filter((t) => t.project_id === p.id).length || ""}
-            </small>
-          </button>
-        ))}
-        {!projects.length && (
-          <p className="sidebar-hint">
-            Add one with +, or type #Name in quick add
-          </p>
-        )}
-      </nav>
-      <div className="sidebar-heading">
-        Labels
-        <Tag size={13} />
-      </div>
-      <nav>
-        {labels.map((l) => (
-          <button
-            key={l}
-            className={view === `label:${l}` ? "active" : ""}
-            onClick={() => navigate(`label:${l}`)}
-          >
-            <span className="label-dot" />
-            <span>{l}</span>
-            <small>
-              {active.filter((t) => t.labels.includes(l)).length || ""}
-            </small>
-          </button>
-        ))}
-        {!labels.length && (
-          <p className="sidebar-hint">Type @label in quick add</p>
-        )}
-      </nav>
-      <div className="sidebar-bottom">
-        {status}
-        <button onClick={() => setSettings(true)}>
-          <Settings size={17} /> Settings & integrations
-        </button>
-      </div>
-    </aside>
-  );
+  const sidebar = !companion && <Sidebar w={w} status={status} />;
 
   const detail = openTask && (
     <TaskDetail
@@ -1868,13 +943,13 @@ function Workspace({
       openMenu={(e, entries, title) =>
         openMenuAt(
           e,
-          entries || taskMenu(openTask),
+          entries || taskMenu(openTask, w),
           title || openTask.title,
           openTask.id,
         )
       }
-      projectMenu={() => moveMenu(openTask)}
-      priorityMenu={() => priorityMenu(openTask)}
+      projectMenu={() => moveMenu(openTask, w)}
+      priorityMenu={() => priorityMenu(openTask, w)}
       openInColumn={
         hosted && (companion || detailBeside)
           ? () => openInColumn(openTask)
@@ -1982,7 +1057,10 @@ function Workspace({
           logout={() =>
             S.signOut(async () => {
               await disableBrowserPush().catch(() => {});
-              await api("/auth/logout", "POST");
+              await api("/auth/logout", "POST").catch((e) => {
+                // Already ended on the server, so there is nothing left to revoke there.
+                if (e.status !== 401) throw e;
+              });
             }).then(
               () => setSettings(false),
               (e) => setToast({ id: Date.now(), text: e.message, error: true }),
@@ -1999,6 +1077,8 @@ function Workspace({
       {shortcuts && <ShortcutsDialog close={() => setShortcuts(false)} />}
     </>
   );
+
+  const parts = { sections, status, bellButton, expiredBanner, detail };
 
   /* ---------- companion ---------- */
 
@@ -2152,133 +1232,6 @@ function Workspace({
         <MoreHorizontal size={22} />
       </button>
     );
-    const page =
-      phoneScreen === "browse" ? (
-        <BrowseScreen
-          projects={projects}
-          labels={labels}
-          counts={counts}
-          projectCount={(id) =>
-            active.filter((t) => t.project_id === id).length
-          }
-          labelCount={(l) => active.filter((t) => t.labels.includes(l)).length}
-          go={(next) => navigate(next as View)}
-          addProject={() => setProjectEditor("new")}
-          projectProps={(p) => menuFor(() => projectMenu(p), p.name)}
-          reminders={permission === "granted"}
-          openReminders={(anchor) => setBell(anchor)}
-          openSettings={() => setSettings(true)}
-          openShortcuts={coarse ? undefined : () => setShortcuts(true)}
-          status={status}
-        />
-      ) : phoneScreen === "search" ? (
-        <div className="phone-page">
-          <header className="phone-head">
-            <div className="phone-bar">
-              <span />
-              <span className="phone-bar-title">Search</span>
-              <div className="phone-bar-actions">{status}</div>
-            </div>
-            <h1>Search</h1>
-            <div className="search-box phone-search">
-              <Search size={18} />
-              <input
-                ref={searchRef}
-                type="search"
-                enterKeyHint="search"
-                autoFocus
-                placeholder="Tasks, descriptions and labels"
-                aria-label="Search tasks"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === "Escape")
-                    e.currentTarget.blur();
-                }}
-              />
-              {search && (
-                <button aria-label="Clear search" onClick={() => setSearch("")}>
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-          </header>
-          {search ? (
-            <main className="task-main">{sections}</main>
-          ) : (
-            <p className="phone-hint">
-              Search task names, descriptions and labels.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="phone-page">
-          <header className="phone-head">
-            <div className="phone-bar">
-              {tab === "browse" ? (
-                <button
-                  className="phone-back"
-                  onClick={() => {
-                    setPhoneScreen("browse");
-                    scrollTo({ top: 0 });
-                  }}
-                >
-                  <ChevronLeft size={24} />
-                  Browse
-                </button>
-              ) : (
-                <span />
-              )}
-              <span className="phone-bar-title">{title}</span>
-              <div className="phone-bar-actions">
-                {status}
-                {selectedProject && (
-                  <button
-                    className="icon-button"
-                    aria-label="Edit project"
-                    onClick={() => setProjectEditor(selectedProject)}
-                  >
-                    <Pencil size={19} />
-                  </button>
-                )}
-                {bellButton}
-                {viewButton}
-              </div>
-            </div>
-            <h1>
-              {selectedProject && (
-                <span
-                  className="project-hash"
-                  style={{ color: selectedProject.color }}
-                >
-                  #
-                </span>
-              )}
-              {title}
-            </h1>
-            {subtitle && <p className="phone-sub">{subtitle}</p>}
-          </header>
-          {expiredBanner}
-          {view === "upcoming" && (
-            <WeekStrip
-              tasks={active}
-              jump={(d) => {
-                const el = listRef.current?.querySelector(
-                  `[data-group="${d}"]`,
-                ) as HTMLElement | null;
-                if (el)
-                  scrollTo({
-                    top: el.getBoundingClientRect().top + scrollY - 64,
-                    behavior: "smooth",
-                  });
-              }}
-            />
-          )}
-          <main className="task-main" {...menuFor(listMenu, title)}>
-            {sections}
-          </main>
-        </div>
-      );
     // Same root and the overlays in the same place as the full layout, so a rotation or a
     // resize between the two keeps an open sheet and what was typed in it.
     return (
@@ -2286,7 +1239,13 @@ function Workspace({
         className={`app-shell is-phone${hosted ? " hosted" : ""}${scrolled ? " is-scrolled" : ""}${toast && !quick ? " has-toast" : ""}${openTask ? " has-detail" : ""}`}
       >
         <React.Fragment key="phone">
-          {page}
+          <PhonePage
+            w={w}
+            parts={parts}
+            tab={tab}
+            subtitle={subtitle}
+            viewButton={viewButton}
+          />
           {phoneScreen !== "search" && (
             <button
               className="fab"
@@ -2321,392 +1280,9 @@ function Workspace({
             onClick={() => setDrawer(false)}
           />
         )}
-        <div className="main-shell">
-          <header className="topbar">
-            {!sidebarDocked && (
-              <button
-                className="icon-button mobile-menu"
-                aria-label={wide ? "Show sidebar" : "Open navigation"}
-                title={wide ? "Show sidebar (M)" : "Navigation"}
-                onClick={() => {
-                  if (wide) {
-                    setSidebarPref(true);
-                    store("tasks.sidebar", "shown");
-                  } else setDrawer(true);
-                }}
-              >
-                {wide ? <PanelLeft size={18} /> : <Menu size={20} />}
-              </button>
-            )}
-            {!hosted && (
-              <div className="breadcrumb">
-                My workspace <span className="crumb-sep">/</span>{" "}
-                <span>{title}</span>
-              </div>
-            )}
-            <span className="spacer" />
-            <div className="search-box">
-              <Search size={16} />
-              <input
-                ref={searchRef}
-                placeholder="Search tasks"
-                aria-label="Search tasks"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setSearch("");
-                    e.currentTarget.blur();
-                  } else if (e.key === "ArrowDown" || e.key === "Enter") {
-                    e.preventDefault();
-                    const first = flat[0];
-                    if (first) {
-                      setSelected(first.id);
-                      (
-                        listRef.current?.querySelector(
-                          `[data-id="${CSS.escape(first.id)}"]`,
-                        ) as HTMLElement | null
-                      )?.focus();
-                    }
-                  }
-                }}
-              />
-              {search ? (
-                <button aria-label="Clear search" onClick={() => setSearch("")}>
-                  <X size={14} />
-                </button>
-              ) : (
-                <kbd>{hosted ? "/" : "⌘ K"}</kbd>
-              )}
-            </div>
-            {bellButton}
-            {!hosted && (
-              <button
-                className="top-avatar"
-                aria-label="Open settings"
-                onClick={() => setSettings(true)}
-              >
-                {user.name.slice(0, 1)}
-              </button>
-            )}
-          </header>
-          {expiredBanner}
-          <div className="content-layout">
-            <main className="task-main" {...menuFor(listMenu, title)}>
-              <div className="page-title">
-                <h1>
-                  {selectedProject && (
-                    <span
-                      className="project-hash"
-                      style={{ color: selectedProject.color }}
-                    >
-                      #
-                    </span>
-                  )}
-                  {title}
-                </h1>
-                <div>
-                  {selectedProject && (
-                    <button
-                      className="icon-button"
-                      aria-label="Edit project"
-                      onClick={() => setProjectEditor(selectedProject)}
-                    >
-                      <Pencil size={18} />
-                    </button>
-                  )}
-                  <button
-                    className="icon-button"
-                    aria-label="View options"
-                    title="Sort and filter"
-                    onClick={(e) => openMenuAt(e, listMenu().slice(2), "View")}
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
-                  <button className="primary" onClick={() => openQuick()}>
-                    <Plus size={16} /> Add task
-                  </button>
-                </div>
-              </div>
-              <div className="list-toolbar">
-                <span>
-                  <Layers size={15} />
-                  {view === "completed"
-                    ? `${shown.length} completed`
-                    : (() => {
-                        const n = shown.filter((t) => !t.completed).length;
-                        return `${n} ${n === 1 ? "task" : "tasks"}`;
-                      })()}
-                </span>
-                <div>
-                  <button
-                    className={priorityFilter ? "filter-on" : ""}
-                    onClick={() => setPriorityFilter(!priorityFilter)}
-                  >
-                    <ListFilter size={15} />
-                    {priorityFilter ? "High priority" : "Filter"}
-                  </button>
-                  <label>
-                    <ArrowDownWideNarrow size={14} />
-                    <select
-                      aria-label="Sort tasks"
-                      value={sort}
-                      onChange={(e) => {
-                        setSort(e.target.value);
-                        store("tasks.sort", e.target.value);
-                      }}
-                    >
-                      <option value="smart">Due date</option>
-                      <option value="priority">Priority</option>
-                      <option value="name">Name</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-              {view === "upcoming" && !search && (
-                <WeekStrip
-                  tasks={active}
-                  jump={(d) =>
-                    listRef.current
-                      ?.querySelector(`[data-group="${d}"]`)
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                />
-              )}
-              {sections}
-            </main>
-            {detail}
-          </div>
-        </div>
+        <MainColumn w={w} parts={parts} />
       </React.Fragment>
       {overlays}
     </div>
   );
 }
-
-function ToastView({
-  toast,
-  close,
-  compact,
-  top,
-}: {
-  toast: Toast;
-  close: () => void;
-  compact?: boolean;
-  /** At the top of the screen, clear of a sheet on the keyboard. */
-  top?: boolean;
-}) {
-  return (
-    <div
-      className={`toast ${toast.error ? "is-error" : ""} ${compact ? "is-compact" : ""} ${top ? "is-top" : ""}`}
-      role="status"
-      key={toast.id}
-    >
-      {toast.error ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}
-      <span>{toast.text}</span>
-      {toast.undo && (
-        <button
-          className="toast-undo"
-          onClick={() => {
-            toast.undo!();
-            close();
-          }}
-        >
-          <Undo2 size={14} /> Undo
-        </button>
-      )}
-      <button className="toast-close" aria-label="Dismiss" onClick={close}>
-        <X size={13} />
-      </button>
-    </div>
-  );
-}
-
-function WeekStrip({
-  tasks,
-  jump,
-}: {
-  tasks: Task[];
-  jump: (date: string) => void;
-}) {
-  const days = Array.from({ length: 7 }, (_, i) => daysFromNow(i));
-  return (
-    <div className="week-strip" role="navigation" aria-label="This week">
-      {days.map((d, i) => {
-        const n = tasks.filter((t) => t.due_date === d).length;
-        return (
-          <button
-            key={d}
-            className={i === 0 ? "is-today" : ""}
-            onClick={() => jump(d)}
-          >
-            <small>{weekday(d)}</small>
-            <strong>{Number(d.slice(8))}</strong>
-            <span className="week-dots" aria-label={`${n} tasks`}>
-              {Array.from({ length: Math.min(n, 3) }, (_, k) => (
-                <i key={k} />
-              ))}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function BellPanel({
-  anchor,
-  close,
-  tasks,
-  hosted,
-}: {
-  anchor: DOMRect;
-  close: () => void;
-  tasks: Task[];
-  hosted: boolean;
-}) {
-  const permission = usePermission();
-  const [auto, setAuto] = useState(autoReminder());
-  const [busy, setBusy] = useState(false);
-  const [push, setPush] = useState<boolean | null>(null);
-  useEffect(() => {
-    api<{ web_enabled: boolean }>("/push/config")
-      .then((c) => setPush(c.web_enabled))
-      .catch(() => setPush(false));
-  }, []);
-  const upcoming = tasks
-    .map((t) => ({ t, at: reminderAt(t) }))
-    .filter(
-      (r): r is { t: Task; at: number } => r.at !== null && r.at > Date.now(),
-    )
-    .sort((a, b) => a.at - b.at)
-    .slice(0, 4);
-  return (
-    <Popover anchor={anchor} close={close} label="Reminders" width={320}>
-      <div className="bell-panel">
-        <div className="bell-head">
-          {permission === "granted" ? (
-            <BellRing size={18} className="tone-green" />
-          ) : (
-            <BellOff size={18} />
-          )}
-          <div>
-            <strong>Reminders</strong>
-            <p>
-              {permission === "granted"
-                ? "On for this browser."
-                : permission === "denied"
-                  ? "Blocked. Allow notifications for this site in your browser settings."
-                  : permission === "unsupported"
-                    ? "This browser can't show notifications."
-                    : "Get a notification when a task is due."}
-            </p>
-          </div>
-        </div>
-        {permission === "default" && (
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              await enableNotifications().catch(() => "default");
-              setBusy(false);
-            }}
-          >
-            <Bell size={15} /> Turn on notifications
-          </button>
-        )}
-        <label className="bell-field">
-          <span>When a task has a time, remind me</span>
-          <select
-            aria-label="Automatic reminder"
-            value={auto ?? ""}
-            onChange={(e) => {
-              const v = e.target.value === "" ? null : Number(e.target.value);
-              setAuto(v);
-              setAutoReminder(v);
-            }}
-          >
-            <option value="">Never</option>
-            {reminderChoices.map(([m, label]) => (
-              <option key={m} value={m}>
-                {label.replace("At due time", "At the time")}
-              </option>
-            ))}
-          </select>
-        </label>
-        {upcoming.length > 0 && (
-          <div className="bell-upcoming">
-            <small>Coming up</small>
-            {upcoming.map(({ t, at }) => (
-              <div key={t.id}>
-                <span>{t.title}</span>
-                <time>
-                  {new Date(at).toLocaleString(undefined, {
-                    weekday: "short",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </time>
-              </div>
-            ))}
-          </div>
-        )}
-        <p className="bell-note">
-          {push
-            ? "Push is set up, so reminders also arrive when Tasks is closed."
-            : hosted
-              ? "Reminders fire while Personal Command is open (the companion counts). Set up push in Tasks settings to get them when it's closed."
-              : "Reminders fire while Tasks is open. Set up push in Settings to get them when it's closed."}
-        </p>
-        {permission === "granted" && (
-          <button
-            className="secondary"
-            onClick={() =>
-              showReminder(
-                {
-                  ...(upcoming[0]?.t ||
-                    ({ id: "test", title: "Test reminder" } as Task)),
-                  title: upcoming[0]?.t.title || "Test reminder",
-                },
-                "test-" + Date.now(),
-                "This is how reminders look.",
-              )
-            }
-          >
-            Send a test notification
-          </button>
-        )}
-      </div>
-    </Popover>
-  );
-}
-
-// Notes, tasks and projects a description links to ([[note:id]]) or embeds (![[note:id]]).
-function Linked({ text }: { text: string }) {
-  const pc = usePc();
-  const refs = findShortRefs(text, TYPE_OWNERS);
-  if (!refs.length) return null;
-  return (
-    <section className="linked-items" aria-label="Linked items">
-      <h3>Linked</h3>
-      {refs.map((r, i) =>
-        r.embed ? (
-          <PcEmbed key={i} target={r.ref} size="card">
-            {r.label || r.ref}
-          </PcEmbed>
-        ) : (
-          <button
-            key={i}
-            className="linked-link"
-            onClick={() => pc.open(r.ref, { placement: "new-column" })}
-          >
-            {r.label || r.ref.replace(/^pc:\/\/[^/]+\//, "")}
-          </button>
-        ),
-      )}
-    </section>
-  );
-}
-
-export { Copy };

@@ -56,6 +56,16 @@ const at12 = (value: string) => new Date(value + "T12:00:00");
 export const weekday = (value: string, style: "short" | "long" = "short") =>
   at12(value).toLocaleDateString(undefined, { weekday: style });
 
+/** Nov 12, or Nov 12, 2027 outside this year. */
+export const shortDate = (value: string) =>
+  at12(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(at12(value).getFullYear() !== new Date().getFullYear()
+      ? { year: "numeric" }
+      : {}),
+  });
+
 /** How a due date reads in a list: Today, Tomorrow, Friday (this week), Nov 12, Nov 12 2027. */
 export function dueLabel(date: string | null, time?: string | null) {
   if (!date) return "";
@@ -68,14 +78,7 @@ export function dueLabel(date: string | null, time?: string | null) {
   else if (diff === 1) text = "Tomorrow";
   else if (diff === -1) text = "Yesterday";
   else if (diff > 1 && diff < 7) text = weekday(date, "long");
-  else
-    text = at12(date).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      ...(at12(date).getFullYear() !== new Date().getFullYear()
-        ? { year: "numeric" }
-        : {}),
-    });
+  else text = shortDate(date);
   return time ? `${text} ${formatTime(time)}` : text;
 }
 export function formatTime(time: string) {

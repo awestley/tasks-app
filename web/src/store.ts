@@ -159,7 +159,11 @@ function overlay() {
       const t = tasks.get(op.id);
       if (!t) continue;
       const { undo: _undo, ...changes } = op.changes;
-      const next: Task = { ...t, ...changes };
+      const next: Task = {
+        ...t,
+        ...changes,
+        updated_at: new Date(op.at).toISOString().replace("Z", ""),
+      };
       if (changes.completed === true && !t.completed) {
         next.completed_at = nowIso();
         next.checklist = next.checklist.map((i) => ({ ...i, completed: true }));
@@ -184,6 +188,8 @@ function overlay() {
 
 let refreshing: Promise<void> | null = null;
 let refreshAgain = false;
+/** The server's task revision that `server.tasks` is known to match. */
+let lastRevision = "";
 /** Fetch everything from the server into the replica. */
 export function refresh(): Promise<void> {
   if (refreshing) {
@@ -192,12 +198,22 @@ export function refresh(): Promise<void> {
   }
   refreshing = (async () => {
     try {
-      const [tasks, projects] = await Promise.all([
-        allTasks(),
+      // Live updates and focus refresh often. Projects are small, and tasks download only if they changed.
+      const [{ revision }, projects] = await Promise.all([
+        api<{ revision: string }>("/tasks/revision"),
         api<Project[]>("/projects"),
       ]);
-      server = { tasks, projects };
-      saveReplica();
+      const unchanged =
+        revision === lastRevision &&
+        JSON.stringify(projects) === JSON.stringify(server.projects);
+      if (!unchanged) {
+        const tasks =
+          revision === lastRevision ? server.tasks : await allTasks();
+        server = { tasks, projects };
+        // Read before the download, so a change during it only causes one more download.
+        lastRevision = revision;
+        saveReplica();
+      }
       emit({ online: true, expired: false });
     } catch (e) {
       handleFailure(e);
@@ -222,15 +238,27 @@ function handleFailure(e: unknown) {
   else if ((e as APIError).status === 401) {
     if (state.config.shell || location.pathname.startsWith("/apps/"))
       emit({ expired: true });
-    else signedOut();
+    else sessionEnded();
   } else emit({ problem: (e as Error).message });
 }
 
 function signedOut() {
   server = { tasks: [], projects: [] };
+  lastRevision = "";
   queue = [];
   saveQueue();
   write(REPLICA, null);
+  emit({ phase: "signed-out", user: null, expired: false });
+}
+
+/**
+ * The server ended the session, which the person did not ask for. Writes it has not received wait for
+ * the next sign-in, with the replica saying whose they are in case someone else signs in instead.
+ */
+function sessionEnded() {
+  if (!queue.length) return signedOut();
+  server = { tasks: [], projects: [] };
+  lastRevision = "";
   emit({ phase: "signed-out", user: null, expired: false });
 }
 
@@ -272,23 +300,36 @@ export async function boot() {
         (state.config.shell || location.pathname.startsWith("/apps/"))
       )
         emit({ expired: true });
-      else signedOut();
+      else sessionEnded();
     } else
       emit({
         phase: state.user ? "ready" : "signed-out",
         bootError: (e as Error).message,
       });
   }
-  if (new URLSearchParams(location.search).has("auth_error"))
+  const authError = new URLSearchParams(location.search).get("auth_error");
+  if (authError) {
+    // Out of the address, so the message does not come back on reload.
+    history.replaceState(null, "", location.pathname + location.hash);
     emit({
-      bootError: "Apple sign-in was interrupted or expired. Please try again.",
+      bootError:
+        authError === "denied"
+          ? "This Apple account is not allowed on this server."
+          : "Apple sign-in was interrupted or expired. Please try again.",
     });
+  }
 }
 
 export async function signedIn() {
   const user = await api<Profile>("/me");
+  const owner = read<Replica>(REPLICA)?.user;
+  if (owner && owner.id !== user.id) {
+    queue = [];
+    saveQueue();
+  }
   emit({ user, phase: "ready", bootError: "", online: true });
   await refresh();
+  flush();
 }
 
 export async function signOut(action: () => Promise<void>) {
@@ -342,6 +383,8 @@ export function startLive() {
       const replica = read<Replica>(REPLICA);
       if (replica && state.user && replica.user.id === state.user.id) {
         server = { tasks: replica.tasks, projects: replica.projects };
+        // Another view wrote this, so it may not match the revision seen here.
+        lastRevision = "";
         emit();
       }
     } else if (e.key === OUTBOX) {
@@ -388,7 +431,6 @@ function coalesce() {
   }
 }
 
-let sending: string | null = null;
 let flushing = false;
 export function flush() {
   if (flushing || !queue.length || !state.user) return;
@@ -398,7 +440,6 @@ export function flush() {
       queue = storedQueue();
       const op = queue[0];
       if (!op) break;
-      sending = op.op;
       try {
         await send(op);
       } catch (e) {
@@ -423,8 +464,6 @@ export function flush() {
         });
         refreshSoon(0);
         continue;
-      } finally {
-        sending = null;
       }
       drop(op);
       saveReplica();

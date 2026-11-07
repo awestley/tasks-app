@@ -9,11 +9,24 @@ import Combine
     @Published var busy = false
     @Published var server = UserDefaults.standard.string(forKey: "serverURL") ?? "https://tasks.example.com"
     var api: API { API(server: server, token: Keychain.read(server: server)) }
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// Runs work one at a time, in order. Work started during a refresh waits its turn instead of being lost.
     func perform(_ action: () async throws -> Void) async {
-        guard !busy else { return }
+        if busy { await withCheckedContinuation { waiting.append($0) } }
         busy = true
-        defer { busy = false }
-        do { try await action() } catch { self.error = error.localizedDescription }
+        defer { if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() } }
+        do { try await action() } catch { report(error) }
+    }
+    func report(_ error: Error) {
+        if let error = error as? APIError, error.sessionEnded { endSession() } else { self.error = error.localizedDescription }
+    }
+    /// Keeps notification settings on purpose, so they resume after signing in again.
+    private func endSession() {
+        try? Keychain.save(nil, server: server)
+        profile = nil
+        tasks = []
+        projects = []
+        error = "Your session has ended. Sign in again."
     }
     func connect(server: String) throws {
         let value = server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -80,8 +93,12 @@ import Combine
         try await refresh()
     }
     func signOut() async throws {
-        try await Notifications.shared.disable()
-        try await api.send("/auth/logout", method: "POST")
+        do {
+            try await Notifications.shared.disable()
+            try await api.send("/auth/logout", method: "POST")
+        } catch let error as APIError where error.sessionEnded {
+            // The server already ended this session, so there is nothing left to revoke there.
+        }
         try forgetSession()
     }
     func forgetSession() throws {

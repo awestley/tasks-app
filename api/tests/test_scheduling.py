@@ -2,6 +2,8 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+
+from taskwell.db import Task
 from taskwell.quick_add import parse_task
 from taskwell.scheduling import due_instant, reminder_instant
 
@@ -138,6 +140,85 @@ def test_recurring_spring_gap_moves_forward(client):
     assert client.post("/api/v1/tasks/" + task["id"] + "/complete", json={"version": 1}).status_code == 200
     successor = next(t for t in client.get("/api/v1/tasks").json() if t["id"] != task["id"])
     assert (successor["due_date"], successor["due_time"]) == ("2027-03-14", "03:30")
+    # The shift applies to that date only. The series keeps its original time.
+    assert client.post("/api/v1/tasks/" + successor["id"] + "/complete", json={"version": 1}).status_code == 200
+    following = next(t for t in client.get("/api/v1/tasks", params={"completed": False}).json())
+    assert (following["due_date"], following["due_time"]) == ("2027-03-15", "02:30")
+
+
+def complete_open_task(client):
+    task = client.get("/api/v1/tasks", params={"completed": False}).json()[0]
+    assert (
+        client.post("/api/v1/tasks/" + task["id"] + "/complete", json={"version": task["version"]}).status_code == 200
+    )
+    return client.get("/api/v1/tasks", params={"completed": False}).json()[0]
+
+
+def test_monthly_series_keeps_its_day_after_a_short_month(client):
+    client.post("/api/v1/tasks", json={"title": "Rent", "due_date": "2027-01-31", "recurrence": "monthly"})
+    assert [complete_open_task(client)["due_date"] for _ in range(4)] == [
+        "2027-02-28",
+        "2027-03-31",
+        "2027-04-30",
+        "2027-05-31",
+    ]
+
+
+def test_choosing_a_new_date_or_time_starts_a_new_series(client):
+    client.post(
+        "/api/v1/tasks",
+        json={
+            "title": "Rent",
+            "due_date": "2027-01-31",
+            "due_time": "09:00",
+            "time_zone": ZONE,
+            "recurrence": "monthly",
+        },
+    )
+    february = complete_open_task(client)
+    assert february["due_date"] == "2027-02-28"
+    # An unrelated edit keeps the series.
+    assert client.patch("/api/v1/tasks/" + february["id"], json={"version": 1, "title": "Pay rent"}).status_code == 200
+    march = complete_open_task(client)
+    assert march["due_date"] == "2027-03-31"
+    response = client.patch(
+        "/api/v1/tasks/" + march["id"], json={"version": 1, "due_date": "2027-03-15", "due_time": "10:00"}
+    )
+    assert response.status_code == 200
+    april = complete_open_task(client)
+    assert (april["due_date"], april["due_time"]) == ("2027-04-15", "10:00")
+
+
+def test_extreme_due_years_are_rejected(client):
+    for day in ("0001-01-01", "1899-12-31", "3000-01-01", "9999-12-31"):
+        response = client.post(
+            "/api/v1/tasks",
+            json={
+                "title": "Test",
+                "due_date": day,
+                "due_time": "00:00",
+                "time_zone": "Asia/Tokyo",
+                "reminder_minutes": 5,
+            },
+        )
+        assert response.status_code == 422, day
+
+
+def test_stored_task_that_no_longer_validates_stays_readable_and_fixable(workspace):
+    client, _, sessions = workspace
+    owner = client.get("/api/v1/me").json()["id"]
+    with sessions() as db:
+        # 02:30 does not exist on this date, as if a time zone rule change had created the gap after saving.
+        broken = Task(user_id=owner, title="Gap", due_date=date(2027, 3, 14), due_time="02:30", time_zone=ZONE)
+        db.add(broken)
+        db.commit()
+    tasks = client.get("/api/v1/tasks")
+    assert tasks.status_code == 200 and tasks.json()[0]["due_time"] == "02:30"
+    path = "/api/v1/tasks/" + broken.id
+    response = client.patch(path, json={"version": 1, "title": "Still a gap"})
+    assert response.status_code == 422 and "does not exist" in response.json()["detail"]
+    response = client.patch(path, json={"version": 1, "due_time": "03:30"})
+    assert response.status_code == 200 and response.json()["due_time"] == "03:30"
 
 
 def quick_add_cases():

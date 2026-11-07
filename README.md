@@ -70,7 +70,7 @@ npm --prefix web run dev
 
 Development startup applies database migrations automatically. An original unversioned SQLite database is backed up into `api/.backups/` before its first migration. Keep that directory private, since backups contain workspace data. Production migrations run separately before deployment.
 
-The web app saves every change locally first, sends it in the background, and follows server-sent events (polling every 30 seconds as a fallback). Native apps refresh on activation and support manual refresh. Dates are calendar dates; clients render them in the local calendar. Completion timestamps in the API are UTC. Recurrence advances one interval from the scheduled date, including overdue tasks; monthly recurrence clamps to the destination month's last day. Reopening a completed recurring occurrence keeps its successor, except through Undo (`undo: true` on the reopen), which removes the successor if it has not been touched.
+The web app saves every change locally first, sends it in the background, and follows server-sent events (polling every 30 seconds as a fallback). Native apps refresh on activation and support manual refresh. Dates are calendar dates; clients render them in the local calendar. Completion timestamps in the API are UTC. Recurrence advances one interval from the scheduled date, including overdue tasks; monthly recurrence clamps to the destination month's last day, then returns to the original day. Reopening a completed recurring occurrence keeps its successor, except through Undo (`undo: true` on the reopen), which removes the successor if it has not been touched.
 
 Checklists support up to 100 items per task. Completing a task checks its remaining items; a recurring successor starts with every item unchecked. Reopening a task preserves its checkmarks. Checking the last item does not automatically complete the task.
 
@@ -93,7 +93,7 @@ Run the iOS UI test with `bash scripts/test-ios.sh SIMULATOR_UDID` (find a devic
 
 ## API and MCP
 
-API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward.
+API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
 
 The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
 
@@ -124,11 +124,9 @@ See [DigitalOcean deployment](docs/deployment.md). Both App Platform and a Dropl
 ## Verification
 
 ```sh
-# Core API tests, using isolated SQLite databases:
+# API tests, using isolated SQLite databases and in-process fakes for Apple sign-in and push:
 cd api
 .venv/bin/pytest -q
-# Include Apple integration cases with the local simulation running:
-APPLE_SIMULATION_URL=http://localhost:4900/apple .venv/bin/pytest -q
 
 # From the root, with the local app running:
 api/.venv/bin/python scripts/check_mcp.py
@@ -140,9 +138,9 @@ npm test
 
 The browser test uses the real backend and local development account, creates test resources, verifies persisted edits, completion/restoration, project management and token revocation, then removes its test resources. Set `CHROME_PATH` if using an already-installed Chromium binary.
 
-PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Taskwell's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`.
+PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Taskwell's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
 
-For Apple contract testing, start the included simulation from the repository root:
+To run the Apple tests against the included Postman simulation instead of the in-process fake, start it from the repository root and set `APPLE_SIMULATION_URL=http://localhost:4900/apple`:
 
 ```sh
 postman simulation run postman/simulations/apple-auth/apple-auth.sim.yaml --port 4900 --output ndjson

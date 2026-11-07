@@ -1,31 +1,47 @@
-"""Durable per-device delivery with atomic leases and bounded retries."""
+"""Durable per-device delivery with atomic leases and bounded retries, plus periodic cleanup."""
 
 import asyncio
 import logging
+import time
 from datetime import timedelta
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from .db import PushSubscription, ReminderDelivery, SessionLocal, Task, now
+from .db import Challenge, Credential, PushSubscription, ReminderDelivery, SessionLocal, Task, now
 from .push import DeliveryError, apns_ready, reminder_tag, send_push, web_ready
 from .scheduling import reminder_instant
 
 log = logging.getLogger(__name__)
+PURGE_INTERVAL_SECONDS = 3600
+DELIVERY_RETENTION = timedelta(days=30)
 
 
 def tick(session_factory=SessionLocal, instant=None):
     instant = instant or now()
     with session_factory() as db:
-        candidates = db.scalars(select(Task).where(Task.completed.is_(False), Task.reminder_minutes.is_not(None))).all()
+        # Reminders are at most 7 days before the due time and at most 1 day late, and a time zone moves a
+        # date by at most 1 day. Anything outside this range cannot be due, however long it stays overdue.
+        window = (instant - timedelta(days=2)).date(), (instant + timedelta(days=8)).date()
+        candidates = db.scalars(
+            select(Task).where(
+                Task.completed.is_(False), Task.reminder_minutes.is_not(None), Task.due_date.between(*window)
+            )
+        ).all()
         for task in candidates:
             due = reminder_instant(task)
             # Late delivery is allowed for one day after outages, never indefinitely.
             if due is None or not instant - timedelta(days=1) <= due <= instant:
                 continue
+            # A task saved after its reminder time was already late when it was scheduled, so it was never due.
+            if task.updated_at > due:
+                continue
             endpoints = db.scalars(select(PushSubscription).where(PushSubscription.user_id == task.user_id)).all()
             for endpoint in endpoints:
                 if not (web_ready() if endpoint.kind == "web" else apns_ready()):
+                    continue
+                # A device enabled later does not receive what came due before it existed.
+                if endpoint.created_at > due:
                     continue
                 exists = db.scalar(
                     select(ReminderDelivery.id).where(
@@ -107,12 +123,28 @@ def tick(session_factory=SessionLocal, instant=None):
             db.commit()
 
 
+def purge(session_factory=SessionLocal, instant=None):
+    instant = instant or now()
+    with session_factory() as db:
+        db.execute(delete(Credential).where(Credential.expires_at < instant))
+        db.execute(delete(Challenge).where(Challenge.expires_at < instant))
+        # Deliveries only prevent repeats, and a reminder can no longer fire a day after its time.
+        db.execute(delete(ReminderDelivery).where(ReminderDelivery.scheduled_for < instant - DELIVERY_RETENTION))
+        db.commit()
+
+
 async def run(stop):
+    last_purge = None
     while not stop.is_set():
         try:
-            await asyncio.to_thread(tick)
-        except Exception:
-            log.error("Reminder delivery cycle failed; it will retry")
+            if web_ready() or apns_ready():
+                await asyncio.to_thread(tick)
+            if last_purge is None or time.monotonic() - last_purge >= PURGE_INTERVAL_SECONDS:
+                await asyncio.to_thread(purge)
+                last_purge = time.monotonic()
+        except Exception as error:
+            # The type only, because provider exception strings can contain endpoint credentials.
+            log.error("Background work failed (%s); it will retry", type(error).__name__)
         try:
             await asyncio.wait_for(stop.wait(), timeout=15)
         except TimeoutError:

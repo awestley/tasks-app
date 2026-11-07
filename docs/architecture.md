@@ -26,4 +26,4 @@ Source map:
 - `apple/Taskwell`: SwiftUI app, API client, observable store and Keychain storage. `Glassive.swift` mirrors the same color tokens for the native apps.
 - `api/migrations`: immutable deployment migrations.
 
-Known first-release limits are listed in the README. In particular, refresh polling is not real-time push; no offline write queue exists; PostgreSQL labels are stored as JSON and label filtering is currently performed after the user-scoped query, which should be moved to an indexed query if accounts grow very large.
+Known first-release limits are listed in the README. In particular, refresh polling is not real-time push; PostgreSQL labels are stored as JSON and label filtering is currently performed after the user-scoped query, which should be moved to an indexed query if accounts grow very large.

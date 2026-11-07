@@ -44,6 +44,11 @@ struct PersonalToken: Codable, Identifiable {
     let expires_at: String
 }
 struct CreatedToken: Codable { let token: String }
+struct DeviceSession: Codable, Identifiable {
+    let id: String
+    let kind: String
+    let current: Bool
+}
 struct TaskDraft: Encodable {
     var title = ""
     var description = ""
@@ -75,13 +80,15 @@ struct TaskDraft: Encodable {
     }
 }
 enum DateOnly {
-    static var formatter: DateFormatter {
+    // Formatters are slow to create, and these dates are read for every task on every render.
+    static let formatter: DateFormatter = {
         let result = DateFormatter()
         result.calendar = Calendar(identifier: .gregorian)
         result.locale = Locale(identifier: "en_US_POSIX")
+        result.timeZone = .autoupdatingCurrent
         result.dateFormat = "yyyy-MM-dd"
         return result
-    }
+    }()
     static func string(_ date: Date) -> String { formatter.string(from: date) }
     static func date(_ string: String) -> Date { formatter.date(from: string) ?? Date() }
 }

@@ -10,7 +10,9 @@ export async function disableBrowserPush() {
     try {
       await api("/push/subscriptions/" + id, "DELETE");
     } catch (error) {
-      if ((error as { status?: number }).status !== 404) throw error;
+      // 404: already removed. 401: the session ended, and unsubscribing below still retires this endpoint.
+      const status = (error as { status?: number }).status;
+      if (status !== 404 && status !== 401) throw error;
     }
   }
   if ("serviceWorker" in navigator) {

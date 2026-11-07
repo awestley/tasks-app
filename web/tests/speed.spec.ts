@@ -43,13 +43,19 @@ test("adding many tasks quickly, # suggestions and keyboard control", async ({
     rows.filter({ hasText: new RegExp(`${stamp} 4`) }),
   ).toContainText(`P${stamp}`);
 
+  // Saved copies carry the server's timestamps, which can reorder rows that were added together.
+  await expect(page.locator(".sync-status")).toHaveCount(0);
+
   // Keyboard: move with J/K, set priority with 1-4, complete with C and undo with Cmd/Ctrl+Z.
   await page.getByLabel("Search tasks").press("Enter");
-  await expect(rows.first()).toBeFocused();
+  const selected = page.locator(".task-row.is-selected");
+  await expect(selected).toBeFocused();
+  const first = (await selected.getAttribute("data-id"))!;
   await page.keyboard.press("j");
-  await expect(rows.nth(1)).toBeFocused();
-  // The list re-sorts as priorities change, so follow the task itself.
-  const id = await rows.nth(1).getAttribute("data-id");
+  await expect(selected).not.toHaveAttribute("data-id", first);
+  await expect(selected).toBeFocused();
+  // It re-sorts as priorities change too, so follow the task itself.
+  const id = await selected.getAttribute("data-id");
   const target = page.locator(`.task-row[data-id="${id}"]`);
   await page.keyboard.press("1");
   await expect(target.locator(".check-task")).toHaveClass(/priority-1/);

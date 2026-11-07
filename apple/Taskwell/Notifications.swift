@@ -15,13 +15,16 @@ struct PushDevice: Decodable, Identifiable { let id: String; let name: String; l
     @Published var status = ""
     @Published var selectedTaskID: String?
     private var deviceToken: String?
+    /// Refreshes happen constantly, and registering once for each signed-in user is enough.
+    private var registeredUser: String?
     private var key: String { "pushDevice:" + (store?.server ?? "") }
     private var enabledKey: String { "pushEnabled:" + (store?.server ?? "") }
 
     func attach(_ store: Store) {
         self.store = store
-        UNUserNotificationCenter.current().delegate = self
-        if UserDefaults.standard.bool(forKey: enabledKey), store.profile != nil { registerWithApple() }
+        guard UserDefaults.standard.bool(forKey: enabledKey), let user = store.profile?.id, user != registeredUser else { return }
+        registeredUser = user
+        registerWithApple()
     }
     func enable() async throws {
         guard let store else { return }
@@ -32,6 +35,7 @@ struct PushDevice: Decodable, Identifiable { let id: String; let name: String; l
         }
         UserDefaults.standard.set(true, forKey: enabledKey)
         status = "Registering this device..."
+        registeredUser = store.profile?.id
         registerWithApple()
     }
     private func registerWithApple() {
@@ -76,6 +80,7 @@ struct PushDevice: Decodable, Identifiable { let id: String; let name: String; l
         UserDefaults.standard.removeObject(forKey: key)
         UserDefaults.standard.removeObject(forKey: enabledKey)
         deviceToken = nil
+        registeredUser = nil
         #if os(iOS)
         UIApplication.shared.unregisterForRemoteNotifications()
         #else
@@ -99,11 +104,20 @@ struct PushDevice: Decodable, Identifiable { let id: String; let name: String; l
 
 #if os(iOS)
 final class PushAppDelegate: NSObject, UIApplicationDelegate {
+    // Apple delivers the tap that launched the app only to a delegate assigned before launch finishes.
+    func application(_ application: UIApplication, willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = Notifications.shared
+        return true
+    }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) { Notifications.shared.received(deviceToken) }
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) { Notifications.shared.status = "Push registration failed: \(error.localizedDescription)" }
 }
 #else
 final class PushAppDelegate: NSObject, NSApplicationDelegate {
+    // Apple delivers the tap that launched the app only to a delegate assigned before launch finishes.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = Notifications.shared
+    }
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) { Notifications.shared.received(deviceToken) }
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) { Notifications.shared.status = "Push registration failed: \(error.localizedDescription)" }
 }

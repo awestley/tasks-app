@@ -6,10 +6,11 @@ import {
   KeyRound,
   Keyboard,
   LogOut,
+  MonitorSmartphone,
   X,
   CircleAlert,
 } from "lucide-react";
-import { api, type Profile, type Token } from "./api";
+import { api, type Profile, type Session, type Token } from "./api";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
 import { reminderChoices } from "./ui";
@@ -248,6 +249,7 @@ export function SettingsPanel({
   openShortcuts: () => void;
 }) {
   const [tokens, setTokens] = useState<Token[]>([]),
+    [sessions, setSessions] = useState<Session[]>([]),
     [name, setName] = useState(""),
     [created, setCreated] = useState(""),
     [error, setError] = useState(""),
@@ -255,9 +257,11 @@ export function SettingsPanel({
     [confirm, setConfirm] = useState(""),
     [auto, setAuto] = useState(autoReminder());
   const load = () => api<Token[]>("/tokens").then(setTokens);
+  const loadSessions = () => api<Session[]>("/sessions").then(setSessions);
   useEffect(() => {
     load().catch((e) => setError(e.message));
-  }, []);
+    if (!shell) loadSessions().catch((e) => setError(e.message));
+  }, [shell]);
   const perform = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -318,6 +322,47 @@ export function SettingsPanel({
         </select>
       </section>
       <PushSettings />
+      {!shell && (
+        <section className="token-group">
+          <div className="settings-title">
+            <MonitorSmartphone size={18} />
+            <div>
+              <h3>Signed-in devices</h3>
+              <p>End a session on a device you no longer use.</p>
+            </div>
+          </div>
+          {sessions.map((session) => (
+            <div className="token-row" key={session.id}>
+              <div>
+                <strong>
+                  {session.current
+                    ? "This device"
+                    : session.kind === "web"
+                      ? "Browser"
+                      : "Apple app"}
+                </strong>
+                <small>
+                  Signed in {new Date(session.created_at).toLocaleDateString()}
+                </small>
+              </div>
+              {!session.current && (
+                <button
+                  className="danger-button"
+                  disabled={busy}
+                  onClick={() =>
+                    perform(async () => {
+                      await api(`/sessions/${session.id}`, "DELETE");
+                      await loadSessions();
+                    })
+                  }
+                >
+                  End session
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
       <section className="token-group">
         <div className="settings-title">
           <KeyRound size={18} />

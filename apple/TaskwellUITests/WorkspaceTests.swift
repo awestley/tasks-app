@@ -54,6 +54,135 @@ final class WorkspaceTests: XCTestCase {
         field.typeText(text)
         XCTAssertEqual(field.value as? String, text)
     }
+    /// Signs the app in with a temporary local session, which `endSession` can revoke from outside the app.
+    @MainActor func signedInApp(arguments: [String] = []) async throws -> XCUIApplication {
+        continueAfterFailure = false
+        _ = try await request("/auth/dev", method: "POST")
+        let token = try XCTUnwrap(temporarySession)
+        let app = XCUIApplication()
+        app.launchArguments += arguments
+        app.launch()
+        if app.buttons["Add task"].waitForExistence(timeout: 4) {
+            // A previous run left a session behind. Start from sign-in so this run uses its own.
+            openSettings(app)
+            app.buttons["Remove local session"].tap()
+        } else if app.alerts.firstMatch.exists { app.alerts.buttons["OK"].tap() }
+        let server = app.textFields["Your server URL"]
+        XCTAssertTrue(server.waitForExistence(timeout: 8), app.debugDescription)
+        replace(server, with: base)
+        app.buttons["Local development"].tap()
+        let tokenField = app.secureTextFields.firstMatch
+        XCTAssertTrue(tokenField.waitForExistence(timeout: 3))
+        tokenField.tap(); tokenField.typeText(token)
+        app.buttons["Use development token"].tap()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        return app
+    }
+    @MainActor func openSettings(_ app: XCUIApplication) {
+        if !app.buttons["Settings"].exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.buttons["Remove local session"].waitForExistence(timeout: 5), app.debugDescription)
+    }
+    func endSession() async throws {
+        _ = try await request("/auth/logout", method: "POST")
+        temporarySession = nil
+    }
+    @MainActor func testEndedSessionReturnsToSignInOnActivation() async throws {
+        let app = try await signedInApp()
+        try await endSession()
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.alerts.staticTexts["Your session has ended. Sign in again."].waitForExistence(timeout: 10), app.debugDescription)
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(app.textFields["Your server URL"].waitForExistence(timeout: 5))
+    }
+    @MainActor func testSignOutAndRemoveSessionWorkAfterSessionEndsWithPushOn() async throws {
+        // Registers this device as push-enabled, so sign-out has server cleanup to attempt.
+        let push = ["-pushDevice:" + base, "device-from-an-earlier-run"]
+        for button in ["Sign out", "Remove local session"] {
+            let app = try await signedInApp(arguments: push)
+            openSettings(app)
+            try await endSession()
+            app.buttons[button].tap()
+            XCTAssertTrue(app.textFields["Your server URL"].waitForExistence(timeout: 10), "\(button): " + app.debugDescription)
+            XCTAssertFalse(app.alerts.firstMatch.exists, "\(button) should not report an error")
+            app.terminate()
+        }
+    }
+    @MainActor func testConflictKeepsDraftAndSecondSaveSucceeds() async throws {
+        let app = try await signedInApp()
+        let created = try await request("/api/v1/tasks", method: "POST", body: ["title": taskTitle]) as! [String:Any]
+        let id = created["id"] as! String
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        let search = app.searchFields["Search tasks"]
+        search.tap(); search.typeText(taskTitle)
+        // A row with only a title exposes it as the button's own label.
+        let row = app.buttons[taskTitle]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.tap()
+        let description = app.textFields["Description"]
+        XCTAssertTrue(description.waitForExistence(timeout: 5))
+        description.tap(); description.typeText("Written on this device")
+        _ = try await request("/api/v1/tasks/\(id)", method: "PATCH", body: ["version": 1, "priority": 2])
+        app.buttons["Save"].tap()
+        let notice = app.alerts.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "changed on another device")).firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 10), app.debugDescription)
+        app.alerts.buttons["OK"].tap()
+        // Typing replaces the placeholder that identified the field, so find it by what it now holds.
+        let draft = app.textFields.matching(NSPredicate(format: "value == %@", "Written on this device")).firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 5), "The draft should survive the conflict: " + app.debugDescription)
+        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 5))
+        let save = app.buttons["Save"]
+        let enabled = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: save)
+        await fulfillment(of: [enabled], timeout: 5)
+        save.tap()
+        XCTAssertTrue(app.navigationBars["Edit task"].waitForNonExistence(timeout: 10), app.debugDescription)
+        let saved = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
+        XCTAssertEqual(saved.first { $0["id"] as? String == id }?["description"] as? String, "Written on this device")
+    }
+    @MainActor func testTaskInUTCShowsItsTimeZone() async throws {
+        let app = try await signedInApp()
+        _ = try await request("/api/v1/tasks", method: "POST", body: ["title": taskTitle, "due_date": "2099-01-01", "due_time": "09:00", "time_zone": "UTC"])
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        let search = app.searchFields["Search tasks"]
+        search.tap(); search.typeText(taskTitle)
+        let row = app.buttons.containing(.staticText, identifier: taskTitle).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Edit task"].waitForExistence(timeout: 5), app.debugDescription)
+        let picker = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Time zone")).firstMatch
+        if !picker.exists { app.swipeUp() }
+        XCTAssertTrue(picker.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(picker.label.contains("UTC"), picker.label)
+    }
+    @MainActor func testAnotherDevicesSessionCanBeEnded() async throws {
+        let app = try await signedInApp()
+        // A second session, as if signed in on another device. It has its own cookie storage.
+        let other = URLSession(configuration: .ephemeral)
+        var login = URLRequest(url: URL(string: base + "/auth/dev")!)
+        login.httpMethod = "POST"
+        login.setValue("http://127.0.0.1:5173", forHTTPHeaderField: "Origin")
+        _ = try await other.data(for: login)
+        let profile = URL(string: base + "/api/v1/me")!
+        let (_, before) = try await other.data(from: profile)
+        XCTAssertEqual((before as? HTTPURLResponse)?.statusCode, 200)
+        openSettings(app)
+        let end = app.buttons["End session"].firstMatch
+        if !end.waitForExistence(timeout: 3) { app.swipeUp() }
+        XCTAssertTrue(end.waitForExistence(timeout: 5), app.debugDescription)
+        end.tap()
+        let after = expectation(description: "The other session ends")
+        for _ in 0..<10 {
+            try await Task.sleep(for: .milliseconds(500))
+            let (_, response) = try await other.data(from: profile)
+            if (response as? HTTPURLResponse)?.statusCode == 401 { after.fulfill(); break }
+        }
+        await fulfillment(of: [after], timeout: 1)
+        XCTAssertTrue(app.buttons["Remove local session"].exists, "This device stays signed in")
+    }
     @MainActor func testQuickEntryAndPersistence() async throws {
         continueAfterFailure = false
         _ = try await request("/auth/dev", method: "POST")

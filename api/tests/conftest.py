@@ -1,13 +1,52 @@
+import atexit
 import os
+import shutil
+import tempfile
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from taskwell.auth import issue
-from taskwell.db import Base, User, get_db
-from taskwell.main import app, rate_windows
+# Configure the app before importing it. Starting the app applies migrations to DATABASE_URL and starts the
+# reminder worker when push is configured, so tests must not inherit a developer's .env or environment.
+ISOLATED_DIRECTORY = tempfile.mkdtemp(prefix="tasks-tests-")
+atexit.register(shutil.rmtree, ISOLATED_DIRECTORY, ignore_errors=True)
+os.environ.update(
+    ENVIRONMENT="development",
+    DATABASE_URL=f"sqlite:///{ISOLATED_DIRECTORY}/startup.db",
+    PUBLIC_URL="http://localhost:5173",
+    DEV_LOGIN="false",
+    ALLOWED_APPLE_ACCOUNTS="",
+    CLIENT_IP_HEADER="",
+    SHELL_URL="",
+    SHELL_JWKS_URL="",
+    BASE_PATH="",
+    APPLE_TEAM_ID="",
+    APPLE_KEY_ID="",
+    APPLE_PRIVATE_KEY="",
+    APPLE_WEB_CLIENT_ID="",
+    APPLE_NATIVE_CLIENT_IDS="",
+    VAPID_PUBLIC_KEY="",
+    VAPID_PRIVATE_KEY="",
+    VAPID_SUBJECT="",
+    APNS_TEAM_ID="",
+    APNS_KEY_ID="",
+    APNS_PRIVATE_KEY="",
+    PUSH_SIMULATION_URL="",
+)
+
+import pytest  # noqa: E402
+from fake_providers import running_provider  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine, event  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
+
+from taskwell.auth import issue  # noqa: E402
+from taskwell.db import Base, User, get_db  # noqa: E402
+from taskwell.main import app, rate_windows  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def provider_url():
+    with running_provider() as url:
+        yield url
 
 
 @pytest.fixture(scope="session")
