@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from taskwell import mcp_server
-from taskwell.auth import issue
-from taskwell.config import Settings, settings
-from taskwell.db import Credential, Project, Task, User, engine
-from taskwell.main import MAX_BODY_BYTES, BodyLimit, next_date
+from tasks import mcp_server
+from tasks.auth import issue
+from tasks.config import Settings, settings
+from tasks.db import Credential, Project, Task, User, engine
+from tasks.main import MAX_BODY_BYTES, BodyLimit, next_date
 
 
 def create(client, **fields):
@@ -26,7 +26,7 @@ def create(client, **fields):
 def test_auth_required_and_cookie_origin(client):
     bearer = client.headers.pop("Authorization")
     assert client.get("/api/v1/tasks").status_code == 401
-    client.cookies.set("taskwell_session", bearer.removeprefix("Bearer "))
+    client.cookies.set("tasks_session", bearer.removeprefix("Bearer "))
     assert client.get("/api/v1/me").status_code == 200
     for headers in ({}, {"Origin": "https://attacker.test"}):
         assert client.post("/api/v1/tasks", json={"title": "CSRF"}, headers=headers).status_code == 403
@@ -214,7 +214,7 @@ def test_production_rejects_unsafe_config():
 
 def test_mcp_rejects_cookie_auth(client):
     token = client.headers.pop("Authorization").removeprefix("Bearer ")
-    client.cookies.set("taskwell_session", token)
+    client.cookies.set("tasks_session", token)
     assert client.post("/mcp/", json={}).status_code == 401
 
 
@@ -296,7 +296,7 @@ def test_static_files_are_cached_by_kind(client, monkeypatch, tmp_path):
     (tmp_path / "assets/index-abc.js").write_text("js")
     (tmp_path / "sw.js").write_text("worker")
     (tmp_path / "index.html").write_text("<html>")
-    monkeypatch.setattr("taskwell.main.static", tmp_path)
+    monkeypatch.setattr("tasks.main.static", tmp_path)
     assert client.get("/assets/index-abc.js").headers["cache-control"] == "public, max-age=31536000, immutable"
     assert client.get("/sw.js").headers["cache-control"] == "no-cache"
     for path in ("/", "/today"):
@@ -425,7 +425,7 @@ def test_production_does_not_publish_api_docs():
         "APPLE_WEB_CLIENT_ID": "W",
         "ALLOWED_APPLE_ACCOUNTS": "owner",
     }
-    script = "from taskwell.main import app; print(app.docs_url, app.redoc_url, app.openapi_url)"
+    script = "from tasks.main import app; print(app.docs_url, app.redoc_url, app.openapi_url)"
     result = subprocess.run([sys.executable, "-c", script], env=environment, capture_output=True, text=True)
     assert result.stdout.split() == ["None", "None", "None"], result.stderr
 

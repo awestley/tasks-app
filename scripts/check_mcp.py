@@ -12,7 +12,7 @@ from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE = os.environ.get("TASKWELL_API_URL", "http://127.0.0.1:8000")
+BASE = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000")
 
 
 async def exercise(session):
@@ -89,9 +89,9 @@ async def main():
         try:
             params = StdioServerParameters(
                 command=sys.executable,
-                args=["-m", "taskwell.mcp_server"],
+                args=["-m", "tasks.mcp_server"],
                 cwd=str(ROOT / "api"),
-                env={**os.environ, "TASKWELL_TOKEN": token["token"], "TASKWELL_API_URL": BASE},
+                env={**os.environ, "TASKS_TOKEN": token["token"], "TASKS_API_URL": BASE},
             )
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:

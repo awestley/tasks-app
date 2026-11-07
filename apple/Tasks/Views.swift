@@ -19,7 +19,7 @@ private struct StoreErrorAlert: ViewModifier {
     }
 }
 private extension View {
-    func taskwellErrorAlert(active: Bool = true) -> some View {
+    func tasksErrorAlert(active: Bool = true) -> some View {
         modifier(StoreErrorAlert(active: active))
     }
 }
@@ -88,7 +88,7 @@ struct LoginView: View {
         }.padding(36).frame(maxWidth: 460)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Glassive.backgroundSecondary)
-            .taskwellErrorAlert()
+            .tasksErrorAlert()
             .onAppear { server = store.server }
     }
     func prepare() async {
@@ -257,7 +257,7 @@ struct WorkspaceView: View {
         .sheet(item: $editor) { destination in TaskEditorView(task: destination.task, initialProject: store.projects.contains(where: { $0.id == selection }) ? selection : nil, initialDate: selection == "today" ? Date() : nil) }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(item: $projectEditor) { ProjectEditorView(project: $0.project) }
-        .taskwellErrorAlert(active: editor == nil && projectEditor == nil && !showSettings)
+        .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings)
         .confirmationDialog("Permanently delete this task?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { task in
             Button("Delete task", role: .destructive) { Task { await store.perform { try await store.delete(task) } } }
         }
@@ -488,7 +488,7 @@ struct TaskEditorView: View {
                     }
                 }
         }.frame(idealWidth: 520, idealHeight: 560)
-            .taskwellErrorAlert()
+            .tasksErrorAlert()
             .onAppear {
                 if let task {
                     draft = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist, recurrence: task.recurrence, version: task.version)
@@ -553,7 +553,7 @@ struct ProjectEditorView: View {
                     }
                 }
         }.frame(idealWidth: 450, idealHeight: 300)
-            .taskwellErrorAlert()
+            .tasksErrorAlert()
             .onAppear { name = project?.name ?? ""; color = project?.color ?? "#2563eb" }
             .confirmationDialog("Delete this project? Its tasks will move to Inbox.", isPresented: $confirmDelete) {
                 Button("Delete project", role: .destructive) { if let project { Task { await store.perform {
@@ -630,7 +630,7 @@ struct SettingsView: View {
             }.formStyle(.grouped).navigationTitle("Your workspace")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }.frame(idealWidth: 530, idealHeight: 600)
-            .taskwellErrorAlert()
+            .tasksErrorAlert()
             .task { do { try await loadTokens(); try await loadSessions() } catch { store.report(error) } }
     }
     func loadTokens() async throws { tokens = try await store.api.request("/api/v1/tokens") }

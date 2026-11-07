@@ -25,7 +25,7 @@ final class WorkspaceTests: XCTestCase {
         }
         if path == "/auth/dev" {
             let headers = response.allHeaderFields.reduce(into: [String:String]()) { $0[String(describing:$1.key)] = String(describing:$1.value) }
-            temporarySession = HTTPCookie.cookies(withResponseHeaderFields: headers, for: URL(string:base)!).first(where: { $0.name == "taskwell_session" })?.value
+            temporarySession = HTTPCookie.cookies(withResponseHeaderFields: headers, for: URL(string:base)!).first(where: { $0.name == "tasks_session" })?.value
         }
         return data.isEmpty ? [:] : try JSONSerialization.jsonObject(with: data)
     }
@@ -239,7 +239,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(edited["description"] as? String, "Edited on iPhone")
         XCTAssertEqual(edited["reminder_minutes"] as? Int, 15)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Taskwell iOS workspace"; screenshot.lifetime = .keepAlways; add(screenshot)
+        screenshot.name = "Tasks iOS workspace"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["Complete \(taskTitle)"].tap()
         XCTAssertTrue(app.buttons["Restore \(taskTitle)"].waitForExistence(timeout: 10))
         let afterCompletion = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]

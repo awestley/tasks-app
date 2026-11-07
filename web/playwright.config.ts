@@ -4,7 +4,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: process.env.TASKWELL_WEB_URL || "http://localhost:5173",
+    baseURL: process.env.TASKS_WEB_URL || "http://localhost:5173",
     headless: true,
     viewport: { width: 1440, height: 1000 },
     launchOptions: process.env.CHROME_PATH

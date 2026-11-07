@@ -38,9 +38,9 @@ from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
-from taskwell.auth import issue  # noqa: E402
-from taskwell.db import Base, User, get_db  # noqa: E402
-from taskwell.main import app, rate_windows  # noqa: E402
+from tasks.auth import issue  # noqa: E402
+from tasks.db import Base, User, get_db  # noqa: E402
+from tasks.main import app, rate_windows  # noqa: E402
 
 
 @pytest.fixture(scope="session")

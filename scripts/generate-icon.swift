@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 let root = URL(fileURLWithPath: CommandLine.arguments[1])
-let folder = root.appendingPathComponent("apple/Taskwell/Assets.xcassets/AppIcon.appiconset")
+let folder = root.appendingPathComponent("apple/Tasks/Assets.xcassets/AppIcon.appiconset")
 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 var images: [[String: String]] = []
 func render(_ pixels: Int, mac: Bool, filename: String) throws {

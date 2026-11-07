@@ -1,6 +1,6 @@
 purpose:
   stands_in_for: APNs alert delivery and standards-based encrypted Web Push acceptance.
-  unblocks: Local verification of Taskwell reminder delivery, retries and subscription cleanup without provider credentials.
+  unblocks: Local verification of Tasks reminder delivery, retries and subscription cleanup without provider credentials.
 assumptions:
   - id: apns-response-contract
     status: supported
@@ -11,10 +11,10 @@ assumptions:
     updated_at: '2026-10-31'
   - id: webpush-encrypted-request
     status: supported
-    claim: Taskwell sends its Web Push payload encrypted with aes128gcm and authenticates with VAPID.
+    claim: Tasks sends its Web Push payload encrypted with aes128gcm and authenticates with VAPID.
     reason: Browser subscriptions provide encryption keys and the server uses pywebpush to construct the request.
     verification: Local simulation runs on 2026-10-30 and 2026-10-31 received Web Push requests with the expected content-encoding, authorization and TTL headers and returned 201. The stored delivery became sent. The mock does not decrypt the body or establish browser receipt.
-    source: api/taskwell/push.py; api/tests/test_push.py; postman/mocks/push/default.js
+    source: api/tasks/push.py; api/tests/test_push.py; postman/mocks/push/default.js
     updated_at: '2026-10-31'
   - id: live-device-delivery
     status: unknown

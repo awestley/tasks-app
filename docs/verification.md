@@ -72,7 +72,7 @@ Ran `bash scripts/test-ios.sh 6DEF783D-47A6-4469-BAF1-A793A86AC64E` on the iPhon
 
 Testing exposed and fixed stale task/project editor selection and error alerts dismissing the active sheet. The server URL field now disables correction/capitalization, and Settings has an explicit accessibility label. Simulator UI runs use ad hoc signing so Keychain entitlements are present; earlier unsigned build checks did not establish runtime sign-in behavior. The shared changes also passed a macOS Debug compile.
 
-Result: `apple/DerivedData-iOS/Logs/Test/Test-Taskwell-iOS-2026.10.31_22-54-48--0400.xcresult`. This verifies local native UI and API integration, not live Apple authentication, physical-device provisioning, or APNs delivery.
+Result: `apple/DerivedData-iOS/Logs/Test/Test-Tasks-iOS-2026.10.31_22-54-48--0400.xcresult`. This verifies local native UI and API integration, not live Apple authentication, physical-device provisioning, or APNs delivery.
 
 ## Code review fixes, November 6, 2026
 

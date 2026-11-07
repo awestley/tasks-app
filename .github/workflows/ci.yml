@@ -1,4 +1,4 @@
-name: Verify Taskwell
+name: Verify Tasks
 on: [push, pull_request]
 jobs:
   api:
@@ -38,8 +38,8 @@ jobs:
   web:
     runs-on: ubuntu-latest
     env:
-      TASKWELL_API_URL: http://127.0.0.1:8000
-      TASKWELL_WEB_URL: http://127.0.0.1:8000
+      TASKS_API_URL: http://127.0.0.1:8000
+      TASKS_WEB_URL: http://127.0.0.1:8000
       PUBLIC_URL: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +58,7 @@ jobs:
         working-directory: api
         run: |
           DEV_LOGIN=true DATABASE_URL="sqlite:///$RUNNER_TEMP/ci.db" STATIC_DIRECTORY=../web/dist \
-            .venv/bin/uvicorn taskwell.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+            .venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
           for attempt in $(seq 1 30); do
             curl --silent --fail http://127.0.0.1:8000/health > /dev/null && exit 0
             sleep 1
@@ -69,12 +69,12 @@ jobs:
         run: cd web && npm test
       - name: MCP transports
         run: api/.venv/bin/python scripts/check_mcp.py
-      - run: docker build -t taskwell:ci .
+      - run: docker build -t tasks:ci .
   apple:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
       - run: xcodegen generate --spec apple/project.yml
-      - run: xcodebuild -project apple/Taskwell.xcodeproj -scheme Taskwell-macOS -configuration Debug -derivedDataPath apple/DerivedData CODE_SIGNING_ALLOWED=NO build
-      - run: xcodebuild -project apple/Taskwell.xcodeproj -scheme Taskwell-iOS -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath apple/DerivedData-iOS CODE_SIGNING_ALLOWED=NO build
+      - run: xcodebuild -project apple/Tasks.xcodeproj -scheme Tasks-macOS -configuration Debug -derivedDataPath apple/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - run: xcodebuild -project apple/Tasks.xcodeproj -scheme Tasks-iOS -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath apple/DerivedData-iOS CODE_SIGNING_ALLOWED=NO build

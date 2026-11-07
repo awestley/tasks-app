@@ -3,7 +3,7 @@ import sqlite3
 from alembic import command
 from sqlalchemy import create_engine, inspect, text
 
-from taskwell.migrations import migration_config, upgrade_local_database
+from tasks.migrations import migration_config, upgrade_local_database
 
 
 def test_upgrade_fresh_database_and_repeated_start(tmp_path):

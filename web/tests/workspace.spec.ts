@@ -133,7 +133,7 @@ test("task lifecycle, project editing, tokens and responsive layout", async ({
   await page.getByLabel("Token name").fill(name);
   await page.getByRole("button", { name: "Create token", exact: true }).click();
   const token = await page.locator(".token-created code").innerText();
-  const api = process.env.TASKWELL_API_URL || "http://127.0.0.1:8000";
+  const api = process.env.TASKS_API_URL || "http://127.0.0.1:8000";
   const response = await request.get(api + "/api/v1/tasks", {
     headers: { Authorization: "Bearer " + token },
   });

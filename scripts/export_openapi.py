@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
-from taskwell.main import app  # noqa: E402
+from tasks.main import app  # noqa: E402
 
 path = ROOT / "docs" / "openapi.json"
 path.write_text(json.dumps(app.openapi(), indent=2) + "\n")

@@ -10,9 +10,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
 
-from taskwell.auth import account_allowed
-from taskwell.config import settings
-from taskwell.db import Credential, User
+from tasks.auth import account_allowed
+from tasks.config import settings
+from tasks.db import Credential, User
 
 
 @pytest.fixture(autouse=True)
@@ -165,7 +165,7 @@ def test_browser_sign_in_reports_a_refused_account(client, monkeypatch):
         follow_redirects=False,
     )
     assert response.status_code == 303 and "auth_error=denied" in response.headers["location"]
-    assert "taskwell_session" not in response.headers.get("set-cookie", "")
+    assert "tasks_session" not in response.headers.get("set-cookie", "")
 
 
 def test_production_without_an_allowlist_refuses_everyone(monkeypatch):

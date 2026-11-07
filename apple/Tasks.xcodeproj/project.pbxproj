@@ -8,13 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		107E6FF1B858BE3F62518946 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC922748A69D7D2C0182D07 /* Store.swift */; };
-		1F989F961F31B09E0D732DED /* TaskwellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161722AE826B5946D2C5EACA /* TaskwellApp.swift */; };
+		1F989F961F31B09E0D732DED /* TasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161722AE826B5946D2C5EACA /* TasksApp.swift */; };
 		23890CAD76BBAB5001B9DE3E /* Glassive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE3FABC1290F825794D5131 /* Glassive.swift */; };
 		27C8E881D0CE71EE9A536C15 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0254C94402F74BD0B2F94FF /* API.swift */; };
 		37ACB286502D47A6EA5B4A17 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3871706FEBF317066EE4549 /* Models.swift */; };
 		3936859BCED6D7E61E2EC451 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0254C94402F74BD0B2F94FF /* API.swift */; };
 		55DB79C8608DC9F2D54703ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4FDB566A7386BC67932EE76A /* Assets.xcassets */; };
-		64F374EF97FB8888776FEEBC /* TaskwellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161722AE826B5946D2C5EACA /* TaskwellApp.swift */; };
+		64F374EF97FB8888776FEEBC /* TasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161722AE826B5946D2C5EACA /* TasksApp.swift */; };
 		6E9FC44908F96F7D53ACE706 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE88AD6DB9582169236F6520 /* Views.swift */; };
 		6FBDBD818422FE57A2704A09 /* WorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7B300EF6D26EE4C46A1BBC /* WorkspaceTests.swift */; };
 		8CBE3A81E9457A3B97D9CEE2 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE1C1DCE819054534FBEA0A /* Notifications.swift */; };
@@ -32,35 +32,35 @@
 			containerPortal = EF0B536112CC87993A42559A /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = DC9EEF8976C5E1A6DFFA0BDC;
-			remoteInfo = "Taskwell-iOS";
+			remoteInfo = "Tasks-iOS";
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0C6EE6D5EED823D267D5F408 /* Taskwell-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Taskwell-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		161722AE826B5946D2C5EACA /* TaskwellApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskwellApp.swift; sourceTree = "<group>"; };
+		0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tasks-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		161722AE826B5946D2C5EACA /* TasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksApp.swift; sourceTree = "<group>"; };
 		4FDB566A7386BC67932EE76A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5AC922748A69D7D2C0182D07 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
-		633FDF56BFA4232166EC588D /* Taskwell-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Taskwell-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		633FDF56BFA4232166EC588D /* Tasks-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Tasks-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6FE3FABC1290F825794D5131 /* Glassive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glassive.swift; sourceTree = "<group>"; };
 		A0254C94402F74BD0B2F94FF /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		BFE1C1DCE819054534FBEA0A /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
-		D10738125098136CE3FDF210 /* Taskwell-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Taskwell-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D10738125098136CE3FDF210 /* Tasks-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Tasks-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3871706FEBF317066EE4549 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		ED7B300EF6D26EE4C46A1BBC /* WorkspaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTests.swift; sourceTree = "<group>"; };
 		FE88AD6DB9582169236F6520 /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		4DD873F6C588D1E3842B8983 /* TaskwellUITests */ = {
+		4DD873F6C588D1E3842B8983 /* TasksUITests */ = {
 			isa = PBXGroup;
 			children = (
 				ED7B300EF6D26EE4C46A1BBC /* WorkspaceTests.swift */,
 			);
-			path = TaskwellUITests;
+			path = TasksUITests;
 			sourceTree = "<group>";
 		};
-		70D78B82A92477B2190A0607 /* Taskwell */ = {
+		70D78B82A92477B2190A0607 /* Tasks */ = {
 			isa = PBXGroup;
 			children = (
 				A0254C94402F74BD0B2F94FF /* API.swift */,
@@ -69,17 +69,17 @@
 				D3871706FEBF317066EE4549 /* Models.swift */,
 				BFE1C1DCE819054534FBEA0A /* Notifications.swift */,
 				5AC922748A69D7D2C0182D07 /* Store.swift */,
-				161722AE826B5946D2C5EACA /* TaskwellApp.swift */,
+				161722AE826B5946D2C5EACA /* TasksApp.swift */,
 				FE88AD6DB9582169236F6520 /* Views.swift */,
 			);
-			path = Taskwell;
+			path = Tasks;
 			sourceTree = "<group>";
 		};
 		7EBBFF54554618FC5EBFCA84 = {
 			isa = PBXGroup;
 			children = (
-				70D78B82A92477B2190A0607 /* Taskwell */,
-				4DD873F6C588D1E3842B8983 /* TaskwellUITests */,
+				70D78B82A92477B2190A0607 /* Tasks */,
+				4DD873F6C588D1E3842B8983 /* TasksUITests */,
 				EEF3131FD13151E3EE0D14D0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -87,9 +87,9 @@
 		EEF3131FD13151E3EE0D14D0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D10738125098136CE3FDF210 /* Taskwell-iOS-UITests.xctest */,
-				633FDF56BFA4232166EC588D /* Taskwell-iOS.app */,
-				0C6EE6D5EED823D267D5F408 /* Taskwell-macOS.app */,
+				D10738125098136CE3FDF210 /* Tasks-iOS-UITests.xctest */,
+				633FDF56BFA4232166EC588D /* Tasks-iOS.app */,
+				0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -97,9 +97,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2D55186218CB36D1DAE63405 /* Taskwell-macOS */ = {
+		2D55186218CB36D1DAE63405 /* Tasks-macOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BA01DCAB3ABC0F970E453C26 /* Build configuration list for PBXNativeTarget "Taskwell-macOS" */;
+			buildConfigurationList = BA01DCAB3ABC0F970E453C26 /* Build configuration list for PBXNativeTarget "Tasks-macOS" */;
 			buildPhases = (
 				814ADF4A6A581B3112DE4A11 /* Sources */,
 				C8EB9F53595497A1E5255410 /* Resources */,
@@ -108,16 +108,16 @@
 			);
 			dependencies = (
 			);
-			name = "Taskwell-macOS";
+			name = "Tasks-macOS";
 			packageProductDependencies = (
 			);
-			productName = "Taskwell-macOS";
-			productReference = 0C6EE6D5EED823D267D5F408 /* Taskwell-macOS.app */;
+			productName = "Tasks-macOS";
+			productReference = 0C6EE6D5EED823D267D5F408 /* Tasks-macOS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		C4D184200B6723D20B5328F4 /* Taskwell-iOS-UITests */ = {
+		C4D184200B6723D20B5328F4 /* Tasks-iOS-UITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 3C62864A708F946BF96580C4 /* Build configuration list for PBXNativeTarget "Taskwell-iOS-UITests" */;
+			buildConfigurationList = 3C62864A708F946BF96580C4 /* Build configuration list for PBXNativeTarget "Tasks-iOS-UITests" */;
 			buildPhases = (
 				F71042E60A79539C3594798C /* Sources */,
 			);
@@ -126,16 +126,16 @@
 			dependencies = (
 				D87155E3D1DF59581B82E959 /* PBXTargetDependency */,
 			);
-			name = "Taskwell-iOS-UITests";
+			name = "Tasks-iOS-UITests";
 			packageProductDependencies = (
 			);
-			productName = "Taskwell-iOS-UITests";
-			productReference = D10738125098136CE3FDF210 /* Taskwell-iOS-UITests.xctest */;
+			productName = "Tasks-iOS-UITests";
+			productReference = D10738125098136CE3FDF210 /* Tasks-iOS-UITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		DC9EEF8976C5E1A6DFFA0BDC /* Taskwell-iOS */ = {
+		DC9EEF8976C5E1A6DFFA0BDC /* Tasks-iOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F28DE6CA1987B4D933BCB0CC /* Build configuration list for PBXNativeTarget "Taskwell-iOS" */;
+			buildConfigurationList = F28DE6CA1987B4D933BCB0CC /* Build configuration list for PBXNativeTarget "Tasks-iOS" */;
 			buildPhases = (
 				930A4394277ED8562B017958 /* Sources */,
 				DFB8E7341081A0B52D05D269 /* Resources */,
@@ -144,11 +144,11 @@
 			);
 			dependencies = (
 			);
-			name = "Taskwell-iOS";
+			name = "Tasks-iOS";
 			packageProductDependencies = (
 			);
-			productName = "Taskwell-iOS";
-			productReference = 633FDF56BFA4232166EC588D /* Taskwell-iOS.app */;
+			productName = "Tasks-iOS";
+			productReference = 633FDF56BFA4232166EC588D /* Tasks-iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -172,7 +172,7 @@
 					};
 				};
 			};
-			buildConfigurationList = B7128C72AF12F6005542A2AB /* Build configuration list for PBXProject "Taskwell" */;
+			buildConfigurationList = B7128C72AF12F6005542A2AB /* Build configuration list for PBXProject "Tasks" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -186,9 +186,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				DC9EEF8976C5E1A6DFFA0BDC /* Taskwell-iOS */,
-				2D55186218CB36D1DAE63405 /* Taskwell-macOS */,
-				C4D184200B6723D20B5328F4 /* Taskwell-iOS-UITests */,
+				DC9EEF8976C5E1A6DFFA0BDC /* Tasks-iOS */,
+				2D55186218CB36D1DAE63405 /* Tasks-macOS */,
+				C4D184200B6723D20B5328F4 /* Tasks-iOS-UITests */,
 			);
 		};
 /* End PBXProject section */
@@ -222,7 +222,7 @@
 				D66E70CC025CB11B4ED5A560 /* Models.swift in Sources */,
 				8CBE3A81E9457A3B97D9CEE2 /* Notifications.swift in Sources */,
 				9917A10180FAC924AB3AA6CE /* Store.swift in Sources */,
-				1F989F961F31B09E0D732DED /* TaskwellApp.swift in Sources */,
+				1F989F961F31B09E0D732DED /* TasksApp.swift in Sources */,
 				6E9FC44908F96F7D53ACE706 /* Views.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -236,7 +236,7 @@
 				37ACB286502D47A6EA5B4A17 /* Models.swift in Sources */,
 				CF1A858DBA763E2DDBE49266 /* Notifications.swift in Sources */,
 				107E6FF1B858BE3F62518946 /* Store.swift in Sources */,
-				64F374EF97FB8888776FEEBC /* TaskwellApp.swift in Sources */,
+				64F374EF97FB8888776FEEBC /* TasksApp.swift in Sources */,
 				AC72661D7DBF6DD8A654B871 /* Views.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -254,7 +254,7 @@
 /* Begin PBXTargetDependency section */
 		D87155E3D1DF59581B82E959 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = DC9EEF8976C5E1A6DFFA0BDC /* Taskwell-iOS */;
+			target = DC9EEF8976C5E1A6DFFA0BDC /* Tasks-iOS */;
 			targetProxy = 3E8509F1FD8AD6CBDE24D4B0 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -336,7 +336,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.macos;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.macos;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -350,10 +350,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.uitests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Taskwell-iOS";
+				TEST_TARGET_NAME = "Tasks-iOS";
 			};
 			name = Debug;
 		};
@@ -443,7 +443,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -463,7 +463,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -478,10 +478,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.uitests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Taskwell-iOS";
+				TEST_TARGET_NAME = "Tasks-iOS";
 			};
 			name = Release;
 		};
@@ -496,7 +496,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.taskwell.macos;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.tasks.macos;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -504,7 +504,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		3C62864A708F946BF96580C4 /* Build configuration list for PBXNativeTarget "Taskwell-iOS-UITests" */ = {
+		3C62864A708F946BF96580C4 /* Build configuration list for PBXNativeTarget "Tasks-iOS-UITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				45BDB8310EB2BDE4FF7208E5 /* Debug */,
@@ -513,7 +513,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		B7128C72AF12F6005542A2AB /* Build configuration list for PBXProject "Taskwell" */ = {
+		B7128C72AF12F6005542A2AB /* Build configuration list for PBXProject "Tasks" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4A33E7FC08DB9F456FA09C87 /* Debug */,
@@ -522,7 +522,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		BA01DCAB3ABC0F970E453C26 /* Build configuration list for PBXNativeTarget "Taskwell-macOS" */ = {
+		BA01DCAB3ABC0F970E453C26 /* Build configuration list for PBXNativeTarget "Tasks-macOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E9153E62EBE0668097A66225 /* Debug */,
@@ -531,7 +531,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		F28DE6CA1987B4D933BCB0CC /* Build configuration list for PBXNativeTarget "Taskwell-iOS" */ = {
+		F28DE6CA1987B4D933BCB0CC /* Build configuration list for PBXNativeTarget "Tasks-iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C7AA84B8594B18C8D5D82E54 /* Debug */,

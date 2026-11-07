@@ -36,14 +36,14 @@ async def call(ctx: Context, path: str, method="GET", data=None, params=None):
     token = (
         request.headers.get("authorization", "").removeprefix("Bearer ")
         if request
-        else os.environ.get("TASKWELL_TOKEN", "")
+        else os.environ.get("TASKS_TOKEN", "")
     )
     if not token:
-        raise ValueError("Set TASKWELL_TOKEN or send a Bearer token with your MCP request")
-    base = os.environ.get("TASKWELL_API_URL", "http://127.0.0.1:8000").rstrip("/")
+        raise ValueError("Set TASKS_TOKEN or send a Bearer token with your MCP request")
+    base = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000").rstrip("/")
     url = urlparse(base)
     if url.scheme != "https" and not (url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1"}):
-        raise ValueError("TASKWELL_API_URL must use HTTPS, except for localhost")
+        raise ValueError("TASKS_API_URL must use HTTPS, except for localhost")
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.request(
             method, base + "/api/v1" + path, json=data, params=params, headers={"Authorization": "Bearer " + token}

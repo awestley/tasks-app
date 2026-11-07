@@ -25,7 +25,7 @@ Set `SHELL_URL` to turn this on. Then:
 
 - Sign in is the shell's. The API verifies the shell's ES256 access token (the `pc_session` cookie, or `Authorization: Bearer`) against `SHELL_URL/auth/.well-known/jwks.json` (or `SHELL_JWKS_URL`), and keys data by the token's `sub`. This app's own Apple and development sign in are turned off. Personal access tokens for MCP and scripts keep working.
 - The app is served under `BASE_PATH` (`/apps/tasks`) as well as at the root (health checks), and can be framed by the same origin only.
-- `GET /apps/tasks/manifest.json` describes it to the shell. Contract endpoints live in the API: `GET /api/v1/resolve`, `/search` (the shared search contract, ported in `api/taskwell/search.py`), `/references`, `/events` (server-sent events), plus `GET /tasks/{id}` and `GET /projects/{id}`. Creates accept a client-chosen UUID `id`, and replaying one returns the existing item.
+- `GET /apps/tasks/manifest.json` describes it to the shell. Contract endpoints live in the API: `GET /api/v1/resolve`, `/search` (the shared search contract, ported in `api/tasks/search.py`), `/references`, `/events` (server-sent events), plus `GET /tasks/{id}` and `GET /projects/{id}`. Creates accept a client-chosen UUID `id`, and replaying one returns the existing item.
 - Pane routes: `#/today`, `#/inbox`, `#/upcoming`, `#/all`, `#/completed`, `#/project/<id>`, `#/label/<name>`, `#/task/<id>`. It is the same app at every size: in a wide column the sidebar (views, projects, labels) is docked and a task opens beside the list; in a narrow one the sidebar is a drawer (M toggles it) and a task opens over the list. The theme follows the shell.
 - On a phone (a touch screen under 700px wide, or a browser window under 560px) it switches to a native layout (`web/src/phone.tsx`, `phone.css`): tabs at the bottom (Inbox, Today, Upcoming, Search, Browse), a + button, large titles, quick add as a sheet that sits on the keyboard, swipe right to complete and left to schedule, and a task full screen. Inside the shell's phone layout it fills the screen below the shell's bar and pads itself with the `--pc-safe-*` insets the shell sets on the frame.
 - The companion (`companion.html`) is the same app in its compact layout: a capture field first, a list picker, Space completes, ⌘Enter opens the task in a column, Escape twice hides it. The shell's quick add (`new-task`) focuses that field.
@@ -38,7 +38,7 @@ Run it inside the shell locally:
 # Tasks API on :8000, serving the built web app
 npm --prefix web run build
 cd api && SHELL_URL=http://127.0.0.1:8080 PUBLIC_URL=http://127.0.0.1:8080 BASE_PATH=/apps/tasks \
-  .venv/bin/uvicorn taskwell.main:app --port 8000
+  .venv/bin/uvicorn tasks.main:app --port 8000
 # The shell on :8080 (in westley-app), proxying /apps/tasks to it
 PC_APPS=tasks=/apps/tasks/=http://127.0.0.1:8000 npm run dev
 ```
@@ -53,7 +53,7 @@ Requirements: Python 3.12+, uv, Node 24+, npm. Apple credentials are not needed 
 ./scripts/dev.sh
 ```
 
-Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/taskwell.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled.
+Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/tasks.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled.
 
 To start each component separately:
 
@@ -63,7 +63,7 @@ uv sync --directory api --python 3.12
 npm --prefix web ci
 # Terminal 1:
 cd api
-.venv/bin/uvicorn taskwell.main:app --host 127.0.0.1 --port 8000
+.venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port 8000
 # Terminal 2, from the repository root:
 npm --prefix web run dev
 ```
@@ -80,10 +80,10 @@ Checklists support up to 100 items per task. Completing a task checks its remain
 
 ```sh
 xcodegen generate --spec apple/project.yml
-open apple/Taskwell.xcodeproj
+open apple/Tasks.xcodeproj
 ```
 
-Choose `Taskwell-macOS` or `Taskwell-iOS`. Set your Development Team and real bundle identifiers in `apple/project.yml`, regenerate, and build. Enter the backend's HTTPS origin on the app's connection screen. Simulator interaction tests use local ad hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`) so Keychain works. Unsigned builds only verify compilation. Distribution requires your Apple signing identities and provisioning profiles.
+Choose `Tasks-macOS` or `Tasks-iOS`. Set your Development Team and real bundle identifiers in `apple/project.yml`, regenerate, and build. Enter the backend's HTTPS origin on the app's connection screen. Simulator interaction tests use local ad hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`) so Keychain works. Unsigned builds only verify compilation. Distribution requires your Apple signing identities and provisioning profiles.
 
 Debug builds include a development-token entry so you can use a token from the local web app with `http://localhost:8000` in the Mac app or iOS Simulator. This entry is excluded from Release builds. API tokens intentionally cannot create more tokens or delete the account, so those settings require Apple sign-in. A physical phone requires an HTTPS backend reachable from that device.
 
@@ -102,13 +102,13 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 ```json
 {
   "mcpServers": {
-    "taskwell": {
-      "command": "/absolute/path/to/taskwell/api/.venv/bin/python",
-      "args": ["-m", "taskwell.mcp_server"],
-      "cwd": "/absolute/path/to/taskwell/api",
+    "tasks": {
+      "command": "/absolute/path/to/tasks/api/.venv/bin/python",
+      "args": ["-m", "tasks.mcp_server"],
+      "cwd": "/absolute/path/to/tasks/api",
       "env": {
-        "TASKWELL_API_URL": "https://YOUR_DOMAIN",
-        "TASKWELL_TOKEN": "YOUR_PERSONAL_ACCESS_TOKEN"
+        "TASKS_API_URL": "https://YOUR_DOMAIN",
+        "TASKS_TOKEN": "YOUR_PERSONAL_ACCESS_TOKEN"
       }
     }
   }
@@ -138,7 +138,7 @@ npm test
 
 The browser test uses the real backend and local development account, creates test resources, verifies persisted edits, completion/restoration, project management and token revocation, then removes its test resources. Set `CHROME_PATH` if using an already-installed Chromium binary.
 
-PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Taskwell's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
+PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Tasks's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
 
 To run the Apple tests against the included Postman simulation instead of the in-process fake, start it from the repository root and set `APPLE_SIMULATION_URL=http://localhost:4900/apple`:
 

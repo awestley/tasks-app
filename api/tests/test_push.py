@@ -9,10 +9,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
 
-from taskwell.config import settings
-from taskwell.db import Challenge, Credential, PushSubscription, ReminderDelivery, Task, now
-from taskwell.reminders import purge, tick
-from taskwell.scheduling import reminder_instant
+from tasks.config import settings
+from tasks.db import Challenge, Credential, PushSubscription, ReminderDelivery, Task, now
+from tasks.reminders import purge, tick
+from tasks.scheduling import reminder_instant
 
 # A task saved after its reminder time never fires, so these dates must stay in the future.
 DUE = datetime(2099, 10, 30, 18, 45)
@@ -35,7 +35,7 @@ def push_config(monkeypatch):
         "apns_private_key": pem,
         "apns_team_id": "TESTTEAM",
         "apns_key_id": "TESTKEY",
-        "apple_native_client_ids": "com.example.taskwell.ios",
+        "apple_native_client_ids": "com.example.tasks.ios",
         "vapid_private_key": b64(der),
         "vapid_public_key": b64(public),
         "vapid_subject": "mailto:test@example.com",
@@ -103,7 +103,7 @@ def register_apns(client, prefix="aa"):
     token = prefix + uuid.uuid4().hex + uuid.uuid4().hex
     response = client.post(
         "/api/v1/push/subscriptions",
-        json={"kind": "apns", "token": token, "topic": "com.example.taskwell.ios", "sandbox": True},
+        json={"kind": "apns", "token": token, "topic": "com.example.tasks.ios", "sandbox": True},
     )
     assert response.status_code == 201, response.text
     return response.json()

@@ -1,4 +1,4 @@
-# Taskwell API contract
+# Tasks API contract
 
 All application resources live under `/api/v1` and belong to the authenticated user. Bearer credentials or an HttpOnly session cookie are required. Cookie writes require the configured Origin. Invalid credentials return 401, missing or other-user resources 404, invalid input 422, stale task versions 409, request bodies over 100 KB 413. No cross-user IDs are accepted. Due dates must fall between the years 1900 and 2999. Responses describe what is stored: a task whose schedule no longer validates, for example after a time zone rule change, stays readable, and PATCH returns 422 until the schedule is corrected.
 
@@ -23,7 +23,7 @@ OpenAPI is generated from the same validated schemas used by the server and save
 
 ## MCP transport
 
-`/mcp/` accepts Streamable HTTP using a bearer credential. Cookie-only requests are rejected. The endpoint implements the official MCP SDK protocol and exposes tools rather than a hand-written JSON-RPC approximation. Stdio runs the same tools with `TASKWELL_API_URL` and `TASKWELL_TOKEN`. HTTP MCP currently requires client-configured tokens; OAuth authorization discovery is not implemented.
+`/mcp/` accepts Streamable HTTP using a bearer credential. Cookie-only requests are rejected. The endpoint implements the official MCP SDK protocol and exposes tools rather than a hand-written JSON-RPC approximation. Stdio runs the same tools with `TASKS_API_URL` and `TASKS_TOKEN`. HTTP MCP currently requires client-configured tokens; OAuth authorization discovery is not implemented.
 
 ## Task checklists
 

@@ -23,7 +23,7 @@ from .db import Challenge, Credential, User, get_db, now
 from .schemas import Model
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-COOKIE = "taskwell_session"
+COOKIE = "tasks_session"
 SHELL_COOKIE = "pc_session"
 SHELL_AUDIENCE = "personal-command"
 log = logging.getLogger(__name__)

@@ -2686,7 +2686,7 @@
       "APIKeyCookie": {
         "type": "apiKey",
         "in": "cookie",
-        "name": "taskwell_session"
+        "name": "tasks_session"
       }
     }
   }

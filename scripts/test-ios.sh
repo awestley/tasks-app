@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 # Use a separate simulator and database for UI tests, never the personal workspace.
 # Pass a simulator UDID as the first argument; find one with xcrun simctl list devices.
 device_id="${1:?Usage: bash scripts/test-ios.sh SIMULATOR_UDID}"
-test_directory="$(mktemp -d /tmp/taskwell-ios-test.XXXXXX)"
+test_directory="$(mktemp -d /tmp/tasks-ios-test.XXXXXX)"
 backend_pid=""
 cleanup() {
   if [ -n "$backend_pid" ]; then
@@ -25,7 +25,7 @@ fi
   cd api
   exec env DEV_LOGIN=true PUBLIC_URL=http://127.0.0.1:5173 \
     DATABASE_URL="sqlite:///$test_directory/tasks.db" \
-    .venv/bin/uvicorn taskwell.main:app --host 127.0.0.1 --port 8002
+    .venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port 8002
 ) >"$test_directory/api.log" 2>&1 &
 backend_pid=$!
 for attempt in {1..30}; do
@@ -34,7 +34,7 @@ for attempt in {1..30}; do
 done
 curl --silent --fail http://127.0.0.1:8002/health >/dev/null
 xcodegen generate --spec apple/project.yml
-xcodebuild -project apple/Taskwell.xcodeproj -scheme Taskwell-iOS \
+xcodebuild -project apple/Tasks.xcodeproj -scheme Tasks-iOS \
   -configuration Debug -destination "platform=iOS Simulator,id=$device_id" \
   -derivedDataPath apple/DerivedData-iOS \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \

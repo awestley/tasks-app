@@ -238,7 +238,7 @@ def delete_me(request: Request, user=Depends(authenticate), db: Session = Depend
     db.delete(user)
     db.commit()
     response = Response(status_code=204)
-    response.delete_cookie("taskwell_session")
+    response.delete_cookie("tasks_session")
     return response
 
 

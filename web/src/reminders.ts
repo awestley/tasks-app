@@ -1,7 +1,7 @@
 // Reminders on this device. While any view of the app is open (the companion often is, all day),
 // reminders fire from here even when the server has no push configured. With push set up, the same
 // reminder may also arrive from the server; both use the tag `reminder-<task>-<instant>`
-// (api/taskwell/push.py reminder_tag), so the system shows it once.
+// (api/tasks/push.py reminder_tag), so the system shows it once.
 import { useSyncExternalStore } from "react";
 import type { Task } from "./api";
 import { api } from "./api";
@@ -153,7 +153,7 @@ export async function subscribePush() {
     ...data.keys,
   });
   try {
-    localStorage.setItem("taskwell-push-id", device.id);
+    localStorage.setItem("tasks-push-id", device.id);
   } catch {
     /* private mode */
   }

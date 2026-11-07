@@ -36,7 +36,7 @@ def upgrade_local_database(target=engine):
             for table, columns in LEGACY_COLUMNS.items()
         ):
             raise RuntimeError(
-                "Unversioned database does not match the original Taskwell schema. Back it up and migrate explicitly."
+                "Unversioned database does not match the original Tasks schema. Back it up and migrate explicitly."
             )
         if target.dialect.name != "sqlite":
             raise RuntimeError("Back up and stamp the unversioned PostgreSQL database explicitly before upgrading.")

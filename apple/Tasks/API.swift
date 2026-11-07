@@ -4,7 +4,7 @@ import Security
 enum Keychain {
     static func read(server: String) -> String? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-          kSecAttrService as String: "Taskwell", kSecAttrAccount as String: server,
+          kSecAttrService as String: "Tasks", kSecAttrAccount as String: server,
           kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
@@ -13,7 +13,7 @@ enum Keychain {
     }
     static func save(_ token: String?, server: String) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-          kSecAttrService as String: "Taskwell", kSecAttrAccount as String: server]
+          kSecAttrService as String: "Tasks", kSecAttrAccount as String: server]
         SecItemDelete(query as CFDictionary)
         guard let token else { return }
         var entry = query

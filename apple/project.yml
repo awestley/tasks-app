@@ -1,6 +1,6 @@
-name: Taskwell
+name: Tasks
 options:
-  bundleIdPrefix: com.example.taskwell
+  bundleIdPrefix: com.example.tasks
   deploymentTarget:
     iOS: '17.0'
     macOS: '14.0'
@@ -21,13 +21,13 @@ settings:
     Release:
       APNS_ENVIRONMENT: production
 targets:
-  Taskwell-iOS:
+  Tasks-iOS:
     type: application
     platform: iOS
-    sources: [Taskwell]
+    sources: [Tasks]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.taskwell.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.tasks.ios
         TARGETED_DEVICE_FAMILY: '1,2'
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
@@ -38,13 +38,13 @@ targets:
       properties:
         aps-environment: $(APNS_ENVIRONMENT)
         com.apple.developer.applesignin: [Default]
-  Taskwell-macOS:
+  Tasks-macOS:
     type: application
     platform: macOS
-    sources: [Taskwell]
+    sources: [Tasks]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.taskwell.macos
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.tasks.macos
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
     entitlements:
       path: macOS.entitlements
@@ -53,21 +53,21 @@ targets:
         com.apple.developer.applesignin: [Default]
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
-  Taskwell-iOS-UITests:
+  Tasks-iOS-UITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [TaskwellUITests]
+    sources: [TasksUITests]
     dependencies:
-      - target: Taskwell-iOS
+      - target: Tasks-iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.taskwell.uitests
-        TEST_TARGET_NAME: Taskwell-iOS
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.tasks.uitests
+        TEST_TARGET_NAME: Tasks-iOS
 schemes:
-  Taskwell-iOS:
+  Tasks-iOS:
     build:
       targets:
-        Taskwell-iOS: all
-        Taskwell-iOS-UITests: [test]
+        Tasks-iOS: all
+        Tasks-iOS-UITests: [test]
     test:
-      targets: [Taskwell-iOS-UITests]
+      targets: [Tasks-iOS-UITests]

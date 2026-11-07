@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     environment: str = "development"
-    database_url: str = "sqlite:///./taskwell.db"
+    database_url: str = "sqlite:///./tasks.db"
     public_url: str = "http://localhost:5173"
     secret_key: str = "local-development-only-key-do-not-deploy"
     dev_login: bool = False

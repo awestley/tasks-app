@@ -9,9 +9,9 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from taskwell import auth, events
-from taskwell.config import settings
-from taskwell.search import SearchError, fold, make_snippet, parse_params, score_match, search_docs
+from tasks import auth, events
+from tasks.config import settings
+from tasks.search import SearchError, fold, make_snippet, parse_params, score_match, search_docs
 
 SHELL = "http://shell.test"
 

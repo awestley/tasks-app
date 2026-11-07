@@ -5,7 +5,7 @@ type Device = { id: string; kind: string; name: string };
 type Config = { web_enabled: boolean; vapid_public_key: string | null };
 
 export async function disableBrowserPush() {
-  const id = localStorage.getItem("taskwell-push-id");
+  const id = localStorage.getItem("tasks-push-id");
   if (id) {
     try {
       await api("/push/subscriptions/" + id, "DELETE");
@@ -19,7 +19,7 @@ export async function disableBrowserPush() {
     const registration = await navigator.serviceWorker.getRegistration("./");
     await (await registration?.pushManager.getSubscription())?.unsubscribe();
   }
-  localStorage.removeItem("taskwell-push-id");
+  localStorage.removeItem("tasks-push-id");
 }
 
 export function PushSettings() {
@@ -80,7 +80,7 @@ export function PushSettings() {
       endpoint: data.endpoint,
       ...data.keys,
     });
-    localStorage.setItem("taskwell-push-id", result.id);
+    localStorage.setItem("tasks-push-id", result.id);
   };
   return (
     <section className="push-settings">
@@ -120,7 +120,7 @@ export function PushSettings() {
             disabled={busy}
             onClick={() =>
               perform(async () => {
-                if (device.id === localStorage.getItem("taskwell-push-id"))
+                if (device.id === localStorage.getItem("tasks-push-id"))
                   await disableBrowserPush();
                 else await api("/push/subscriptions/" + device.id, "DELETE");
               })

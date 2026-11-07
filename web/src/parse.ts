@@ -1,5 +1,5 @@
 // Quick add parsing, in the browser, so details highlight as you type and capture works offline.
-// Mirrors api/taskwell/quick_add.py; both run the cases in api/tests/quick_add_cases.json.
+// Mirrors api/tasks/quick_add.py; both run the cases in api/tests/quick_add_cases.json.
 // Unrecognized text stays in the title. A token the user dismissed (its "kind:text" key in
 // `ignore`) also stays in the title.
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main struct TaskwellApp: App {
+@main struct TasksApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
     #else

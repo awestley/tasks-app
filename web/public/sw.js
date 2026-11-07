@@ -51,7 +51,7 @@ self.addEventListener('push', event => {
   let data = {};
   try { data = event.data.json(); } catch { /* Always show a visible notification. */ }
   event.waitUntil(self.registration.showNotification(data.title || 'Task reminder', {
-    body: data.body || 'A task is due.', tag: data.tag || 'taskwell-reminder',
+    body: data.body || 'A task is due.', tag: data.tag || 'tasks-reminder',
     icon: new URL('icon-192.png', scope()).href, data: { task_id: data.task_id },
     actions: [{ action: 'complete', title: 'Complete' }],
   }));
