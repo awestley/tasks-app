@@ -160,6 +160,18 @@ export async function subscribePush() {
   return true;
 }
 
+/** Whether this browser has a push subscription that the server knows about. */
+export async function pushSubscribed() {
+  if (!("PushManager" in window)) return false;
+  try {
+    if (!localStorage.getItem("tasks-push-id")) return false;
+    const reg = await navigator.serviceWorker.getRegistration("./");
+    return !!(await reg?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
 /** Ask for permission (from a button press) and set up push when the server supports it. */
 export async function enableNotifications(): Promise<Permission> {
   if (typeof Notification === "undefined") return "unsupported";

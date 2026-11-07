@@ -168,6 +168,15 @@
         "focus"
       ],
       "reminder_minutes": 0
-    }
+    },
+    {"text": "Today's report", "title": "Today's report"},
+    {"text": "Tomorrow’s plan", "title": "Tomorrow’s plan"},
+    {"text": "Review Monday's agenda", "title": "Review Monday's agenda"},
+    {"text": "Read this morning's notes", "title": "Read this morning's notes"},
+    {"text": "Plan next week's meals", "title": "Plan next week's meals"},
+    {"text": "Report this friday", "title": "Report", "due_date": "2026-11-06"},
+    {"text": "Call 3pm !10080m before", "title": "Call", "due_date": "2026-11-04", "due_time": "15:00", "reminder_minutes": 10080},
+    {"text": "Call 3pm !10081m before", "title": "Call !10081m before", "due_date": "2026-11-04", "due_time": "15:00", "reminder_minutes": 0},
+    {"text": "Call 3pm remind me 10080 minutes before", "title": "Call", "due_date": "2026-11-04", "due_time": "15:00", "reminder_minutes": 10080}
   ]
 }

@@ -75,12 +75,17 @@ export function TaskDetail({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const latest = useRef(task);
   latest.current = task;
+  // What the checklist editor started from: it doesn't follow other devices while it has focus.
+  const checklistBase = useRef(task.checklist);
 
   // Follow changes from elsewhere, except in the field being typed in.
   useEffect(() => {
     if (editing.current !== "title") setTitle(task.title);
     if (editing.current !== "description") setDescription(task.description);
-    if (editing.current !== "checklist") setChecklist(task.checklist);
+    if (editing.current !== "checklist") {
+      setChecklist(task.checklist);
+      checklistBase.current = task.checklist;
+    }
   }, [task.title, task.description, task.checklist]);
   useEffect(() => {
     setConfirm(false);
@@ -99,8 +104,10 @@ export function TaskDetail({
   };
   const saveChecklist = (items: Task["checklist"]) => {
     if (items.some((i) => !i.title.trim())) return; // wait until the new item has a name
-    if (JSON.stringify(items) !== JSON.stringify(latest.current.checklist))
-      save({ checklist: items });
+    if (JSON.stringify(items) !== JSON.stringify(latest.current.checklist)) {
+      save({ checklist: items, checklistBase: checklistBase.current });
+      checklistBase.current = items;
+    }
   };
   // Leaving the task (another row, Escape, closing) saves whatever is still waiting on the pause.
   const draft = useRef({ title, description, checklist });
@@ -120,8 +127,10 @@ export function TaskDetail({
       if (
         !d.checklist.some((i) => !i.title.trim()) &&
         JSON.stringify(d.checklist) !== JSON.stringify(t.checklist)
-      )
+      ) {
         changes.checklist = d.checklist;
+        changes.checklistBase = checklistBase.current;
+      }
       if (Object.keys(changes).length) patchRef.current(changes);
     },
     [],

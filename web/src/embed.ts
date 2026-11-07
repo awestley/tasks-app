@@ -5,6 +5,7 @@
 // Styled only with Glassive custom properties, which inherit through shadow DOM from the host page,
 // so an embedded task matches the note around it. Content is set with textContent only.
 // Plain DOM, no React: this module is loaded into other apps' pages and should stay small.
+import { dueLabel, localDate } from "./due";
 
 type Task = {
   id: string;
@@ -110,26 +111,6 @@ function el<T extends HTMLElement = HTMLElement>(
   const node = Object.assign(document.createElement(tag), props) as T;
   node.append(...children);
   return node;
-}
-
-function localDate(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function dueLabel(task: Task) {
-  if (!task.due_date) return "";
-  const today = localDate();
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const day =
-    task.due_date === today
-      ? "Today"
-      : task.due_date === localDate(tomorrow)
-        ? "Tomorrow"
-        : new Date(task.due_date + "T12:00:00").toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          });
-  return task.due_time ? `${day} ${task.due_time}` : day;
 }
 
 abstract class Embed extends HTMLElement {

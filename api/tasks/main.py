@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from . import events
 from .auth import authenticate, issue, revoke_apple, session_only, trusted_origin
@@ -59,15 +60,20 @@ async def lifespan(app):
         await worker
 
 
+def openapi_path(config):
+    """A personal server has no reason to publish its API, and docs/openapi.json holds the same description.
+    Inside the shell the app contract requires it, and the manifest links to it."""
+    return None if config.production and not config.shell_mode else "/openapi.json"
+
+
 app = FastAPI(
     title="Tasks API",
     version="0.1.0",
     lifespan=lifespan,
     description="Private task management. Authenticate with a revocable personal access token or a session.",
-    # A personal server has no reason to publish its API. docs/openapi.json holds the same description.
     docs_url=None if settings.production else "/docs",
     redoc_url=None if settings.production else "/redoc",
-    openapi_url=None if settings.production else "/openapi.json",
+    openapi_url=openapi_path(settings),
 )
 app.add_middleware(
     CORSMiddleware,
@@ -79,7 +85,8 @@ app.add_middleware(
 app.include_router(auth_router)
 api = APIRouter(prefix="/api/v1", tags=["Workspace"])
 rate_windows = defaultdict(deque)
-MAX_BODY_BYTES = 100_000
+# Fits the largest task the schema allows, written entirely in 4-byte characters.
+MAX_BODY_BYTES = 300_000
 
 
 class BodyLimit:
@@ -160,11 +167,16 @@ async def protect(request: Request, call_next):
             return JSONResponse({"detail": "Bearer token required"}, 401)
         if request.headers.get("origin") and not trusted_origin(request):
             return JSONResponse({"detail": "Invalid request origin"}, 403)
-        with SessionLocal() as db:
-            try:
+
+        def check_credential():
+            with SessionLocal() as db:
                 authenticate(request, db)
-            except HTTPException as error:
-                return JSONResponse({"detail": error.detail}, error.status_code)
+
+        # Off the event loop: this reads the database, and may fetch the shell's keys over the network.
+        try:
+            await run_in_threadpool(check_credential)
+        except HTTPException as error:
+            return JSONResponse({"detail": error.detail}, error.status_code)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
@@ -351,7 +363,9 @@ def create_task(data: TaskCreate, response: Response, user=Depends(authenticate)
         return found
     if data.project_id is not None:
         owned(db, Project, data.project_id, user)
-    task = Task(user_id=user.id, **data.model_dump(exclude={"id"}), **({"id": str(data.id)} if data.id else {}))
+    fields = data.model_dump(exclude={"id"})
+    fields["completed_at"] = (fields["completed_at"] or now()) if fields["completed"] else None
+    task = Task(user_id=user.id, **fields, **({"id": str(data.id)} if data.id else {}))
     db.add(task)
     db.commit()
     events.publish(user.id, task_ref(task.id), "updated", task.version)

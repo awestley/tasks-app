@@ -43,7 +43,7 @@ cd api && SHELL_URL=http://127.0.0.1:8080 PUBLIC_URL=http://127.0.0.1:8080 BASE_
 PC_APPS=tasks=/apps/tasks/=http://127.0.0.1:8000 npm run dev
 ```
 
-Offline: every view keeps a local replica and an outbox in `localStorage` (shared by the column, the companion and any tab, with one sender at a time through Web Locks). Changes show at once and sync in the background; new items get client-made UUIDs; a `409` re-applies the changed fields on top of the newer copy. The service worker keeps the app's files and answers `/search` and `/resolve` with `503 offline` when there is no connection, so the manifest declares `offline`.
+Offline: every view keeps a local replica and an outbox in `localStorage` (shared by the column, the companion and any tab, with one sender at a time through Web Locks). Changes show at once and sync in the background; new items get client-made UUIDs; a `409` re-applies the changed fields on top of the newer copy, and checklists merge item by item. A server error keeps the change and tries again; only a change the server refuses is dropped. The service worker keeps the app's files and answers `/search` and `/resolve` with `503 offline` when there is no connection, so the manifest declares `offline`.
 
 ## Run locally
 
