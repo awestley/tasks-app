@@ -2,6 +2,7 @@ import base64
 import hashlib
 import logging
 import secrets
+import time
 from datetime import timedelta
 from functools import cache
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import APIKeyCookie, HTTPBearer
 from pydantic import Field
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -50,6 +52,9 @@ def shell_keys():
     return jwt.PyJWKClient(settings.jwks_url, cache_keys=True, lifespan=600, timeout=5)
 
 
+SHELL_LEEWAY = 30
+
+
 def verify_shell_token(token):
     """Claims of a valid access token from the shell's identity service, or None."""
     try:
@@ -60,9 +65,12 @@ def verify_shell_token(token):
             algorithms=["ES256"],
             audience=SHELL_AUDIENCE,
             issuer=settings.shell_url,
-            leeway=30,
+            leeway=SHELL_LEEWAY,
             options={"require": ["exp", "iat", "sub", "iss", "aud"]},
         )
+    except jwt.PyJWKClientConnectionError as error:
+        # The shell's keys can't be fetched, which says nothing about this token, so it isn't "signed out".
+        raise HTTPException(503, "Can't check your session right now. Try again shortly.") from error
     except (jwt.PyJWTError, ValueError, TypeError):
         return None
     return claims if isinstance(claims.get("sub"), str) and 0 < len(claims["sub"]) <= 200 else None
@@ -72,15 +80,23 @@ def shell_user(db, claims):
     """The user for a shell identity, created on first use. Data stays keyed by this row, so it survives a
     change of sign in provider in the shell (the sub is stable)."""
     user = db.scalar(select(User).where(User.shell_sub == claims["sub"]))
-    if not user:
-        user = User(
-            apple_sub="shell:" + claims["sub"],
-            shell_sub=claims["sub"],
-            email=str(claims.get("email") or "")[:320],
-            name="My workspace",
-        )
-        db.add(user)
+    if user:
+        return user
+    user = User(
+        apple_sub="shell:" + claims["sub"],
+        shell_sub=claims["sub"],
+        email=str(claims.get("email") or "")[:320],
+        name="My workspace",
+    )
+    db.add(user)
+    try:
         db.commit()
+    except IntegrityError:
+        # A new user's panes load together, so several requests can be the first. One of them won.
+        db.rollback()
+        user = db.scalar(select(User).where(User.shell_sub == claims["sub"]))
+        if not user:
+            raise
     return user
 
 
@@ -111,13 +127,22 @@ def authenticate(
         claims = verify_shell_token(token)
         if not claims:
             raise HTTPException(401, "Session expired")
-        request.state.credential = SimpleNamespace(kind="shell", id=None)
+        request.state.credential = SimpleNamespace(kind="shell", id=None, expires=claims["exp"])
         return shell_user(db, claims)
     credential = db.scalar(select(Credential).where(Credential.digest == digest(token), Credential.expires_at > now()))
     if not credential:
         raise HTTPException(401, "Session expired or token revoked")
     request.state.credential = credential
     return db.get(User, credential.user_id)
+
+
+def still_signed_in(db, credential):
+    """Whether what opened a long-lived connection still counts: a shell token until it expires, and a stored
+    credential until it expires or is revoked."""
+    if credential.kind == "shell":
+        return time.time() < credential.expires + SHELL_LEEWAY
+    query = select(Credential.id).where(Credential.id == credential.id, Credential.expires_at > now())
+    return db.scalar(query) is not None
 
 
 def session_only(request):

@@ -246,6 +246,19 @@ def test_body_limit_applies_without_content_length(client):
     assert "content-length" not in response.request.headers
 
 
+def test_the_largest_valid_task_fits_the_body_limit(client):
+    wide = "\U0001d4b3"  # Four bytes in UTF-8.
+    task = {
+        "title": wide * 500,
+        "description": wide * 10000,
+        "checklist": [{"title": wide * 500} for _ in range(100)],
+    }
+    body = json.dumps(task, ensure_ascii=False).encode()
+    assert len(body) > 240_000
+    response = client.post("/api/v1/tasks", content=body, headers={"Content-Type": "application/json"})
+    assert response.status_code == 201, response.text[:200]
+
+
 def run_body_limit(pieces):
     """Drive the middleware with separate network reads, which the test client always joins into one."""
     received, sent, reads = [], [], iter(pieces)
@@ -265,12 +278,13 @@ def run_body_limit(pieces):
 
 
 def test_body_limit_counts_every_read_and_replays_accepted_bodies():
-    piece = {"type": "http.request", "body": b"a" * 60_000, "more_body": True}
+    size = MAX_BODY_BYTES // 2 + 10_000
+    piece = {"type": "http.request", "body": b"a" * size, "more_body": True}
     last = {"type": "http.request", "body": b"b", "more_body": False}
     received, sent = run_body_limit([piece, piece, last])
     assert not received and sent[0]["status"] == 413
     received, sent = run_body_limit([piece, last])
-    assert received == [{"type": "http.request", "body": b"a" * 60_000 + b"b", "more_body": False}] and not sent
+    assert received == [{"type": "http.request", "body": b"a" * size + b"b", "more_body": False}] and not sent
 
 
 def test_rate_limit_uses_the_address_the_proxy_reports(client, monkeypatch):

@@ -18,4 +18,4 @@ RUN useradd --create-home --uid 10001 tasks && chown -R tasks:tasks /app
 USER tasks
 ENV PATH="/app/api/.venv/bin:$PATH" STATIC_DIRECTORY=/app/web/dist TASKS_API_URL=http://127.0.0.1:8080
 EXPOSE 8080
-CMD ["uvicorn", "tasks.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+CMD ["uvicorn", "tasks.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--timeout-graceful-shutdown", "5"]
