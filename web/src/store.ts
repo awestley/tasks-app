@@ -15,10 +15,13 @@ import {
   allTasks,
   APIError,
   isOffline,
+  isTemporary,
+  type ChecklistItem,
   type Profile,
   type Project,
   type Task,
 } from "./api";
+import { mergeChecklist } from "./checklist";
 
 export type Config = {
   apple_enabled: boolean;
@@ -33,10 +36,12 @@ export type TaskChanges = Partial<TaskFields> & {
   completed?: boolean;
   /** Reopening right after completing: the server also removes an untouched recurring successor. */
   undo?: boolean;
+  /** The list a checklist edit started from, to merge it with changes made elsewhere meanwhile. */
+  checklistBase?: ChecklistItem[];
 };
 type Op = { op: string; at: number } & (
   | { kind: "create"; task: Task }
-  | { kind: "patch"; id: string; changes: TaskChanges }
+  | { kind: "patch"; id: string; changes: TaskChanges; base?: ChecklistItem[] }
   | { kind: "delete"; id: string }
   | { kind: "project-create"; project: Project }
   | {
@@ -62,6 +67,8 @@ export type State = {
   /** Writes not yet on the server. */
   pending: number;
   online: boolean;
+  /** The server had a problem with the last write, which is kept and sent again. */
+  retrying: boolean;
   /** The session ended (inside the shell: sign in again there). */
   expired: boolean;
   /** A write the server refused, to show once. */
@@ -71,6 +78,8 @@ export type State = {
 
 const REPLICA = "tasks.replica.v1";
 const OUTBOX = "tasks.outbox.v1";
+/** Written when someone signs out, so other views of the app in this browser do too. */
+const SIGNED_OUT = "tasks.signed-out";
 const read = <T>(key: string): T | null => {
   try {
     return JSON.parse(localStorage.getItem(key) || "null");
@@ -89,13 +98,14 @@ const storageWorks = (() => {
 })();
 /** The outbox as every view in this browser sees it. */
 const storedQueue = (): Op[] =>
-  storageWorks ? read<Op[]>(OUTBOX) || [] : queue;
+  storageWorks && !unsaved ? read<Op[]>(OUTBOX) || [] : queue;
 const write = (key: string, value: unknown) => {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* private mode or full: the app still works for this session */
+    return false; // private mode or full: the app still works for this session
   }
 };
 
@@ -104,6 +114,8 @@ let server: { tasks: Task[]; projects: Project[] } = {
   projects: [],
 };
 let queue: Op[] = read<Op[]>(OUTBOX) || [];
+/** Storage is full, so the outbox is only in this view's memory until it can be saved again. */
+let unsaved = false;
 let state: State = {
   phase: "loading",
   user: null,
@@ -112,6 +124,7 @@ let state: State = {
   projects: [],
   pending: queue.length,
   online: true,
+  retrying: false,
   expired: false,
   problem: "",
   bootError: "",
@@ -143,7 +156,17 @@ function saveReplica() {
   } satisfies Replica);
 }
 function saveQueue() {
-  write(OUTBOX, queue.length ? queue : null);
+  const value = queue.length ? queue : null;
+  // Unsent changes matter more than the replica, which can be downloaded again.
+  const saved =
+    write(OUTBOX, value) || (write(REPLICA, null) && write(OUTBOX, value));
+  const warn = !saved && !unsaved && storageWorks;
+  unsaved = !saved;
+  if (warn)
+    emit({
+      problem:
+        "Browser storage is full. Keep this page open until your changes sync.",
+    });
 }
 const nowIso = () => new Date().toISOString().replace("Z", "");
 
@@ -188,14 +211,20 @@ function overlay() {
 
 let refreshing: Promise<void> | null = null;
 let refreshAgain = false;
-/** The server's task revision that `server.tasks` is known to match. */
-let lastRevision = "";
+/** What GET /tasks/revision returns when the server has exactly the tasks held here. */
+function localRevision() {
+  let latest = "";
+  for (const task of server.tasks)
+    if (task.updated_at > latest) latest = task.updated_at;
+  return `${server.tasks.length}:${latest}`;
+}
 /** Fetch everything from the server into the replica. */
 export function refresh(): Promise<void> {
   if (refreshing) {
     refreshAgain = true;
     return refreshing;
   }
+  const who = state.user;
   refreshing = (async () => {
     try {
       // Live updates and focus refresh often. Projects are small, and tasks download only if they changed.
@@ -203,20 +232,20 @@ export function refresh(): Promise<void> {
         api<{ revision: string }>("/tasks/revision"),
         api<Project[]>("/projects"),
       ]);
-      const unchanged =
-        revision === lastRevision &&
+      const sameTasks = revision === localRevision();
+      const sameProjects =
         JSON.stringify(projects) === JSON.stringify(server.projects);
-      if (!unchanged) {
-        const tasks =
-          revision === lastRevision ? server.tasks : await allTasks();
-        server = { tasks, projects };
-        // Read before the download, so a change during it only causes one more download.
-        lastRevision = revision;
+      if (!sameTasks || !sameProjects) {
+        server = {
+          tasks: sameTasks ? server.tasks : await allTasks(),
+          projects,
+        };
         saveReplica();
       }
       emit({ online: true, expired: false });
     } catch (e) {
-      handleFailure(e);
+      // A refusal from before someone signed in says nothing about the session they have now.
+      if (state.user === who) handleFailure(e);
     } finally {
       refreshing = null;
       if (refreshAgain) {
@@ -243,12 +272,12 @@ function handleFailure(e: unknown) {
 }
 
 function signedOut() {
+  closeLive();
   server = { tasks: [], projects: [] };
-  lastRevision = "";
   queue = [];
   saveQueue();
   write(REPLICA, null);
-  emit({ phase: "signed-out", user: null, expired: false });
+  emit({ phase: "signed-out", user: null, expired: false, retrying: false });
 }
 
 /**
@@ -257,9 +286,9 @@ function signedOut() {
  */
 function sessionEnded() {
   if (!queue.length) return signedOut();
+  closeLive();
   server = { tasks: [], projects: [] };
-  lastRevision = "";
-  emit({ phase: "signed-out", user: null, expired: false });
+  emit({ phase: "signed-out", user: null, expired: false, retrying: false });
 }
 
 export async function boot() {
@@ -282,6 +311,7 @@ export async function boot() {
       saveQueue();
     }
     emit({ user, phase: "ready", online: true });
+    openLive();
     await refresh();
     flush();
   } catch (e) {
@@ -328,6 +358,7 @@ export async function signedIn() {
     saveQueue();
   }
   emit({ user, phase: "ready", bootError: "", online: true });
+  openLive();
   await refresh();
   flush();
 }
@@ -335,6 +366,9 @@ export async function signedIn() {
 export async function signOut(action: () => Promise<void>) {
   await action();
   signedOut();
+  // Only when someone chose to. An ended session is left for each view to find, because a late refusal
+  // in one view could otherwise end a newer session here and clear the outbox the views share.
+  write(SIGNED_OUT, Date.now());
 }
 
 export const clearProblem = () => emit({ problem: "" });
@@ -342,35 +376,58 @@ export const clearProblem = () => emit({ problem: "" });
 /* ---------- live updates ---------- */
 
 let live = false;
+let source: EventSource | null = null;
+let fallback: ReturnType<typeof setInterval> | undefined;
+/** The stream dropped, so changes may have been missed by the time it is back. */
+let missed = false;
+/** Open the stream when there is someone signed in and the page is showing. */
+function openLive() {
+  if (
+    !live ||
+    source ||
+    typeof EventSource === "undefined" ||
+    !state.user ||
+    document.visibilityState === "hidden"
+  )
+    return;
+  const stream = new EventSource("api/v1/events");
+  source = stream;
+  stream.onmessage = () => refreshSoon();
+  stream.onopen = () => {
+    clearInterval(fallback);
+    fallback = undefined;
+    if (missed) refreshSoon(0);
+    missed = false;
+  };
+  stream.onerror = () => {
+    missed = true;
+    // The browser reconnects by itself, unless the server refused (the session or shell token ended).
+    // Refreshing then shows which: it ends the session, or renews the shell token for the next attempt.
+    if (stream.readyState === EventSource.CLOSED && source === stream) {
+      source = null;
+      refresh();
+    }
+    // Poll meanwhile so nothing is missed.
+    fallback ||= setInterval(() => {
+      refresh();
+      flush();
+      openLive();
+    }, 30000);
+  };
+}
+function closeLive() {
+  source?.close();
+  source = null;
+  clearInterval(fallback);
+  fallback = undefined;
+}
 /** Follow changes from other views and devices. Pauses while the page is hidden. */
 export function startLive() {
   if (live) return;
   live = true;
-  let source: EventSource | null = null;
-  let fallback: ReturnType<typeof setInterval> | undefined;
-  const open = () => {
-    if (source || typeof EventSource === "undefined" || !state.user) return;
-    source = new EventSource("api/v1/events");
-    source.onmessage = () => refreshSoon();
-    source.onopen = () => {
-      clearInterval(fallback);
-      fallback = undefined;
-    };
-    source.onerror = () => {
-      // The browser reconnects by itself; poll meanwhile so nothing is missed.
-      fallback ||= setInterval(() => {
-        refresh();
-        flush();
-      }, 30000);
-    };
-  };
-  const close = () => {
-    source?.close();
-    source = null;
-  };
   const wake = () => {
-    if (document.visibilityState === "hidden") return close();
-    open();
+    if (document.visibilityState === "hidden") return closeLive();
+    openLive();
     refreshSoon(0);
     flush();
   };
@@ -379,20 +436,20 @@ export function startLive() {
   window.addEventListener("focus", () => refreshSoon(0));
   // Another view of the app in this browser changed the replica or the outbox.
   window.addEventListener("storage", (e) => {
-    if (e.key === REPLICA) {
+    if (e.key === SIGNED_OUT) {
+      if (e.newValue && state.user) signedOut();
+    } else if (e.key === REPLICA) {
       const replica = read<Replica>(REPLICA);
       if (replica && state.user && replica.user.id === state.user.id) {
         server = { tasks: replica.tasks, projects: replica.projects };
-        // Another view wrote this, so it may not match the revision seen here.
-        lastRevision = "";
         emit();
       }
-    } else if (e.key === OUTBOX) {
+    } else if (e.key === OUTBOX && !unsaved) {
       queue = read<Op[]>(OUTBOX) || [];
       emit();
     }
   });
-  if (document.visibilityState !== "hidden") open();
+  openLive();
   setInterval(() => {
     if (queue.length && document.visibilityState !== "hidden") flush();
   }, 15000);
@@ -417,7 +474,11 @@ function coalesce() {
     const op = queue[i];
     if (op.kind === "patch" && op.id === last.id) {
       if ("completed" in op.changes) break;
-      queue[i] = { ...op, changes: { ...op.changes, ...last.changes } };
+      queue[i] = {
+        ...op,
+        changes: { ...op.changes, ...last.changes },
+        base: op.base ?? last.base,
+      };
       queue.pop();
       return;
     }
@@ -439,7 +500,10 @@ export function flush() {
     for (;;) {
       queue = storedQueue();
       const op = queue[0];
-      if (!op) break;
+      if (!op) {
+        if (state.retrying) emit({ retrying: false });
+        break;
+      }
       try {
         await send(op);
       } catch (e) {
@@ -450,6 +514,11 @@ export function flush() {
         const status = (e as APIError).status;
         if (status === 401) {
           handleFailure(e);
+          break;
+        }
+        if (isTemporary(e)) {
+          // Keep it and try again: nothing says this change is wrong.
+          emit({ retrying: true });
           break;
         }
         // Refused (a conflict, a deleted item, bad input): drop it and show the server's copy.
@@ -467,7 +536,7 @@ export function flush() {
       }
       drop(op);
       saveReplica();
-      emit({ online: true });
+      emit({ online: true, retrying: false });
     }
   };
   const done = () => {
@@ -505,6 +574,18 @@ async function mergeOn409<T>(
   }
 }
 
+/** The changes to send now: a checklist is merged with what happened to it elsewhere since. */
+function changesToSend(op: Extract<Op, { kind: "patch" }>) {
+  const current = server.tasks.find((t) => t.id === op.id);
+  if (!op.changes.checklist || !op.base || !current) return op.changes;
+  const checklist = mergeChecklist(
+    op.base,
+    op.changes.checklist,
+    current.checklist,
+  );
+  return { ...op.changes, checklist };
+}
+
 async function send(op: Op) {
   if (op.kind === "create") {
     const {
@@ -518,6 +599,7 @@ async function send(op: Op) {
     } = op.task;
     const { reminder_minutes, priority, labels, checklist, recurrence } =
       op.task;
+    const { completed, completed_at } = op.task;
     const task = await api<Task>("/tasks", "POST", {
       id,
       title,
@@ -531,14 +613,15 @@ async function send(op: Op) {
       labels,
       checklist,
       recurrence,
+      ...(completed ? { completed, completed_at } : {}),
     });
     server = { ...server, tasks: upsert(server.tasks, task) };
   } else if (op.kind === "patch") {
     if (serverVersion(op.id) === undefined) await refresh();
     // Only the changed fields are sent, so a 409 (changed on another device) merges field by field:
-    // fetch the newer copy and apply these fields on top of it.
+    // fetch the newer copy and apply these fields on top of it. A checklist merges item by item.
     const task = await mergeOn409(op.id, (version) =>
-      api<Task>(`/tasks/${op.id}`, "PATCH", { ...op.changes, version }),
+      api<Task>(`/tasks/${op.id}`, "PATCH", { ...changesToSend(op), version }),
     );
     server = { ...server, tasks: upsert(server.tasks, task) };
     if (op.changes.completed !== undefined && task.recurrence) refreshSoon(300);
@@ -589,15 +672,16 @@ export const blankTask = (): TaskFields => ({
 });
 
 export function createTask(
-  fields: Partial<TaskFields> & { id?: string },
+  fields: Partial<TaskFields> &
+    Partial<Pick<Task, "id" | "completed" | "completed_at">>,
 ): Task {
   const stamp = nowIso();
   const task: Task = {
     ...blankTask(),
     ...fields,
     id: fields.id || crypto.randomUUID(),
-    completed: false,
-    completed_at: null,
+    completed: fields.completed ?? false,
+    completed_at: fields.completed_at ?? null,
     created_at: stamp,
     updated_at: stamp,
     version: 1,
@@ -605,8 +689,18 @@ export function createTask(
   enqueue({ op: opId(), at: Date.now(), kind: "create", task });
   return task;
 }
-export function patchTask(id: string, changes: TaskChanges) {
-  enqueue({ op: opId(), at: Date.now(), kind: "patch", id, changes });
+export function patchTask(
+  id: string,
+  { checklistBase: base, ...changes }: TaskChanges,
+) {
+  enqueue({
+    op: opId(),
+    at: Date.now(),
+    kind: "patch",
+    id,
+    changes,
+    ...(base ? { base } : {}),
+  });
 }
 export function deleteTask(id: string) {
   enqueue({ op: opId(), at: Date.now(), kind: "delete", id });
@@ -625,11 +719,11 @@ export function patchProject(
 export function deleteProject(id: string) {
   enqueue({ op: opId(), at: Date.now(), kind: "project-delete", id });
 }
-/** Wait until the outbox is empty (or the server is unreachable). */
+/** Wait until the outbox is empty (or it can't be sent right now). */
 export function settled(): Promise<void> {
   return new Promise((resolve) => {
     const check = () => {
-      if (!state.pending || !state.online) {
+      if (!state.pending || !state.online || state.retrying) {
         off();
         resolve();
       }

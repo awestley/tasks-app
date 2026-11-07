@@ -1,7 +1,17 @@
 // Tasks service worker: reminders (push and the app's own), the Complete action on a reminder, and
 // the app's files for offline use. Task data is never cached here; the app keeps its own replica.
 const CACHE = 'tasks-app-v1';
+// Hashed files kept for offline use. Each deploy adds new ones, and the oldest make way.
+const ASSET_LIMIT = 60;
 const scope = () => new URL(self.registration?.scope || self.location.origin + '/');
+
+async function keepAsset(request, response) {
+  const cache = await caches.open(CACHE);
+  await cache.put(request, response);
+  const prefix = scope().pathname + 'assets/';
+  const assets = (await cache.keys()).filter(r => new URL(r.url).pathname.startsWith(prefix));
+  await Promise.all(assets.slice(0, -ASSET_LIMIT).map(r => cache.delete(r)));
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE)
@@ -29,16 +39,17 @@ self.addEventListener('fetch', event => {
     return;
   }
   if (/^(api|auth|mcp|docs|openapi)/.test(path) || path === 'manifest.json') return;
-  if (path.startsWith('assets/') || path === 'embed.js') {
+  if (path.startsWith('assets/')) {
     // Hashed build files never change: cache first.
     event.respondWith(caches.match(request).then(hit => hit || fetch(request).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(request, copy)); }
+      if (res.ok) event.waitUntil(keepAsset(request, res.clone()));
       return res;
     })));
     return;
   }
   if (request.mode === 'navigate' || /\.(html|js|svg|png|webmanifest)$/.test(path) || path === '') {
-    // Network first, so a deploy shows at once; the cache is the offline copy.
+    // Network first, so a deploy shows at once; the cache is the offline copy. This includes embed.js,
+    // whose name stays the same across deploys because other apps load it.
     const key = request.mode === 'navigate' ? new URL(path.startsWith('companion') ? 'companion.html' : './', base).href : request;
     event.respondWith(fetch(request).then(res => {
       if (res.ok && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(key, copy)); }

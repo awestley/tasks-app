@@ -13,6 +13,7 @@ import {
 import { api, type Profile, type Session, type Token } from "./api";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
+import { flush } from "./store";
 import { reminderChoices } from "./ui";
 
 export function Modal({
@@ -236,6 +237,7 @@ export function ShortcutsDialog({ close }: { close: () => void }) {
 export function SettingsPanel({
   user,
   shell,
+  unsent,
   close,
   logout,
   deleteAccount,
@@ -243,6 +245,8 @@ export function SettingsPanel({
 }: {
   user: Profile;
   shell: boolean;
+  /** Changes not yet on the server, which signing out discards. */
+  unsent: number;
   close: () => void;
   logout: () => void;
   deleteAccount: () => void;
@@ -255,7 +259,9 @@ export function SettingsPanel({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [confirm, setConfirm] = useState(""),
+    [leaving, setLeaving] = useState(false),
     [auto, setAuto] = useState(autoReminder());
+  const warnUnsent = leaving && unsent > 0;
   const load = () => api<Token[]>("/tokens").then(setTokens);
   const loadSessions = () => api<Session[]>("/sessions").then(setSessions);
   useEffect(() => {
@@ -291,11 +297,25 @@ export function SettingsPanel({
           <p>{user.email}</p>
         </div>
         {!shell && (
-          <button className="secondary" onClick={logout}>
-            <LogOut size={14} /> Sign out
+          <button
+            className={warnUnsent ? "danger-button mod-cta" : "secondary"}
+            onClick={() => {
+              if (unsent > 0 && !leaving) {
+                setLeaving(true);
+                flush();
+              } else logout();
+            }}
+          >
+            <LogOut size={14} /> {warnUnsent ? "Sign out anyway" : "Sign out"}
           </button>
         )}
       </div>
+      {warnUnsent && (
+        <p role="alert" className="error-text">
+          {unsent} change{unsent === 1 ? "" : "s"} not synced. Signing out
+          discards {unsent === 1 ? "it" : "them"}.
+        </p>
+      )}
       <section className="settings-block">
         <div className="settings-title">
           <Bell size={18} />

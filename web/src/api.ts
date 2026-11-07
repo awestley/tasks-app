@@ -45,6 +45,11 @@ export class APIError extends Error {
 export const isOffline = (e: unknown) =>
   e instanceof TypeError ||
   [0, 502, 503, 504].includes((e as APIError)?.status);
+/** The server had a problem or asked to wait, which says nothing about the request itself. */
+export const isTemporary = (e: unknown) => {
+  const status = (e as APIError)?.status;
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+};
 let refreshing: Promise<boolean> | null = null;
 /** Inside Personal Command the shell's access token is short-lived; renew it once on a 401. */
 function renewShellSession() {
@@ -86,7 +91,9 @@ export async function api<T>(
       response.status,
       typeof body.detail === "string"
         ? body.detail
-        : "Please check your input and try again.",
+        : response.status >= 500
+          ? "The server had a problem. Please try again."
+          : "Please check your input and try again.",
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
