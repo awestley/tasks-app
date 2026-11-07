@@ -27,6 +27,7 @@ targets:
     sources: [Tasks]
     settings:
       base:
+        PRODUCT_NAME: Tasks
         PRODUCT_BUNDLE_IDENTIFIER: com.example.tasks.ios
         TARGETED_DEVICE_FAMILY: '1,2'
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -44,6 +45,7 @@ targets:
     sources: [Tasks]
     settings:
       base:
+        PRODUCT_NAME: Tasks
         PRODUCT_BUNDLE_IDENTIFIER: com.example.tasks.macos
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
     entitlements:

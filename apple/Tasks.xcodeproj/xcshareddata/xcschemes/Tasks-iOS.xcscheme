@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-               BuildableName = "Tasks-iOS.app"
+               BuildableName = "Tasks.app"
                BlueprintName = "Tasks-iOS"
                ReferencedContainer = "container:Tasks.xcodeproj">
             </BuildableReference>
@@ -47,7 +47,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks-iOS.app"
+            BuildableName = "Tasks.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>
@@ -83,7 +83,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks-iOS.app"
+            BuildableName = "Tasks.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>
@@ -100,7 +100,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks-iOS.app"
+            BuildableName = "Tasks.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>
