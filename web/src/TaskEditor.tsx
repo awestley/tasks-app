@@ -44,6 +44,7 @@ export function TaskEditor({
           labels: task.labels,
           checklist: task.checklist,
           recurrence: task.recurrence,
+          alert_style: task.alert_style ?? "notification",
         }
       : { ...emptyDraft(), project_id: initialProject, due_date: initialDate },
   );
@@ -324,6 +325,24 @@ export function TaskEditor({
                 )}
             </select>
           </label>
+          {draft.reminder_minutes !== null && (
+            <label>
+              Alert
+              <select
+                aria-label="Alert"
+                value={draft.alert_style}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    alert_style: e.target.value as Draft["alert_style"],
+                  })
+                }
+              >
+                <option value="notification">Notification</option>
+                <option value="alarm">Alarm on iPhone</option>
+              </select>
+            </label>
+          )}
           <label>
             <Flag size={14} /> Priority
             <select

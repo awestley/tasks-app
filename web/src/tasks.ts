@@ -22,6 +22,7 @@ export type Draft = Pick<
   | "labels"
   | "recurrence"
   | "checklist"
+  | "alert_style"
 >;
 export const emptyDraft = (): Draft => ({
   title: "",
@@ -35,6 +36,7 @@ export const emptyDraft = (): Draft => ({
   labels: [],
   checklist: [],
   recurrence: null,
+  alert_style: "notification",
 });
 export const daysFromNow = (days: number) => {
   const d = new Date();
@@ -59,6 +61,16 @@ export const reminderChoices: [number, string][] = [
   [60, "1 hour before"],
   [1440, "1 day before"],
 ];
+/** 09:00 tomorrow on this device, as an ISO time with offset. */
+export const tomorrowMorning = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.toISOString();
+};
+/** The server stores UTC times without an offset. */
+export const serverTime = (value: string) =>
+  new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : value + "Z");
 export const taskLink = (task: Task) => `${location.origin}/?task=${task.id}`;
 export const parseLabels = (text: string) =>
   text

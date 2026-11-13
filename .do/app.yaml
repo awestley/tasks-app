@@ -1,10 +1,10 @@
 # Replace repository, domain and Apple identifiers before deployment.
-name: taskwell
+name: tasks
 region: nyc
 services:
   - name: app
     github:
-      repo: YOUR_GITHUB_OWNER/taskwell
+      repo: YOUR_GITHUB_OWNER/tasks
       branch: dev
       deploy_on_push: true
     dockerfile_path: Dockerfile
@@ -21,7 +21,7 @@ services:
         value: production
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${taskwell-db.DATABASE_URL}
+        value: ${tasks-db.DATABASE_URL}
       - key: PUBLIC_URL
         value: https://tasks.example.com
       - key: DEV_LOGIN
@@ -41,14 +41,14 @@ services:
         type: SECRET
         value: REPLACE_WITH_APPLE_P8_KEY
       - key: APPLE_WEB_CLIENT_ID
-        value: com.example.taskwell.web
+        value: com.example.tasks.web
       - key: APPLE_NATIVE_CLIENT_IDS
-        value: com.example.taskwell.ios,com.example.taskwell.macos
+        value: com.example.tasks.ios,com.example.tasks.macos
 jobs:
   - name: migrate
     kind: PRE_DEPLOY
     github:
-      repo: YOUR_GITHUB_OWNER/taskwell
+      repo: YOUR_GITHUB_OWNER/tasks
       branch: dev
     dockerfile_path: Dockerfile
     run_command: alembic upgrade head
@@ -56,11 +56,11 @@ jobs:
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${taskwell-db.DATABASE_URL}
+        value: ${tasks-db.DATABASE_URL}
 databases:
-  - name: taskwell-db
+  - name: tasks-db
     engine: PG
     production: true
-    cluster_name: taskwell-db
-    db_name: taskwell
-    db_user: taskwell
+    cluster_name: tasks-db
+    db_name: tasks
+    db_user: tasks

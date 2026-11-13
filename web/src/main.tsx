@@ -37,7 +37,7 @@ import {
 } from "./api";
 import "./glassive.css";
 import "./style.css";
-import { disableBrowserPush } from "./PushSettings";
+import { clearStaleNotifications, disableBrowserPush } from "./PushSettings";
 import { Logo } from "./Logo";
 import { ProjectEditor } from "./ProjectEditor";
 import { SettingsPanel } from "./SettingsPanel";
@@ -84,7 +84,13 @@ function App() {
       api<Project[]>("/projects"),
     ]);
     setTasks(nextTasks);
-    const taskId = new URLSearchParams(location.search).get("task");
+    clearStaleNotifications(nextTasks);
+    const params = new URLSearchParams(location.search);
+    if (params.get("view") === "today") {
+      setView("today");
+      history.replaceState(null, "", location.pathname);
+    }
+    const taskId = params.get("task");
     if (taskId) {
       const target = nextTasks.find((t) => t.id === taskId);
       if (target) setEditor(target);
@@ -93,6 +99,16 @@ function App() {
     setProjects(nextProjects);
     return nextTasks;
   }, []);
+  // A notification action changed a task from the service worker.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const changed = (event: MessageEvent) => {
+      if (event.data?.type === "tasks-changed") refresh().catch(() => {});
+    };
+    navigator.serviceWorker.addEventListener("message", changed);
+    return () =>
+      navigator.serviceWorker.removeEventListener("message", changed);
+  }, [refresh]);
   useEffect(() => {
     Promise.all([api<Profile>("/me"), api<typeof config>("/auth/config")])
       .then(async ([profile, cfg]) => {
@@ -335,6 +351,7 @@ function App() {
         priority: task.priority,
         labels: task.labels,
         recurrence: task.recurrence,
+        alert_style: task.alert_style,
         checklist: task.checklist.map(({ title, completed }) => ({
           title,
           completed,
@@ -342,6 +359,12 @@ function App() {
       });
       await refresh();
       setNotice("Task duplicated");
+    });
+  const snooze = (task: Task, change: { minutes?: number; until?: string }) =>
+    run(async () => {
+      await api(`/tasks/${task.id}/snooze`, "POST", change);
+      await refresh();
+      setNotice("Task snoozed");
     });
   const removeTask = (task: Task) =>
     run(async () => {
@@ -392,6 +415,7 @@ function App() {
       schedule,
       setPriority,
       patch,
+      snooze,
       duplicate,
       copy,
       remove: removeTask,

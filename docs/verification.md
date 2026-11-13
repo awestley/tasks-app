@@ -72,7 +72,7 @@ Ran `bash scripts/test-ios.sh 6DEF783D-47A6-4469-BAF1-A793A86AC64E` on the iPhon
 
 Testing exposed and fixed stale task/project editor selection and error alerts dismissing the active sheet. The server URL field now disables correction/capitalization, and Settings has an explicit accessibility label. Simulator UI runs use ad hoc signing so Keychain entitlements are present; earlier unsigned build checks did not establish runtime sign-in behavior. The shared changes also passed a macOS Debug compile.
 
-Result: `apple/DerivedData-iOS/Logs/Test/Test-Taskwell-iOS-2026.10.31_22-54-48--0400.xcresult`. This verifies local native UI and API integration, not live Apple authentication, physical-device provisioning, or APNs delivery.
+Result: `apple/DerivedData-iOS/Logs/Test/Test-Tasks-iOS-2026.10.31_22-54-48--0400.xcresult`. This verifies local native UI and API integration, not live Apple authentication, physical-device provisioning, or APNs delivery.
 
 ## Code review fixes, November 6, 2026
 
@@ -98,3 +98,28 @@ Fixed the Low findings from the same review: unhandled server errors on bad inpu
 - A one-off simulator check counted push registrations across seven refreshes: one with the fix, six with the previous code.
 
 Not verified: the purge running on its hourly schedule in a long-lived process (tests call it directly and it ran once at startup), the macOS app's interface, and everything listed as not verified in the previous section.
+
+## Sign-in screen and authentication, November 7, 2026
+
+The Mac and iPhone sign-in screen now asks the server which methods it offers, as the web does, instead of always requesting an Apple challenge. Development servers offer **Open local workspace** to the apps through a new native route. Development sign-in answers only this computer, and production cookies use the `__Host-` prefix. [Authentication design](authentication.md) records the reasoning.
+
+- 130 API tests passed on SQLite with one PostgreSQL-only test skipped. New tests cover development sign-in being off by default, refused from other addresses and from any request with an Origin header on the native route, honoring the proxy-reported address, issuing a full native session, and the production cookie name and attributes.
+- macOS Debug and iOS Simulator builds passed. Seven iOS UI tests, including a new local workspace sign-in and sign-out test, passed twice in a row on an iPhone 17 simulator with iOS 27.2 against an isolated backend.
+- Manual simulator checks against a backend with this code: a new server, local workspace sign-in creating one `native` session, a session revoked on the server returning to the card with an inline message and the saved server's options, an unreachable server, and dark mode.
+- The built web app signed in to the local workspace against the same backend.
+
+Testing found and fixed three problems in the first version of the new screen: the server field had no VoiceOver label, a scroll view swallowed taps made just after typing, and re-centering the card while the keyboard was up sometimes stalled the interface.
+
+Not verified: real Sign in with Apple on either platform, which needs the Apple Developer configuration; the macOS sign-in screen interactively, which shares the iOS view code but was only compiled; and PostgreSQL for the new tests.
+
+## Smarter notifications, November 12, 2026
+
+Added notification actions (Complete, Snooze, Tomorrow), server-side snooze delivered to every device, project grouping, Time Sensitive urgency by priority, relevance scores, badges, replacement of earlier notifications for the same task, background pushes that remove notifications for tasks finished elsewhere, an optional morning summary and overdue follow-up, App Intents for Siri and Shortcuts, a notification service extension that tags pushed reminders with the task's entity (iOS 27 `appEntityIdentifiers`), and AlarmKit alarm-style reminders on iPhone. The Apple apps now require iOS 27 and macOS 27. See [reminders](reminders.md).
+
+- 147 API tests passed on SQLite with one PostgreSQL-only test skipped. 16 new tests cover snooze validation and delivery, snooze clearing, overdue follow-ups once per occurrence, summaries at local time across DST and skipped when empty, APNs payload keys and headers, the Time Sensitive setting, armed-alarm suppression per device, and background sync pushes, including after deletion. The in-process fake APNs provider and the Postman mock script now reject invalid interruption levels, relevance scores and background push formats.
+- Migration 0005 upgraded, backfilled delivery keys in the format the delivery loop uses, downgraded and upgraded again on SQLite. Ruff and the OpenAPI snapshot are current.
+- 18 browser tests passed against an isolated backend, including new tests for the snooze menu, notification settings persistence, and the service worker's actions, badge and stale-notification removal with simulated browser APIs.
+- iOS Simulator and macOS Debug builds passed with no warnings, including both notification service extensions. All 7 iOS UI tests passed on an iPhone 17 simulator with iOS 27.2, including new checks for the Alert picker and saving the morning summary setting. The tests now dismiss the simulator's own "Save Password?" sheet, which covered the app after the token was typed. A refresh that waited on notification and alarm calls kept the task list busy; that work now runs separately.
+- The simulator's system log showed the notification service extension registered with the system.
+
+Not verified: notification display, actions, extension entity tagging and badge on a device or simulator (the permission prompt did not appear in the simulator and automated input stopped registering), AlarmKit alarms ringing, Siri acting on notifications or alarms, the Time Sensitive capability with real provisioning, live APNs and Web Push, PostgreSQL for migration 0005, and the MCP smoke script for the new `snooze_task` tool.

@@ -18,7 +18,7 @@ func writeIcon(_ size: Int, _ path: String) throws {
     CGImageDestinationAddImage(destination, context.makeImage()!, nil)
     guard CGImageDestinationFinalize(destination) else { throw NSError(domain: "Icons", code: 1) }
 }
-let folder = "apple/Taskwell/Assets.xcassets/AppIcon.appiconset/"
+let folder = "apple/Tasks/Assets.xcassets/AppIcon.appiconset/"
 let data = try Data(contentsOf: URL(fileURLWithPath: folder + "Contents.json"))
 let contents = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 for item in contents["images"] as! [[String: String]] {

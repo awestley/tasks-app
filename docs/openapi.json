@@ -31,7 +31,28 @@
           "Authentication"
         ],
         "summary": "Dev",
+        "description": "Signs the browser in to the local development workspace.",
         "operationId": "dev_auth_dev_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/dev/native": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Dev Native",
+        "description": "Signs a development build of the Mac or iPhone app in to the local development workspace.",
+        "operationId": "dev_native_auth_dev_native_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -341,6 +362,60 @@
             }
           }
         ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/push/subscriptions/{subscription_id}/alarms": {
+      "put": {
+        "tags": [
+          "Push"
+        ],
+        "summary": "Armed Alarms",
+        "description": "The alarms an iPhone has scheduled with AlarmKit. Their reminders are not also sent to it as notifications.",
+        "operationId": "armed_alarms_api_v1_push_subscriptions__subscription_id__alarms_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subscription Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArmedAlarmsIn"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -859,6 +934,54 @@
       }
     },
     "/api/v1/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Get Task",
+        "operationId": "get_task_api_v1_tasks__task_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Workspace"
@@ -1027,6 +1150,145 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/tasks/{task_id}/snooze": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Snooze Task",
+        "description": "Notify every enabled device again at a later time. Works from a notification without the task's version.",
+        "operationId": "snooze_task_api_v1_tasks__task_id__snooze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnoozeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/settings": {
+      "get": {
+        "tags": [
+          "Workspace",
+          "Push"
+        ],
+        "summary": "Notification Settings",
+        "operationId": "notification_settings_api_v1_notifications_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Workspace",
+          "Push"
+        ],
+        "summary": "Save Notification Settings",
+        "operationId": "save_notification_settings_api_v1_notifications_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/v1/tokens": {
@@ -1229,6 +1491,46 @@
   },
   "components": {
     "schemas": {
+      "ArmedAlarm": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "at"
+        ],
+        "title": "ArmedAlarm"
+      },
+      "ArmedAlarmsIn": {
+        "properties": {
+          "alarms": {
+            "items": {
+              "$ref": "#/components/schemas/ArmedAlarm"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Alarms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "alarms"
+        ],
+        "title": "ArmedAlarmsIn"
+      },
       "ChecklistItem": {
         "properties": {
           "id": {
@@ -1328,6 +1630,98 @@
           "code"
         ],
         "title": "NativeExchange"
+      },
+      "NotificationSettingsIn": {
+        "properties": {
+          "summary_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Time"
+          },
+          "summary_zone": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Summary Zone",
+            "default": "UTC"
+          },
+          "overdue_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  30,
+                  60,
+                  120,
+                  240
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overdue Minutes"
+          },
+          "time_sensitive_priority": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Time Sensitive Priority",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationSettingsIn"
+      },
+      "NotificationSettingsOut": {
+        "properties": {
+          "summary_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Time"
+          },
+          "summary_zone": {
+            "type": "string",
+            "title": "Summary Zone"
+          },
+          "overdue_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overdue Minutes"
+          },
+          "time_sensitive_priority": {
+            "type": "integer",
+            "title": "Time Sensitive Priority"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary_time",
+          "summary_zone",
+          "overdue_minutes",
+          "time_sensitive_priority"
+        ],
+        "title": "NotificationSettingsOut"
       },
       "ParseInput": {
         "properties": {
@@ -1609,6 +2003,39 @@
         ],
         "title": "SessionOut"
       },
+      "SnoozeIn": {
+        "properties": {
+          "minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10080.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SnoozeIn",
+        "description": "Remind again after a number of minutes, or at a given time. At most 7 days ahead."
+      },
       "SubscriptionIn": {
         "properties": {
           "kind": {
@@ -1828,6 +2255,15 @@
               }
             ],
             "title": "Recurrence"
+          },
+          "alert_style": {
+            "type": "string",
+            "enum": [
+              "notification",
+              "alarm"
+            ],
+            "title": "Alert Style",
+            "default": "notification"
           }
         },
         "additionalProperties": false,
@@ -1928,6 +2364,23 @@
               }
             ],
             "title": "Recurrence"
+          },
+          "alert_style": {
+            "type": "string",
+            "title": "Alert Style",
+            "default": "notification"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
           },
           "completed": {
             "type": "boolean",
@@ -2145,6 +2598,21 @@
               }
             ],
             "title": "Checklist"
+          },
+          "alert_style": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "notification",
+                  "alarm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Style"
           }
         },
         "additionalProperties": false,
@@ -2278,8 +2746,9 @@
       },
       "APIKeyCookie": {
         "type": "apiKey",
+        "description": "Browser session. Named __Host-tasks_session in production.",
         "in": "cookie",
-        "name": "taskwell_session"
+        "name": "tasks_session"
       }
     }
   }

@@ -1926,7 +1926,7 @@ wheels = [
 ]
 
 [[package]]
-name = "taskwell"
+name = "tasks"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -1940,7 +1940,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "pywebpush" },
+    { name = "requests" },
     { name = "sqlalchemy" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1963,7 +1965,9 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10,<3" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "pywebpush", specifier = ">=2.0,<3" },
+    { name = "requests", specifier = ">=2.32,<3" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "urllib3", specifier = ">=2.2,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
 ]
 

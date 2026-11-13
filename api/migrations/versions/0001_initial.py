@@ -1,4 +1,4 @@
-"""Initial Taskwell schema."""
+"""Initial schema."""
 
 import sqlalchemy as sa
 from alembic import op

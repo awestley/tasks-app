@@ -13,14 +13,14 @@
 ## Option A: App Platform
 
 1. Push the source to your repository.
-2. Create a production Managed PostgreSQL cluster named `taskwell-db` in the intended region. Create the database and user named `taskwell`, or update the spec to match existing names. Enable backups and restrict trusted sources to the application.
+2. Create a production Managed PostgreSQL cluster named `tasks-db` in the intended region. Create the database and user named `tasks`, or update the spec to match existing names. Enable backups and restrict trusted sources to the application.
 3. Update `.do/app.yaml`: repository, branch, region, cluster name, public URL, and Apple identifiers. Add your custom domain in App Platform. Both the service and migration job must use the same source revision.
 4. Set `SECRET_KEY` and `APPLE_PRIVATE_KEY` as encrypted App Platform secrets. Replace the template values in the deployment form or a private copy of the spec. Do not commit secrets. Generate a strong secret with `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`.
 5. Validate the template schema with `doctl apps spec validate .do/app.yaml --schema-only`. After replacing placeholders, validate against your selected account and create the app through App Platform or `doctl apps create --spec PRIVATE_SPEC_PATH`.
 6. The PRE_DEPLOY job runs `alembic upgrade head`. The application does not auto-create tables in production. Deploying multiple instances is safe for credential consumption and task version checks because those operations are atomic in PostgreSQL.
 7. Configure DNS and verify HTTPS before enabling Apple's return URL. Check `/health`, sign in, create a task on one client and read it from another, and verify token revocation through MCP.
 
-The service uses one application process per container and a per-process sign-in rate limiter. Add edge rate limiting or a shared limiter before scaling to multiple instances. `CLIENT_IP_HEADER` tells the limiter which header holds the client address. The spec sets [`do-connecting-ip`](https://docs.digitalocean.com/support/where-can-i-find-the-client-ip-address-of-a-request-connecting-to-my-app); after deploying, confirm in your logs or with a test request that it holds the real client address, because without it every client shares one limit. `TASKWELL_API_URL` inside the container points to its own loopback API for HTTP MCP tool calls. The platform terminates TLS.
+The service uses one application process per container and a per-process sign-in rate limiter. Add edge rate limiting or a shared limiter before scaling to multiple instances. `CLIENT_IP_HEADER` tells the limiter which header holds the client address. The spec sets [`do-connecting-ip`](https://docs.digitalocean.com/support/where-can-i-find-the-client-ip-address-of-a-request-connecting-to-my-app); after deploying, confirm in your logs or with a test request that it holds the real client address, because without it every client shares one limit. `TASKS_API_URL` inside the container points to its own loopback API for HTTP MCP tool calls. The platform terminates TLS.
 
 ## Option B: Ubuntu Droplet with Docker
 

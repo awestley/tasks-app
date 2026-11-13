@@ -1,5 +1,6 @@
 import {
   ArrowRightToLine,
+  AlarmClockOff,
   Bell,
   Calendar,
   CheckCircle2,
@@ -23,6 +24,7 @@ import {
   priorityNames,
   reminderChoices,
   taskLink,
+  tomorrowMorning,
   weekday,
 } from "./tasks";
 
@@ -35,6 +37,7 @@ export type TaskMenuContext = {
   schedule: (task: Task, due: string | null) => void;
   setPriority: (task: Task, priority: number) => void;
   patch: (task: Task, changes: Partial<Task>, message: string) => void;
+  snooze: (task: Task, change: { minutes?: number; until?: string }) => void;
   duplicate: (task: Task) => void;
   copy: (text: string, message: string) => void;
   remove: (task: Task) => void;
@@ -50,6 +53,7 @@ export function taskMenu(task: Task, context: TaskMenuContext): MenuEntry[] {
     schedule,
     setPriority,
     patch,
+    snooze,
     duplicate,
     copy,
     remove,
@@ -169,6 +173,29 @@ export function taskMenu(task: Task, context: TaskMenuContext): MenuEntry[] {
                 action: () =>
                   patch(task, { reminder_minutes: minutes }, "Reminder set"),
               })),
+            ],
+          },
+        ]
+      : []),
+    ...(!task.completed
+      ? [
+          {
+            label: "Snooze",
+            icon: <AlarmClockOff size={16} />,
+            items: [
+              {
+                label: "15 minutes",
+                action: () => snooze(task, { minutes: 15 }),
+              },
+              { label: "1 hour", action: () => snooze(task, { minutes: 60 }) },
+              {
+                label: "3 hours",
+                action: () => snooze(task, { minutes: 180 }),
+              },
+              {
+                label: "Tomorrow 09:00",
+                action: () => snooze(task, { until: tomorrowMorning() }),
+              },
             ],
           },
         ]

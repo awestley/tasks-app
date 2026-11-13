@@ -1182,6 +1182,32 @@ input[type="checkbox"] {
   font-weight: 600;
   line-height: 20px;
 }
+.notification-preferences {
+  justify-self: stretch;
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border-subtle);
+  font-size: 13px;
+}
+.notification-preferences > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notification-preferences > label.check {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.notification-preferences select,
+.notification-preferences input[type="time"] {
+  min-width: 170px;
+}
+.notification-preferences .muted {
+  font-size: 12px;
+  line-height: 16px;
+}
 .push-device {
   justify-self: stretch;
   display: flex;

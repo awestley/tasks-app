@@ -13,6 +13,8 @@ export type Task = {
   labels: string[];
   checklist: ChecklistItem[];
   recurrence: string | null;
+  alert_style: "notification" | "alarm";
+  snoozed_until: string | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;

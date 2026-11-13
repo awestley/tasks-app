@@ -8,6 +8,7 @@ import {
   Tag,
 } from "lucide-react";
 import { dateLabel, type Project, type Task } from "./api";
+import { serverTime } from "./tasks";
 
 export function TaskRow({
   task,
@@ -34,6 +35,17 @@ export function TaskRow({
   goToProject: (task: Task) => void;
   openMenu: (box: DOMRect) => void;
 }) {
+  const snoozedAt =
+    task.snoozed_until && !task.completed
+      ? serverTime(task.snoozed_until)
+      : null;
+  const snoozed =
+    snoozedAt && snoozedAt > new Date()
+      ? snoozedAt.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
   return (
     <div
       className={`task-row ${task.completed ? "is-complete" : ""} ${menuOpen ? "menu-target" : ""}`}
@@ -69,7 +81,12 @@ export function TaskRow({
               <CalendarDays size={12} />
               {dateLabel(task.due_date)}
               {task.due_time ? ` · ${task.due_time} (${task.time_zone})` : ""}
-              {task.reminder_minutes !== null ? " · Reminder" : ""}
+              {task.reminder_minutes !== null
+                ? task.alert_style === "alarm"
+                  ? " · Alarm"
+                  : " · Reminder"
+                : ""}
+              {snoozed ? ` · Snoozed until ${snoozed}` : ""}
               {task.recurrence && <Repeat2 size={12} />}
             </span>
           )}

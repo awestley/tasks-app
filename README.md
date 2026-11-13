@@ -1,17 +1,17 @@
-# Taskwell
+# Tasks
 
 A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for DigitalOcean with Sign in with Apple.
 
-![Taskwell web workspace](docs/screenshots/web-desktop.png)
+![Tasks web workspace](docs/screenshots/web-desktop.png)
 
 ## Included
 
 - Responsive React web app with Inbox, Today, Upcoming, projects, labels, search, priorities, completed history, and keyboard shortcuts.
 - Create, edit, complete, restore, and delete tasks, with checklists inside each task. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
 - Native SwiftUI macOS and iOS applications using the same backend. Apple sign-in, Keychain sessions, projects, task editing, search, API tokens, and account deletion.
-- English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Push delivery requires server configuration and device permission.
+- English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, Siri support, and alarm-style reminders on iPhone. Push delivery requires server configuration and device permission.
 - Versioned REST API and generated OpenAPI contract.
-- MCP over stdio and authenticated Streamable HTTP, with eight task and project tools.
+- MCP over stdio and authenticated Streamable HTTP, with nine task and project tools.
 - Sign in with Apple code exchange, signature/audience/issuer/expiry/nonce validation, one-time challenges, browser binding, and revocable sessions.
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
@@ -25,7 +25,7 @@ Requirements: Python 3.12+, uv, Node 24+, npm. Apple credentials are not needed 
 ./scripts/dev.sh
 ```
 
-Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/taskwell.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled.
+Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/tasks.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only, and local sign-in answers only requests from this computer. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled. [Authentication design](docs/authentication.md) explains every sign-in method and its safeguards.
 
 To start each component separately:
 
@@ -35,7 +35,7 @@ uv sync --directory api --python 3.12
 npm --prefix web ci
 # Terminal 1:
 cd api
-.venv/bin/uvicorn taskwell.main:app --host 127.0.0.1 --port 8000
+.venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port 8000
 # Terminal 2, from the repository root:
 npm --prefix web run dev
 ```
@@ -52,12 +52,12 @@ Checklists support up to 100 items per task. Completing a task checks its remain
 
 ```sh
 xcodegen generate --spec apple/project.yml
-open apple/Taskwell.xcodeproj
+open apple/Tasks.xcodeproj
 ```
 
-Choose `Taskwell-macOS` or `Taskwell-iOS`. Set your Development Team and real bundle identifiers in `apple/project.yml`, regenerate, and build. Enter the backend's HTTPS origin on the app's connection screen. Simulator interaction tests use local ad hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`) so Keychain works. Unsigned builds only verify compilation. Distribution requires your Apple signing identities and provisioning profiles.
+Choose `Tasks-macOS` or `Tasks-iOS`. Set your Development Team and real bundle identifiers in `apple/project.yml`, regenerate, and build. Enter the backend's HTTPS origin on the app's connection screen. Simulator interaction tests use local ad hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`) so Keychain works. Unsigned builds only verify compilation. Distribution requires your Apple signing identities and provisioning profiles.
 
-Debug builds include a development-token entry so you can use a token from the local web app with `http://localhost:8000` in the Mac app or iOS Simulator. This entry is excluded from Release builds. API tokens intentionally cannot create more tokens or delete the account, so those settings require Apple sign-in. A physical phone requires an HTTPS backend reachable from that device.
+Debug builds connected to a local development server, such as `http://localhost:8000` from the Mac app or iOS Simulator, offer **Open local workspace**, the same local account as the web app. Under **Local development** they also accept a personal access token, for pointing a Debug build at another server. Both are excluded from Release builds. API tokens intentionally cannot create more tokens or delete the account, so those settings require Apple sign-in. A physical phone requires an HTTPS backend reachable from that device.
 
 [Apple setup](docs/apple-auth.md) covers identifiers, app grouping, return URLs, keys, and distribution.
 
@@ -74,13 +74,13 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 ```json
 {
   "mcpServers": {
-    "taskwell": {
-      "command": "/absolute/path/to/taskwell/api/.venv/bin/python",
-      "args": ["-m", "taskwell.mcp_server"],
-      "cwd": "/absolute/path/to/taskwell/api",
+    "tasks": {
+      "command": "/absolute/path/to/tasks/api/.venv/bin/python",
+      "args": ["-m", "tasks.mcp_server"],
+      "cwd": "/absolute/path/to/tasks/api",
       "env": {
-        "TASKWELL_API_URL": "https://YOUR_DOMAIN",
-        "TASKWELL_TOKEN": "YOUR_PERSONAL_ACCESS_TOKEN"
+        "TASKS_API_URL": "https://YOUR_DOMAIN",
+        "TASKS_TOKEN": "YOUR_PERSONAL_ACCESS_TOKEN"
       }
     }
   }
@@ -110,7 +110,7 @@ npm test
 
 The browser test uses the real backend and local development account, creates test resources, verifies persisted edits, completion/restoration, project management and token revocation, then removes its test resources. Set `CHROME_PATH` if using an already-installed Chromium binary.
 
-PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Taskwell's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
+PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate the tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
 
 To run the Apple tests against the included Postman simulation instead of the in-process fake, start it from the repository root and set `APPLE_SIMULATION_URL=http://localhost:4900/apple`:
 

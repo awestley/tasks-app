@@ -1,6 +1,6 @@
 from alembic import context
 
-from taskwell.db import Base, engine
+from tasks.db import Base, engine
 
 
 def run(connection):

@@ -1,11 +1,122 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, localDate, type Task } from "./api";
 
 type Device = { id: string; kind: string; name: string };
 type Config = { web_enabled: boolean; vapid_public_key: string | null };
+type Preferences = {
+  summary_time: string | null;
+  summary_zone: string;
+  overdue_minutes: number | null;
+  time_sensitive_priority: number;
+};
+
+/** Removes this browser's notifications for tasks that are no longer open, and updates the app badge. */
+export function clearStaleNotifications(tasks: Task[]) {
+  if (!("serviceWorker" in navigator)) return;
+  const open = tasks.filter((t) => !t.completed);
+  const today = localDate();
+  navigator.serviceWorker.controller?.postMessage({
+    type: "open-tasks",
+    ids: open.map((t) => t.id),
+    badge: open.filter((t) => t.due_date && t.due_date <= today).length,
+  });
+}
+
+export function NotificationPreferences() {
+  const [value, setValue] = useState<Preferences>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api<Preferences>("/notifications/settings")
+      .then(setValue)
+      .catch((e) => setError(e.message));
+  }, []);
+  const save = (change: Partial<Preferences>) => {
+    if (!value) return;
+    const next = {
+      ...value,
+      ...change,
+      summary_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    };
+    setValue(next);
+    setError("");
+    api<Preferences>("/notifications/settings", "PUT", next)
+      .then(setValue)
+      .catch((e) => setError(e.message));
+  };
+  if (!value) return error ? <p className="error-text">{error}</p> : null;
+  return (
+    <div className="notification-preferences">
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={value.summary_time !== null}
+          onChange={(e) =>
+            save({ summary_time: e.target.checked ? "08:00" : null })
+          }
+        />
+        Morning summary
+      </label>
+      {value.summary_time !== null && (
+        <label>
+          Summary time
+          <input
+            type="time"
+            aria-label="Summary time"
+            value={value.summary_time}
+            onChange={(e) =>
+              e.target.value && save({ summary_time: e.target.value })
+            }
+          />
+        </label>
+      )}
+      <label>
+        Overdue follow-up
+        <select
+          aria-label="Overdue follow-up"
+          value={value.overdue_minutes ?? ""}
+          onChange={(e) =>
+            save({
+              overdue_minutes: e.target.value ? Number(e.target.value) : null,
+            })
+          }
+        >
+          <option value="">Off</option>
+          <option value="30">30 minutes after</option>
+          <option value="60">1 hour after</option>
+          <option value="120">2 hours after</option>
+          <option value="240">4 hours after</option>
+        </select>
+      </label>
+      <label>
+        Time Sensitive on Apple devices
+        <select
+          aria-label="Time Sensitive"
+          value={value.time_sensitive_priority}
+          onChange={(e) =>
+            save({ time_sensitive_priority: Number(e.target.value) })
+          }
+        >
+          <option value="1">Urgent</option>
+          <option value="2">Urgent and high</option>
+          <option value="0">Off</option>
+        </select>
+      </label>
+      <p className="muted">
+        The summary lists tasks due today and overdue, and is not sent when
+        there are none. Follow-ups apply to tasks with a reminder. Settings
+        apply to every device.
+      </p>
+      {error && (
+        <p role="alert" className="error-text">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export async function disableBrowserPush() {
-  const id = localStorage.getItem("taskwell-push-id");
+  const id = localStorage.getItem("tasks-push-id");
   if (id) {
     try {
       await api("/push/subscriptions/" + id, "DELETE");
@@ -19,7 +130,7 @@ export async function disableBrowserPush() {
     const registration = await navigator.serviceWorker.getRegistration("/");
     await (await registration?.pushManager.getSubscription())?.unsubscribe();
   }
-  localStorage.removeItem("taskwell-push-id");
+  localStorage.removeItem("tasks-push-id");
 }
 
 export function PushSettings() {
@@ -80,7 +191,7 @@ export function PushSettings() {
       endpoint: data.endpoint,
       ...data.keys,
     });
-    localStorage.setItem("taskwell-push-id", result.id);
+    localStorage.setItem("tasks-push-id", result.id);
   };
   return (
     <section className="push-settings">
@@ -110,6 +221,7 @@ export function PushSettings() {
       {supported && Notification.permission === "denied" && (
         <p className="muted">Notifications are blocked in browser settings.</p>
       )}
+      <NotificationPreferences />
       {devices.map((device) => (
         <div className="push-device" key={device.id}>
           <span>
@@ -120,7 +232,7 @@ export function PushSettings() {
             disabled={busy}
             onClick={() =>
               perform(async () => {
-                if (device.id === localStorage.getItem("taskwell-push-id"))
+                if (device.id === localStorage.getItem("tasks-push-id"))
                   await disableBrowserPush();
                 else await api("/push/subscriptions/" + device.id, "DELETE");
               })

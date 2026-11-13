@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from taskwell.db import Task
-from taskwell.quick_add import parse_task
-from taskwell.scheduling import due_instant, reminder_instant
+from tasks.db import Task
+from tasks.quick_add import parse_task
+from tasks.scheduling import due_instant, reminder_instant
 
 ZONE = "America/New_York"
 TUESDAY = datetime(2026, 10, 27, 14, tzinfo=timezone.utc)

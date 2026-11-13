@@ -16,6 +16,8 @@ from jwt.algorithms import RSAAlgorithm
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 KEY_ID = "simulation-key"
 attempts = Counter()
+# Every APNs request the fake received, for tests that check headers and payloads.
+pushes = []
 
 
 def identity_token(fixture, client_id):
@@ -94,16 +96,26 @@ class Provider(BaseHTTPRequestHandler):
 
     def apns(self, body):
         headers = self.headers
-        if (
-            not (headers.get("authorization") or "").startswith("bearer ")
-            or not headers.get("apns-topic")
-            or headers.get("apns-push-type") != "alert"
-            or headers.get("apns-priority") != "10"
-        ):
-            return self.reply(400, {"reason": "MissingTopic"})
         payload = json.loads(body or b"{}")
-        if not payload.get("aps", {}).get("alert", {}).get("body") or not payload.get("task_id"):
+        aps = payload.get("aps", {})
+        pushes.append({"headers": dict(headers), "payload": payload})
+        if not (headers.get("authorization") or "").startswith("bearer ") or not headers.get("apns-topic"):
+            return self.reply(400, {"reason": "MissingTopic"})
+        if headers.get("apns-push-type") == "background":
+            # Apple rejects background pushes with high priority or with anything the user would see.
+            if headers.get("apns-priority") != "5" or aps != {"content-available": 1} or not payload.get("sync"):
+                return self.reply(400, {"reason": "BadPriority"})
+            return self.reply(200)
+        if headers.get("apns-push-type") != "alert" or headers.get("apns-priority") not in ("5", "10"):
+            return self.reply(400, {"reason": "InvalidPushType"})
+        if not aps.get("alert", {}).get("body") or not aps.get("thread-id") or not aps.get("category"):
             return self.reply(400, {"reason": "PayloadEmpty"})
+        if aps.get("interruption-level") not in ("passive", "active", "time-sensitive"):
+            return self.reply(400, {"reason": "BadInterruptionLevel"})
+        if not 0 <= aps.get("relevance-score", -1) <= 1:
+            return self.reply(400, {"reason": "BadRelevanceScore"})
+        if len((headers.get("apns-collapse-id") or "").encode()) > 64:
+            return self.reply(400, {"reason": "BadCollapseId"})
         token = self.path.rsplit("/", 1)[-1]
         if token.startswith("ee"):
             return self.reply(410, {"reason": "Unregistered"})
