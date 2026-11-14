@@ -19,15 +19,42 @@ This is an online-first first release. It does not yet include shared projects, 
 
 ## Run locally
 
-Requirements: Python 3.12+, uv, Node 24+, npm. Apple credentials are not needed for local development.
+Requirements: Python 3.12+, uv, Node 24+, npm. The Apple builds also need Xcode and XcodeGen (`brew install xcodegen`). Apple credentials are not needed for local development.
+
+### Build everything and start the backend
+
+```sh
+./scripts/start.sh
+```
+
+This removes old builds, installs dependencies, builds the web app, builds the macOS and iOS Simulator apps, then starts the backend at http://localhost:8000. The backend serves the web app, so open http://localhost:8000 and choose **Open local workspace**. Press Control-C to stop. Running the script again stops an earlier backend on the same port first.
+
+| Option | Effect |
+| --- | --- |
+| `--skip-apple` | Build only the web app. The Apple builds take a few minutes. |
+| `--no-build` | Start the backend with the existing builds, without cleaning or building. |
+| `--no-serve` | Clean and build, then exit without starting the backend. |
+| `--port PORT` | Use another port. The default is 8000. |
+
+Build output:
+
+- Web: `web/dist`
+- macOS: `apple/DerivedData/Build/Products/Debug/Tasks.app` (unsigned, because its entitlements need a development certificate)
+- iOS Simulator: `apple/DerivedData-iOS/Build/Products/Debug-iphonesimulator/Tasks.app` (ad hoc signed so the Keychain works)
+
+In the Mac app or iOS Simulator, connect to `http://localhost:8000`.
+
+New workspaces start empty and are stored in `api/tasks.db`. The local workspace is a single shared local account, not a production authentication method. The API binds to loopback only, and local sign-in answers only requests from this computer. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled. [Authentication design](docs/authentication.md) explains every sign-in method and its safeguards.
+
+### Web development with live reload
 
 ```sh
 ./scripts/dev.sh
 ```
 
-Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/tasks.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only, and local sign-in answers only requests from this computer. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled. [Authentication design](docs/authentication.md) explains every sign-in method and its safeguards.
+This starts the backend on port 8000 and the Vite development server at http://localhost:5173, which reloads as you edit `web/src`. Open http://localhost:5173.
 
-To start each component separately:
+### Start each component by hand
 
 ```sh
 cp api/.env.example api/.env
@@ -39,6 +66,8 @@ cd api
 # Terminal 2, from the repository root:
 npm --prefix web run dev
 ```
+
+Local sign-in only works from the address in `PUBLIC_URL`, which `api/.env` sets to http://localhost:5173. To use the backend's own copy of the web app at port 8000 instead, start it with `PUBLIC_URL=http://localhost:8000`, as `scripts/start.sh` does.
 
 Development startup applies database migrations automatically. An original unversioned SQLite database is backed up into `api/.backups/` before its first migration. Keep that directory private, since backups contain workspace data. Production migrations run separately before deployment.
 
