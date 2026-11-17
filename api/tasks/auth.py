@@ -100,8 +100,13 @@ def authenticate(
     return db.get(User, credential.user_id)
 
 
+# Credentials that act for the user without being a signed-in device. They cannot manage credentials or the account.
+DELEGATED_KINDS = ("api", "agent")
+LIFETIMES = {"api": timedelta(days=90), "agent": timedelta(minutes=15)}
+
+
 def session_only(request):
-    if request.state.credential.kind == "api":
+    if request.state.credential.kind in DELEGATED_KINDS:
         raise HTTPException(403, "Sign in to manage credentials or your account")
 
 
@@ -112,7 +117,7 @@ def issue(db, user, kind="web", name="Session"):
         digest=digest(token),
         name=name,
         kind=kind,
-        expires_at=now() + timedelta(days=90 if kind == "api" else 30),
+        expires_at=now() + LIFETIMES.get(kind, timedelta(days=30)),
     )
     db.add(credential)
     db.commit()

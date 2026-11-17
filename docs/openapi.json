@@ -919,6 +919,198 @@
         }
       }
     },
+    "/api/v1/agent": {
+      "get": {
+        "tags": [
+          "Agent",
+          "Agent"
+        ],
+        "summary": "Agent Config",
+        "description": "Whether the agent is available, and which other MCP servers it can use.",
+        "operationId": "agent_config_api_v1_agent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/agent-runs": {
+      "post": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Start Run",
+        "description": "Ask the agent to work on a task. One run at a time per account; poll the run for its result.",
+        "operationId": "start_run_api_v1_tasks__task_id__agent_runs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Task Runs",
+        "operationId": "task_runs_api_v1_tasks__task_id__agent_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunOut"
+                  },
+                  "title": "Response Task Runs Api V1 Tasks  Task Id  Agent Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent-runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_api_v1_agent_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -1929,6 +2121,125 @@
   },
   "components": {
     "schemas": {
+      "AgentAction": {
+        "properties": {
+          "server": {
+            "type": "string",
+            "title": "Server"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "input": {
+            "type": "string",
+            "title": "Input"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "server",
+          "tool",
+          "input",
+          "ok",
+          "result"
+        ],
+        "title": "AgentAction"
+      },
+      "AgentRunIn": {
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Instruction",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentRunIn"
+      },
+      "AgentRunOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "instruction": {
+            "type": "string",
+            "title": "Instruction"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAction"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "instruction",
+          "status",
+          "summary",
+          "actions",
+          "error",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "AgentRunOut"
+      },
       "ArmedAlarm": {
         "properties": {
           "task_id": {

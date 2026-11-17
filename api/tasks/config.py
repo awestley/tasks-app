@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     # Where Notebook's web app runs, so links to notes open there and pasted note addresses are recognized.
     notebook_web_url: str = ""
 
+    # The in-app agent that fleshes out a task. Hidden unless an Anthropic API key is set.
+    anthropic_api_key: str = ""
+    agent_model: str = "claude-opus-5-5"
+    agent_max_iterations: int = 25
+    agent_timeout_seconds: int = 600
+    # This server's own address as the agent reaches its MCP endpoint, usually the loopback the API listens on.
+    agent_tasks_url: str = "http://127.0.0.1:8000"
+    # JSON list of other MCP servers the agent may use: [{"name": "notebook", "url": "https://…/mcp", "token_env": "NOTEBOOK_TOKEN"}].
+    # Each token is read from the named environment variable, so the list itself holds no secrets.
+    agent_mcp_servers: str = "[]"
+    # Tools the agent never gets, in addition to every tool marked destructive.
+    agent_blocked_tools: str = "delete_task,delete_note,move_note,rebuild_index,unlink_notes,review_auto_link"
+
     @field_validator("public_url", "notebook_web_url")
     @classmethod
     def origin_without_trailing_slash(cls, value):

@@ -147,6 +147,24 @@ class Link(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class AgentRun(Base):
+    """One request to the in-app agent to work on a task, with what it did."""
+
+    __tablename__ = "agent_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Kept when the task is deleted, so the record of what happened survives.
+    task_id: Mapped[str] = mapped_column(String(36), index=True)
+    instruction: Mapped[str] = mapped_column(Text, default="")
+    # queued, running, done or failed.
+    status: Mapped[str] = mapped_column(String(10), default="queued")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 def get_db():
     with SessionLocal() as db:
         yield db

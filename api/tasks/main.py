@@ -14,7 +14,10 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
+from .agent import interrupted_runs
+from .agent import router as agent_router
 from .auth import (
+    DELEGATED_KINDS,
     authenticate,
     clear_session_cookie,
     client_address,
@@ -59,6 +62,7 @@ from .schemas import (
 async def lifespan(app):
     if not settings.production:
         upgrade_local_database()
+    interrupted_runs()
     stop = asyncio.Event()
     worker = asyncio.create_task(background_work(stop))
     try:
@@ -485,7 +489,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
     session_only(request)
     rows = db.scalars(
         select(Credential)
-        .where(Credential.user_id == user.id, Credential.kind != "api", Credential.expires_at > now())
+        .where(Credential.user_id == user.id, Credential.kind.notin_(DELEGATED_KINDS), Credential.expires_at > now())
         .order_by(Credential.created_at.desc())
     )
     return [
@@ -504,7 +508,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
 def delete_session(session_id: str, request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
     session_only(request)
     session = owned(db, Credential, session_id, user)
-    if session.kind == "api":
+    if session.kind in DELEGATED_KINDS:
         raise HTTPException(404)
     if session.id == request.state.credential.id:
         raise HTTPException(422, "Use Sign out to end the session on this device.")
@@ -515,6 +519,7 @@ def delete_session(session_id: str, request: Request, user=Depends(authenticate)
 app.include_router(push_router)
 app.include_router(quick_router)
 app.include_router(links_router)
+app.include_router(agent_router)
 app.include_router(api)
 app.mount("/mcp", http_app(settings.public_url))
 static = Path(settings.static_directory).resolve()
