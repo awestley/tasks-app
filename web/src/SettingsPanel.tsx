@@ -185,6 +185,10 @@ export function SettingsPanel({
         <p>
           REST API: <code>{location.origin}/api/v1</code>
           <br />
+          <a href="/docs" target="_blank" rel="noopener">
+            API reference
+          </a>
+          <br />
           Use the included MCP adapter with your server URL and a token. Tokens
           expire after 90 days and can be revoked here.
         </p>

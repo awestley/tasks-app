@@ -71,10 +71,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
     description="Private task management. Authenticate with a revocable personal access token or a session.",
-    # A personal server has no reason to publish its API. docs/openapi.json holds the same description.
-    docs_url=None if settings.production else "/docs",
-    redoc_url=None if settings.production else "/redoc",
-    openapi_url=None if settings.production else "/openapi.json",
+    # The web build serves the reference page at /docs with a bundled Swagger UI, so FastAPI's
+    # pages, which load their scripts from a CDN, stay off. docs/openapi.json holds the same schema.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/api/v1/openapi.json",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -159,10 +160,6 @@ async def protect(request: Request, call_next):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self' https://appleid.apple.com"
     )
-    if request.url.path in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self'; frame-ancestors 'none'"
-        )
     if settings.production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if request.url.path.startswith(("/api/", "/auth/")):
@@ -525,6 +522,9 @@ def frontend(path: str):
     if path.startswith("assets/"):
         # An HTML fallback here would be blocked as a script, leaving stale pages blank after a deploy.
         raise HTTPException(404)
+    if path and requested.is_relative_to(static) and (requested / "index.html").is_file():
+        # A page of its own, such as the API reference at /docs.
+        return FileResponse(requested / "index.html", headers={"Cache-Control": "no-cache"})
     if (static / "index.html").exists():
         return FileResponse(static / "index.html", headers={"Cache-Control": "no-cache"})
     raise HTTPException(404, "Build the web app or start the Vite development server")

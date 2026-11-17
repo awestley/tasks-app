@@ -44,7 +44,7 @@ Set up database backups to separate storage and test restoration. Before updatin
 ## Operational behavior
 
 - `/health` checks database connectivity. Configure uptime monitoring against the deployed HTTPS endpoint.
-- The API description (`/docs`, `/redoc`, `/openapi.json`) is not served in production.
+- The API schema (`/api/v1/openapi.json`) and reference page (`/docs`) are public. They describe endpoints only; every resource route still requires a credential.
 - The API process removes expired sessions, tokens and sign-in challenges every hour, along with reminder delivery records older than 30 days.
 - Request bodies are limited to 100 KB, including chunked requests. Fingerprinted files in `/assets/` are cached permanently, and everything else served to browsers revalidates, so a deploy reaches open and returning browsers without blank pages.
 - API and auth responses use `Cache-Control: no-store`. Web sessions are HttpOnly and Secure in production.
