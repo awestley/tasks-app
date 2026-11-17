@@ -21,6 +21,13 @@ export type Task = {
   updated_at: string;
   version: number;
 };
+export type Link = {
+  id: string;
+  ref: string | null;
+  title: string;
+  url: string | null;
+  created_at: string;
+};
 export type Profile = { id: string; name: string; email: string };
 export type Token = {
   id: string;

@@ -1828,3 +1828,22 @@ input[type="checkbox"] {
     background: rgb(0 0 0 / 45%);
   }
 }
+.link-item a,
+.link-item span {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.link-item > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.link-new input[type="text"]:last-of-type {
+  max-width: 40%;
+}

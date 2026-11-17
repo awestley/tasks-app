@@ -8,6 +8,7 @@ import {
   type Task,
 } from "./api";
 import { ChecklistEditor } from "./ChecklistEditor";
+import { LinksEditor } from "./LinksEditor";
 import { Modal } from "./Modal";
 import { emptyDraft, parseLabels, reminderChoices, type Draft } from "./tasks";
 
@@ -217,6 +218,7 @@ export function TaskEditor({
           locked={task?.completed}
           onChange={(checklist) => setDraft({ ...draft, checklist })}
         />
+        {task && <LinksEditor owner={`/tasks/${task.id}`} />}
         <div
           className="form-grid"
           onFocus={() => {

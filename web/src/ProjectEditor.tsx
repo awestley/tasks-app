@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { Project } from "./api";
+import { LinksEditor } from "./LinksEditor";
 import { Modal } from "./Modal";
 
 export function ProjectEditor({
@@ -56,6 +57,7 @@ export function ProjectEditor({
             onChange={(e) => setColor(e.target.value)}
           />
         </label>
+        {project && <LinksEditor owner={`/projects/${project.id}`} />}
         {confirm && (
           <p className="muted">Tasks in this project will move to Inbox.</p>
         )}

@@ -96,9 +96,28 @@ function App() {
       if (target) setEditor(target);
       history.replaceState(null, "", location.pathname);
     }
+    // Links from other apps: #task/<id> and #project/<id>, also with a leading slash.
+    const link = /^#\/?(task|project)\/([0-9a-fA-F-]{36})$/.exec(location.hash);
+    if (link) {
+      const [, kind, id] = link;
+      if (kind === "task") {
+        const target = nextTasks.find((t) => t.id === id);
+        if (target) setEditor(target);
+      } else if (nextProjects.some((p) => p.id === id)) {
+        setView(`project:${id}`);
+      }
+      history.replaceState(null, "", location.pathname);
+    }
     setProjects(nextProjects);
     return nextTasks;
   }, []);
+  useEffect(() => {
+    const opened = () => {
+      if (location.hash) refresh().catch(() => {});
+    };
+    window.addEventListener("hashchange", opened);
+    return () => window.removeEventListener("hashchange", opened);
+  }, [refresh]);
   // A notification action changed a task from the service worker.
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
