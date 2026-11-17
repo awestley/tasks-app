@@ -148,6 +148,17 @@ struct ParsedTask: Decodable {
     let project_id: String?
     let recognized: [String]
 }
+struct AgentAvailability: Codable { var available: Bool; var servers: [String] }
+struct AgentAction: Codable, Hashable { var server: String; var tool: String; var ok: Bool }
+/// One request to the server's agent to work on a task.
+struct AgentRun: Codable, Identifiable, Hashable {
+    let id: String
+    var status: String
+    var summary: String
+    var actions: [AgentAction]
+    var error: String?
+    var active: Bool { status == "queued" || status == "running" }
+}
 /// A task or project points at an item in another app (a pc:// reference) or a web page.
 struct ItemLink: Codable, Identifiable, Hashable {
     let id: String
