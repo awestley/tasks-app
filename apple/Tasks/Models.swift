@@ -148,3 +148,10 @@ struct ParsedTask: Decodable {
     let project_id: String?
     let recognized: [String]
 }
+/// A task or project points at an item in another app (a pc:// reference) or a web page.
+struct ItemLink: Codable, Identifiable, Hashable {
+    let id: String
+    var ref: String?
+    var title: String
+    var url: String?
+}

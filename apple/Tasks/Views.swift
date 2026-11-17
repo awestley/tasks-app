@@ -568,6 +568,7 @@ struct TaskEditorView: View {
                             .disabled(draft.checklist.count >= 100)
                     }
                 }
+                if let task { LinksSection(owner: "/api/v1/tasks/\(task.id)") }
                 Section {
                 Picker("Project", selection: $draft.project_id) {
                     Text("Inbox").tag(nil as String?)
@@ -686,6 +687,7 @@ struct ProjectEditorView: View {
                         Label(value, systemImage: "circle.fill").foregroundStyle(Color(hex: value)).tag(value)
                     }
                 }
+                if let project { LinksSection(owner: "/api/v1/projects/\(project.id)") }
                 if project != nil { Button("Delete project", role: .destructive) { confirmDelete = true } }
             }.formStyle(.grouped).navigationTitle(project == nil ? "Add project" : "Edit project")
                 .toolbar {
@@ -830,4 +832,53 @@ struct SettingsView: View {
     }
     func loadTokens() async throws { tokens = try await store.api.request("/api/v1/tokens") }
     func loadSessions() async throws { sessions = try await store.api.request("/api/v1/sessions") }
+}
+/// Links save as soon as they are added or removed, separately from the task's other fields.
+struct LinksSection: View {
+    @EnvironmentObject var store: Store
+    /// The owner's API path, such as /api/v1/tasks/<id>.
+    let owner: String
+    @State private var links: [ItemLink] = []
+    @State private var target = ""
+    @State private var title = ""
+    var body: some View {
+        Section("Links") {
+            ForEach(links) { link in
+                HStack {
+                    if let address = link.url, let url = URL(string: address) {
+                        Link(destination: url) { Label(link.title, systemImage: "link") }
+                    } else {
+                        Label(link.title, systemImage: "link").help(link.ref ?? "")
+                    }
+                    Spacer()
+                    Button(role: .destructive) { remove(link) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).accessibilityLabel("Remove link \(link.title)")
+                }
+            }
+            TextField("Note or web address", text: $target)
+                .autocorrectionDisabled()
+            TextField("Title", text: $title)
+            Button { add() } label: { Label("Add link", systemImage: "plus") }
+                .disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || store.busy)
+        }
+        .task(id: owner) {
+            do { links = try await store.api.request(owner + "/links") } catch { store.report(error) }
+        }
+    }
+    func add() {
+        let value = target.trimmingCharacters(in: .whitespaces)
+        let name = title.trimmingCharacters(in: .whitespaces)
+        Task { await store.perform {
+            let link: ItemLink = try await store.api.request(owner + "/links", method: "POST", body: API.body([value.hasPrefix("pc://") ? "ref" : "url": value, "title": name]))
+            links.removeAll { $0.id == link.id }
+            links.append(link)
+            target = ""; title = ""
+        } }
+    }
+    func remove(_ link: ItemLink) {
+        Task { await store.perform {
+            try await store.api.send(owner + "/links/\(link.id)", method: "DELETE")
+            links.removeAll { $0.id == link.id }
+        } }
+    }
 }
