@@ -124,7 +124,7 @@ Tasks and projects can link to items in other apps by reference (`pc://notes/not
 
 ### Flesh out
 
-With `ANTHROPIC_API_KEY` set, the task editor offers Flesh out: the server runs Claude (`AGENT_MODEL`, default `claude-opus-5-5`) as an MCP client of its own `/mcp` endpoint, with a credential that lasts 15 minutes and is deleted when the run ends, and of each server in `AGENT_MCP_SERVERS`. Tools marked destructive and those in `AGENT_BLOCKED_TOOLS` are never offered, so by default the agent cannot delete, complete, create or rename tasks, projects or notebooks; it can edit the task, its links, and notes. Every tool call is listed on the run. One run at a time per account; a restart marks running runs as failed. Model usage is billed to the configured API key.
+With `ANTHROPIC_API_KEY` set, the task editor offers Flesh out: the server runs Claude (`AGENT_MODEL`, default `claude-opus-5-5`) as an MCP client of its own `/mcp` endpoint, with a credential that lasts 15 minutes and is deleted when the run ends, and of each server in `AGENT_MCP_SERVERS`. Tools marked destructive and those in `AGENT_BLOCKED_TOOLS` are never offered, so by default the agent cannot delete, complete, create or rename tasks, projects or notebooks; it can edit the task, its links, and notes. To let it use Notebook, add `{"name": "notebook", "url": "https://<notebook host>/mcp", "token_env": "NOTEBOOK_TOKEN"}` to `AGENT_MCP_SERVERS` and set `NOTEBOOK_TOKEN` to a Notebook personal access token (New token in Notebook's Agents dialog). Every tool call is listed on the run. One run at a time per account; a restart marks running runs as failed. Model usage is billed to the configured API key.
 
 ## Import from Todoist
 
