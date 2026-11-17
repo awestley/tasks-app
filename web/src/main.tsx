@@ -68,7 +68,9 @@ function App() {
   const [mobile, setMobile] = useState(false),
     [sort, setSort] = useState("smart"),
     [priorityFilter, setPriorityFilter] = useState(false),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    // Changes when the agent edits the open task, to reload the editor without losing drafts in other cases.
+    [agentEdits, setAgentEdits] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -873,7 +875,7 @@ function App() {
       )}
       {editor && (
         <TaskEditor
-          key={editor === "new" ? "new" : `${editor.id}:${editor.version}`}
+          key={editor === "new" ? "new" : `${editor.id}:${agentEdits}`}
           task={editor === "new" ? null : editor}
           agentChanged={
             editor === "new"
@@ -882,6 +884,7 @@ function App() {
                   // Reopen with the agent's changes, so the next save uses the new version.
                   const next = await refresh();
                   setEditor(next.find((t) => t.id === editor.id) || null);
+                  setAgentEdits((count) => count + 1);
                 }
           }
           projects={projects}
