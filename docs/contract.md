@@ -20,7 +20,7 @@ All application resources live under `/api/v1` and belong to the authenticated u
 - POST /auth/apple/challenge; POST /auth/apple/native: native one-time nonce + authorization code exchange. Token returned only to native client. The challenge answers 503 when Apple is not configured and 400 for a bundle ID outside `APPLE_NATIVE_CLIENT_IDS`. An account outside `ALLOWED_APPLE_ACCOUNTS` receives 403, or `auth_error=denied` in the browser flow.
 - POST /auth/logout: revoke current credential and clear cookie.
 
-OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web UI refreshes after mutations, and on focus and periodically when the task revision has changed. Native clients refresh on activation. First release is online-first, without collaboration, attachments, or offline conflict merging. The API description is served in development only; `docs/openapi.json` holds the same schema.
+OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web UI refreshes after mutations, and on focus and periodically when the task revision has changed. Native clients refresh on activation. First release is online-first, without collaboration, attachments, or offline conflict merging. Every server publishes the schema at `GET /api/v1/openapi.json` without authentication, and an interactive reference at `/docs`. The reference page bundles Swagger UI into the web build, so it loads no third-party scripts. Its requests use the browser session when signed in, or a token entered under Authorize. `docs/openapi.json` holds the same schema.
 
 ## Links and references
 

@@ -12,7 +12,7 @@ from fastapi import Response
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from tasks import mcp_server
+from tasks import main, mcp_server
 from tasks.auth import clear_session_cookie, issue, set_session_cookie
 from tasks.config import Settings, settings
 from tasks.db import Credential, Project, Task, User, engine
@@ -297,14 +297,14 @@ def test_mcp_rejects_cookie_auth(client):
 
 
 def test_contract(client):
-    spec = client.get("/openapi.json").json()
+    spec = client.get("/api/v1/openapi.json").json()
     assert "/api/v1/tasks" in spec["paths"]
     assert "version" in spec["components"]["schemas"]["TaskPatch"]["required"]
 
 
 def test_openapi_snapshot_is_current(client):
     snapshot = json.loads((Path(__file__).resolve().parents[2] / "docs/openapi.json").read_text())
-    assert client.get("/openapi.json").json() == snapshot, "Run scripts/export_openapi.py to update the snapshot"
+    assert client.get("/api/v1/openapi.json").json() == snapshot, "Run scripts/export_openapi.py to update the snapshot"
 
 
 def test_tests_never_use_a_development_database():
@@ -490,7 +490,7 @@ def test_mcp_transport_uses_the_configured_public_url():
     assert mcp_server.mcp.settings.transport_security.allowed_origins == ["http://localhost:5173"]
 
 
-def test_production_does_not_publish_api_docs():
+def test_production_serves_the_api_schema_without_cdn_pages():
     environment = {
         **os.environ,
         "ENVIRONMENT": "production",
@@ -505,4 +505,27 @@ def test_production_does_not_publish_api_docs():
     }
     script = "from tasks.main import app; print(app.docs_url, app.redoc_url, app.openapi_url)"
     result = subprocess.run([sys.executable, "-c", script], env=environment, capture_output=True, text=True)
-    assert result.stdout.split() == ["None", "None", "None"], result.stderr
+    assert result.stdout.split() == ["None", "None", "/api/v1/openapi.json"], result.stderr
+
+
+def test_api_schema_is_public_and_not_cached(client):
+    client.headers.pop("Authorization", None)
+    client.cookies.clear()
+    response = client.get("/api/v1/openapi.json")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "script-src 'self';" in response.headers["Content-Security-Policy"]
+    for retired in ("/openapi.json", "/redoc"):
+        assert "application/json" not in client.get(retired).headers.get("content-type", "")
+
+
+def test_reference_page_is_served_from_its_own_directory(client, tmp_path, monkeypatch):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "index.html").write_text("app")
+    (tmp_path / "docs" / "index.html").write_text("reference")
+    monkeypatch.setattr(main, "static", tmp_path)
+    assert client.get("/docs").text == "reference"
+    assert client.get("/docs/").text == "reference"
+    assert client.get("/today").text == "app"
+    assert client.get("/").text == "app"
+    assert client.get("/docs").headers["Content-Security-Policy"].startswith("default-src 'self'; script-src 'self';")

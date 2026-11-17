@@ -96,7 +96,7 @@ Run the iOS UI test with `bash scripts/test-ios.sh SIMULATOR_UDID` (find a devic
 
 API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
 
-The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
+Browse the API reference at `https://YOUR_DOMAIN/docs`, also linked from **Settings & integrations**. Try it out uses your browser session, or a token entered under **Authorize**. The schema itself is at `/api/v1/openapi.json`. The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
 
 Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header. This release uses personal tokens, not MCP OAuth discovery. Use the stdio adapter for clients that cannot configure a bearer header.
 
@@ -125,6 +125,23 @@ Tasks and projects can link to items in other apps by reference (`pc://notes/not
 ### Flesh out
 
 With `ANTHROPIC_API_KEY` set, the task editor offers Flesh out: the server runs Claude (`AGENT_MODEL`, default `claude-opus-5-5`) as an MCP client of its own `/mcp` endpoint, with a credential that lasts 15 minutes and is deleted when the run ends, and of each server in `AGENT_MCP_SERVERS`. Tools marked destructive and those in `AGENT_BLOCKED_TOOLS` are never offered, so by default the agent cannot delete, complete, create or rename tasks, projects or notebooks; it can edit the task, its links, and notes. Every tool call is listed on the run. One run at a time per account; a restart marks running runs as failed. Model usage is billed to the configured API key.
+
+## Import from Todoist
+
+`scripts/import_todoist.py` copies open Todoist projects and tasks through the API. It runs on the system `python3` with no extra packages. Put your Todoist API token (Todoist **Settings > Integrations > Developer**) in `~/.todoist_token`, or set `TODOIST_TOKEN`. The script never prints it.
+
+```bash
+python3 scripts/import_todoist.py
+```
+
+The default is a dry run that lists what would be created and anything that needs checking. Add `--apply` to import. It signs in to the local workspace, so the server must run with local sign-in on; set `TASKS_API_URL` and `TASKS_TOKEN` to import into another server. Imported IDs are recorded in `~/.config/tasks/todoist-import.json`, so running it again adds only new tasks.
+
+- Subtasks become checklist items. Comments, attachment links and Todoist deadlines are added to the description.
+- Sections become labels; `--drop-sections` ignores them.
+- Todoist priority 1 (urgent) becomes Urgent here.
+- Repeats map to daily, weekly or monthly. Others, such as yearly or every 2 weeks, keep the original rule in the description and are listed in the output.
+- One time-based reminder per task is kept (the earliest). Location reminders, completed tasks and archived projects are skipped.
+- Dates without a time zone use this Mac's zone; `--time-zone` overrides it.
 
 ## Deploy
 

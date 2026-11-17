@@ -1,0 +1,20 @@
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+.swagger-ui,
+.swagger-ui .info .title,
+.swagger-ui .opblock-tag,
+.swagger-ui .opblock .opblock-summary-description,
+.swagger-ui .btn {
+  font-family: "Inter Variable", system-ui, sans-serif;
+}
+
+.swagger-ui .wrapper {
+  padding: 0 16px;
+}
+
+.swagger-ui .information-container .info {
+  margin: 32px 0 24px;
+}
