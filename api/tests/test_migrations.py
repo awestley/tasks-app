@@ -11,8 +11,9 @@ def test_upgrade_fresh_database_and_repeated_start(tmp_path):
     upgrade_local_database(engine)
     upgrade_local_database(engine)
     assert "checklist" in {c["name"] for c in inspect(engine).get_columns("tasks")}
+    assert "ref" in {c["name"] for c in inspect(engine).get_columns("links")}
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0005"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006"
     engine.dispose()
 
 

@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     apns_key_id: str = ""
     apns_private_key: str = ""
     push_simulation_url: str = ""
+    # Where Notebook's web app runs, so links to notes open there and pasted note addresses are recognized.
+    notebook_web_url: str = ""
 
-    @field_validator("public_url")
+    @field_validator("public_url", "notebook_web_url")
     @classmethod
     def origin_without_trailing_slash(cls, value):
         # Browsers send Origin without one, so a trailing slash would fail every cookie write.
@@ -68,6 +70,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires HTTPS PUBLIC_URL and PostgreSQL DATABASE_URL")
             if urlsplit(self.public_url).path:
                 raise RuntimeError("PUBLIC_URL must be an origin, without a path")
+            if self.notebook_web_url and not self.notebook_web_url.startswith("https://"):
+                raise RuntimeError("NOTEBOOK_WEB_URL must use HTTPS in production")
             if self.apple_base_url != "https://appleid.apple.com" or not self.apple_ready:
                 raise RuntimeError("Production requires configured Sign in with Apple")
             if not self.apple_account_allowlist or "REPLACE" in self.allowed_apple_accounts:

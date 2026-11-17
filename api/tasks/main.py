@@ -26,6 +26,8 @@ from .auth import (
 from .auth import router as auth_router
 from .config import settings
 from .db import Credential, NotificationSettings, Project, SessionLocal, Task, get_db, now, uid
+from .links import copy_links, links_of, remove_links
+from .links import router as links_router
 from .mcp_server import http_app, mcp
 from .migrations import upgrade_local_database
 from .push import router as push_router
@@ -42,6 +44,7 @@ from .schemas import (
     ProjectPatch,
     SessionOut,
     SnoozeIn,
+    TaskDetailOut,
     TaskIn,
     TaskOut,
     TaskPatch,
@@ -239,6 +242,7 @@ def delete_project(project_id: str, user=Depends(authenticate), db: Session = De
         .where(Task.project_id == project.id, Task.user_id == user.id)
         .values(project_id=None, version=Task.version + 1, updated_at=now())
     )
+    remove_links(db, "project", project.id)
     db.delete(project)
     db.commit()
 
@@ -294,9 +298,11 @@ def create_task(data: TaskIn, user=Depends(authenticate), db: Session = Depends(
     return task
 
 
-@api.get("/tasks/{task_id}", response_model=TaskOut)
+@api.get("/tasks/{task_id}", response_model=TaskDetailOut)
 def get_task(task_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
-    return owned(db, Task, task_id, user)
+    """One task with its links."""
+    task = owned(db, Task, task_id, user)
+    return TaskDetailOut.model_validate(task).model_copy(update={"links": links_of(db, "task", task.id)})
 
 
 def next_date(value, recurrence, anchor_day=None):
@@ -374,6 +380,7 @@ def mutate(db, user, task_id, data):
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     if successor:
         db.add(successor)
+        copy_links(db, user.id, task.id, successor.id)
     if needs_sync:
         queue_sync(db, user.id, task.id, alarm=alarm)
     db.commit()
@@ -424,6 +431,7 @@ def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authentic
     result = db.execute(delete(Task).where(Task.id == task_id, Task.user_id == user.id, Task.version == version))
     if result.rowcount != 1:
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
+    remove_links(db, "task", task_id)
     db.commit()
 
 
@@ -506,6 +514,7 @@ def delete_session(session_id: str, request: Request, user=Depends(authenticate)
 
 app.include_router(push_router)
 app.include_router(quick_router)
+app.include_router(links_router)
 app.include_router(api)
 app.mount("/mcp", http_app(settings.public_url))
 static = Path(settings.static_directory).resolve()

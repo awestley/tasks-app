@@ -130,6 +130,23 @@ class Task(Base):
     alert_style: Mapped[str] = mapped_column(String(12), default="notification", server_default="notification")
 
 
+class Link(Base):
+    """A task or project points at something else: an item in another app (by pc:// reference) or a web page."""
+
+    __tablename__ = "links"
+    __table_args__ = (UniqueConstraint("owner_type", "owner_id", "ref", name="uq_link_owner_ref"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # "task" or "project". Polymorphic, so the delete routes remove an owner's links.
+    owner_type: Mapped[str] = mapped_column(String(10))
+    owner_id: Mapped[str] = mapped_column(String(36), index=True)
+    # Canonical reference such as pc://notes/note/<id>, or null for a plain web link.
+    ref: Mapped[str | None] = mapped_column(String(500), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 def get_db():
     with SessionLocal() as db:
         yield db
