@@ -116,7 +116,15 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 }
 ```
 
-Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools: `list_tasks`, `list_projects`, `create_task`, `update_task`, `complete_task`, `delete_task`, `create_project`, `parse_task`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change.
+Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools: `list_tasks`, `get_task`, `list_projects`, `create_task`, `update_task`, `complete_task`, `snooze_task`, `delete_task`, `create_project`, `update_project`, `parse_task`, and for links `link_item`, `unlink_item`, `list_project_links`, `find_linked`. Prompts: `flesh_out_task`, `plan_project`, `capture_in_notebook`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change.
+
+### Working with other apps
+
+Tasks and projects can link to items in other apps by reference (`pc://notes/note/<id>` for a Notebook note) or to web pages. Connect a client such as Claude Code to both the Tasks and the Notebook MCP servers and use the prompts above: the client reads the task, reads and writes notes, and keeps links in both directions (`[[task:<id>|Title]]` in a note, a link on the task). `GET /api/v1/references?target=<ref>` lists the tasks and projects that link to an item, and `GET /api/v1/resolve?ref=<ref>` summarizes one of this app's items. The web addresses `#task/<id>` and `#project/<id>` open an item. Set `NOTEBOOK_WEB_URL` so note links open in Notebook.
+
+### Flesh out
+
+With `ANTHROPIC_API_KEY` set, the task editor offers Flesh out: the server runs Claude (`AGENT_MODEL`, default `claude-opus-5-5`) as an MCP client of its own `/mcp` endpoint, with a credential that lasts 15 minutes and is deleted when the run ends, and of each server in `AGENT_MCP_SERVERS`. Tools marked destructive and those in `AGENT_BLOCKED_TOOLS` are never offered, so the agent cannot delete anything. Every tool call is listed on the run. One run at a time per account; a restart marks running runs as failed. Model usage is billed to the configured API key.
 
 ## Deploy
 

@@ -22,6 +22,18 @@ All application resources live under `/api/v1` and belong to the authenticated u
 
 OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web UI refreshes after mutations, and on focus and periodically when the task revision has changed. Native clients refresh on activation. First release is online-first, without collaboration, attachments, or offline conflict merging. The API description is served in development only; `docs/openapi.json` holds the same schema.
 
+## Links and references
+
+Items are named across apps by `pc://<app>/<type>/<id>` references (the shared app contract). This app owns `pc://tasks/task/<id>` and `pc://tasks/project/<id>`; tasks and projects return theirs as `ref`.
+
+- GET/POST /tasks/{id}/links; DELETE /tasks/{id}/links/{link_id}; the same under /projects/{id}: a link has `ref` (a reference, or null for a plain web page), `title` (up to 200 characters) and `url`. POST takes `ref`, `url` or both; a pasted Notebook or Tasks address is stored as its reference, and a known reference gets its address. Posting a reference the owner already links to updates that link and returns 200. At most 50 links per owner. URLs must be HTTPS, except localhost. Links do not change a task's version. Deleting a task or project deletes its links; a recurring task's next occurrence copies them. GET /tasks/{id} includes `links`.
+- GET /references?target=<ref>: the caller's tasks and projects that link to the target, as `{ref, type, id, title, completed, updated, url}`.
+- GET /resolve?ref=<ref>: the same summary for one of this app's tasks or projects; 404 for anything else.
+
+## Agent
+
+GET /agent reports whether the agent is configured and which other MCP servers it uses. POST /tasks/{id}/agent-runs with an optional `instruction` (up to 2000 characters) starts a run and returns 202; 503 when unconfigured, 409 while another run of the account is queued or running. GET /agent-runs/{id} and GET /tasks/{id}/agent-runs (latest 10) return `status` (queued, running, done, failed), `summary`, `actions` (server, tool, short input and result, ok) and `error`. The run's credential has kind `agent`: like a personal token it cannot manage credentials or the account, it lasts at most 15 minutes, and it is deleted when the run ends. Agent credentials are not listed as devices.
+
 ## MCP transport
 
 `/mcp/` accepts Streamable HTTP using a bearer credential. Cookie-only requests are rejected. The endpoint implements the official MCP SDK protocol and exposes tools rather than a hand-written JSON-RPC approximation. Stdio runs the same tools with `TASKS_API_URL` and `TASKS_TOKEN`. HTTP MCP currently requires client-configured tokens; OAuth authorization discovery is not implemented.
