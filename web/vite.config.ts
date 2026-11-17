@@ -3,10 +3,23 @@ import react from "@vitejs/plugin-react";
 const apiTarget = process.env.TASKS_API_URL || "http://127.0.0.1:8000";
 export default defineConfig({
   plugins: [react()],
+  // Relative URLs, so one build works at the root and under the shell's /apps/tasks/ path.
+  base: "./",
   build: {
     rollupOptions: {
-      // The app, plus the REST API reference at /docs.
-      input: { app: "index.html", docs: "docs/index.html" },
+      // embed.js is loaded by other apps (through <pc-embed>), so it keeps a fixed name.
+      input: {
+        index: "index.html",
+        // The compact view the shell keeps beside the workspace (westley-app docs/companion.md).
+        companion: "companion.html",
+        embed: "src/embed.ts",
+        // The REST API reference, served at /docs.
+        docs: "docs/index.html",
+      },
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name === "embed" ? "embed.js" : "assets/[name]-[hash].js",
+      },
     },
   },
   server: {
@@ -15,6 +28,7 @@ export default defineConfig({
       "/auth": apiTarget,
       "/health": apiTarget,
       "/mcp": apiTarget,
+      "/manifest.json": apiTarget,
     },
   },
 });

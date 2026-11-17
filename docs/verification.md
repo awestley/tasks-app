@@ -123,3 +123,29 @@ Added notification actions (Complete, Snooze, Tomorrow), server-side snooze deli
 - The simulator's system log showed the notification service extension registered with the system.
 
 Not verified: notification display, actions, extension entity tagging and badge on a device or simulator (the permission prompt did not appear in the simulator and automated input stopped registering), AlarmKit alarms ringing, Siri acting on notifications or alarms, the Time Sensitive capability with real provisioning, live APNs and Web Push, PostgreSQL for migration 0005, and the MCP smoke script for the new `snooze_task` tool.
+
+## Code review fixes on the rebuilt web app
+
+Fixed the findings from a full code review, on top of the rebuilt web app and Personal Command support. The review itself covered the code before that rebuild. Each web finding was then rechecked against the rebuilt app and fixed there, or dropped where the rebuild had already fixed it. `contract.py`, `events.py`, `search.py` and the rebuilt web code as a whole have not had a review of their own.
+
+- 155 API tests passed on SQLite, with one PostgreSQL-only test skipped, and 156 passed on PostgreSQL 17, with none needing a running simulation. Apple sign-in and push delivery run against in-process fake providers over real HTTP. The Apple and push tests also passed against the Postman mock scripts run directly with Node, not through the Postman CLI.
+- `alembic check` reported no differences on PostgreSQL 17 through revision 0005. A test now compares the OpenAPI snapshot with the running API.
+- 18 browser tests passed against the built web app in six consecutive runs, on a heavily loaded machine. 27 parser unit tests passed, and both MCP transports passed the smoke script. A crafted task ID no longer reaches other routes.
+- The production image ran behind real Caddy through Compose, on a loopback port. Migrations reached 0005, requests with spoofed `X-Forwarded-For` values shared one limit, a second client kept its own limit, a 5 MB chunked request received 413, caching headers were correct, the API schema was not served, MCP rejected missing and invalid tokens, `/%00` returned 404, and the background worker logged no failures on PostgreSQL. Production startup refused a standalone server with no `ALLOWED_APPLE_ACCOUNTS`, and accepted one inside the shell without it.
+- macOS Debug and iOS Simulator builds passed, and six iOS UI tests passed on an iPhone 18 Pro simulator, covering a session ended on activation, sign-out and local removal with push enabled, a conflict that keeps the draft, a task in UTC, and ending another device's session.
+- Three one-off simulator checks compared fixed and previous code. A notification delivered with `simctl push` and tapped while the app was not running opened the task only with the fix. A swipe to complete during a slowed refresh took effect only with the fix. Across seven refreshes, the app registered for push once with the fix and six times without it. These ran before moving onto the rebuild, whose Apple code is unchanged.
+
+Not verified: `do-connecting-ip` on a real App Platform deployment, the updated GitHub Actions workflow on GitHub, sign-in through a real Personal Command shell, live Apple sign-in, live APNs or Web Push, physical devices, the macOS interface, and the hourly purge in a long-lived process (tests call it directly and it runs once at startup).
+
+## Merging the rebuilt web app with notifications, links and the agent, November 17, 2026
+
+`dev` had rebuilt the web app (offline replica, live updates, Personal Command shell support) while this branch added smarter notifications, links, the Flesh out agent, the API reference page and the Clean design. Where both rebuilt the same files, dev's version was kept. This branch's web features were moved into the rebuilt app: links and Flesh out in the task detail, links in the project editor, the alert style and a snooze note in the task detail, Snooze in the task menu, notification preferences and an API reference link in Settings, and Complete and Snooze actions, badge and stale-notification removal in the service worker. The Apple apps keep this branch's features and return to the Glassive tokens, matching the web app. The in-app checkmark was removed from the web sign-in and sidebar, as AGENTS.md asks.
+
+Both branches numbered migrations 0004 and 0005 differently. The chain is now 0004 recurrence anchors, 0005 notifications, 0006 links, 0007 agent runs and 0008 the shell user id. A database created on the shell's branch is recognized and restarted after 0003; 0004 and 0008 skip columns it already has. `/resolve` and `/references` follow the app contract's shape, and `/references` also returns stored links. The schema moved to `/api/v1/openapi.json` for the shell manifest too, and `/docs` redirects to `/docs/` so the page's relative asset URLs work under `/apps/tasks/`.
+
+- 238 API tests passed on SQLite with one PostgreSQL-only test skipped, and 239 passed on PostgreSQL 17. `alembic check` reported no differences on SQLite and PostgreSQL 17. Databases created at the shell branch's 0004 and 0005 upgraded to 0008 and matched the models.
+- 30 browser tests passed against the built web app, including a new test for links, alert style, snooze, notification settings and the API reference. 49 web unit tests passed. Both MCP transports passed the smoke script.
+- macOS Debug and iOS Simulator builds passed.
+- Testing found that posting open tasks to the service worker on every change crashed headless Chromium once the rebuilt app installs its worker at startup. The message is now sent only with notification permission, and only when the list or badge changes.
+
+Not verified: iOS UI tests on a simulator, live push and alarms, sign-in through a real Personal Command shell, and the GitHub Actions run.

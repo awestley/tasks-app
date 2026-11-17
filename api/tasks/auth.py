@@ -3,7 +3,10 @@ import hashlib
 import ipaddress
 import logging
 import secrets
+import time
 from datetime import timedelta
+from functools import cache
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import httpx
@@ -14,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import APIKeyCookie, HTTPBearer
 from pydantic import Field
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -28,6 +32,8 @@ SESSION_COOKIE = "tasks_session"
 # in production, because development runs over plain HTTP.
 BINDING_COOKIE = "__Host-apple_binding"
 LOCAL_USER = "local-demo"
+SHELL_COOKIE = "pc_session"
+SHELL_AUDIENCE = "personal-command"
 log = logging.getLogger(__name__)
 
 
@@ -63,10 +69,68 @@ def trusted_origin(request):
     origin = request.headers.get("origin")
     if origin == settings.public_url:
         return True
-    if settings.production or origin != str(request.base_url).rstrip("/"):
+    if settings.production or origin != f"{request.url.scheme}://{request.url.netloc}":
         return False
     # The API's own origin comes from the Host header, so DNS rebinding could otherwise pose as it.
     return request.url.hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+@cache
+def shell_keys():
+    # Keys are cached and refetched when a token names a key id not seen yet (key rotation).
+    return jwt.PyJWKClient(settings.jwks_url, cache_keys=True, lifespan=600, timeout=5)
+
+
+SHELL_LEEWAY = 30
+
+
+def verify_shell_token(token):
+    """Claims of a valid access token from the shell's identity service, or None."""
+    try:
+        key = shell_keys().get_signing_key_from_jwt(token).key
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["ES256"],
+            audience=SHELL_AUDIENCE,
+            issuer=settings.shell_url,
+            leeway=SHELL_LEEWAY,
+            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+        )
+    except jwt.PyJWKClientConnectionError as error:
+        # The shell's keys can't be fetched, which says nothing about this token, so it isn't "signed out".
+        raise HTTPException(503, "Can't check your session right now. Try again shortly.") from error
+    except (jwt.PyJWTError, ValueError, TypeError):
+        return None
+    return claims if isinstance(claims.get("sub"), str) and 0 < len(claims["sub"]) <= 200 else None
+
+
+def shell_user(db, claims):
+    """The user for a shell identity, created on first use. Data stays keyed by this row, so it survives a
+    change of sign in provider in the shell (the sub is stable)."""
+    user = db.scalar(select(User).where(User.shell_sub == claims["sub"]))
+    if user:
+        return user
+    user = User(
+        apple_sub="shell:" + claims["sub"],
+        shell_sub=claims["sub"],
+        email=str(claims.get("email") or "")[:320],
+        name="My workspace",
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        # A new user's panes load together, so several requests can be the first. One of them won.
+        db.rollback()
+        user = db.scalar(select(User).where(User.shell_sub == claims["sub"]))
+        if not user:
+            raise
+    return user
+
+
+def looks_like_jwt(token):
+    return token.count(".") == 2 and not token.startswith("tw_")
 
 
 def cipher():
@@ -87,12 +151,19 @@ def authenticate(
 ):
     authorization = request.headers.get("authorization", "")
     bearer = authorization.startswith("Bearer ")
-    token = authorization[7:] if bearer else request.cookies.get(session_cookie())
+    shell_cookie = settings.shell_mode and not bearer and request.cookies.get(SHELL_COOKIE)
+    token = authorization[7:] if bearer else (shell_cookie or request.cookies.get(session_cookie()))
     if not token:
         raise HTTPException(401, "Sign in required")
     if not bearer and request.method not in {"GET", "HEAD", "OPTIONS"}:
         if not trusted_origin(request):
             raise HTTPException(403, "Invalid request origin")
+    if settings.shell_mode and looks_like_jwt(token):
+        claims = verify_shell_token(token)
+        if not claims:
+            raise HTTPException(401, "Session expired")
+        request.state.credential = SimpleNamespace(kind="shell", id=None, expires=claims["exp"])
+        return shell_user(db, claims)
     credential = db.scalar(select(Credential).where(Credential.digest == digest(token), Credential.expires_at > now()))
     if not credential:
         raise HTTPException(401, "Session expired or token revoked")
@@ -103,6 +174,15 @@ def authenticate(
 # Credentials that act for the user without being a signed-in device. They cannot manage credentials or the account.
 DELEGATED_KINDS = ("api", "agent")
 LIFETIMES = {"api": timedelta(days=90), "agent": timedelta(minutes=15)}
+
+
+def still_signed_in(db, credential):
+    """Whether what opened a long-lived connection still counts: a shell token until it expires, and a stored
+    credential until it expires or is revoked."""
+    if credential.kind == "shell":
+        return time.time() < credential.expires + SHELL_LEEWAY
+    query = select(Credential.id).where(Credential.id == credential.id, Credential.expires_at > now())
+    return db.scalar(query) is not None
 
 
 def session_only(request):
@@ -246,11 +326,20 @@ def apple_user(db, claims, tokens, client_id):
 
 @router.get("/config")
 def config():
+    if settings.shell_mode:
+        # Sign in happens in the shell; the web app sends people there.
+        return {"apple_enabled": False, "dev_login": False, "shell": True}
     return {"apple_enabled": settings.apple_ready, "dev_login": settings.dev_login and not settings.production}
+
+
+def own_sign_in():
+    if settings.shell_mode:
+        raise HTTPException(404, "Sign in through the shell")
 
 
 def require_local_sign_in(request):
     """Development sign-in skips identity checks, so it exists only outside production and answers only this computer."""
+    own_sign_in()
     if settings.production or not settings.dev_login:
         raise HTTPException(404)
     if not from_this_computer(request):
@@ -290,6 +379,7 @@ def dev_native(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/apple/start")
 def apple_start(db: Session = Depends(get_db)):
+    own_sign_in()
     if not settings.apple_ready:
         raise HTTPException(503, "Sign in with Apple is not configured")
     binding = secrets.token_urlsafe(32)
@@ -312,6 +402,7 @@ def apple_start(db: Session = Depends(get_db)):
 
 @router.post("/apple/callback")
 async def apple_callback(request: Request, db: Session = Depends(get_db)):
+    own_sign_in()
     form = await request.form()
     try:
         challenge = consume(db, str(form.get("state", "")), "web", digest(request.cookies.get(BINDING_COOKIE, "")))
@@ -338,6 +429,7 @@ class NativeExchange(Model):
 
 @router.post("/apple/challenge")
 def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
+    own_sign_in()
     if not settings.apple_ready:
         raise HTTPException(503, "Sign in with Apple is not configured")
     if data.client_id not in settings.native_client_ids:
@@ -348,6 +440,7 @@ def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
 
 @router.post("/apple/native")
 def native_exchange(data: NativeExchange, db: Session = Depends(get_db)):
+    own_sign_in()
     challenge = consume(db, data.challenge_id, "native")
     claims, tokens = exchange(data.code, challenge)
     user = apple_user(db, claims, tokens, challenge.client_id)
@@ -357,6 +450,8 @@ def native_exchange(data: NativeExchange, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(request: Request, response: Response, user=Depends(authenticate), db: Session = Depends(get_db)):
+    if request.state.credential.kind == "shell":
+        raise HTTPException(400, "Sign out from the shell")
     db.delete(request.state.credential)
     db.commit()
     clear_session_cookie(response)

@@ -21,7 +21,7 @@ from .db import (
     uid,
 )
 from .notify import TASK_KINDS, summary_message, sync_message, task_message
-from .push import DeliveryError, apns_ready, armed_value, send_push, web_ready
+from .push import DeliveryError, apns_ready, armed_value, reminder_tag, send_push, web_ready
 from .scheduling import local_today, notification_instants, summary_instant
 
 log = logging.getLogger(__name__)
@@ -220,7 +220,9 @@ def tick(session_factory=SessionLocal, instant=None):
                 db.commit()
                 continue
             try:
-                send_push(endpoint, message, delivery_id)
+                # A reminder shares its tag with the web app's own reminder (web/src/reminders.ts), so it shows once.
+                tag = reminder_tag(delivery.task_id, delivery.scheduled_for) if delivery.kind == "reminder" else None
+                send_push(endpoint, message, delivery_id, tag)
                 delivery.status = "sent"
                 delivery.error = None
             except DeliveryError as error:

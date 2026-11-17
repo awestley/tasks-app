@@ -288,6 +288,16 @@ def test_production_rejects_unsafe_config():
     with pytest.raises(RuntimeError, match="ALLOWED_APPLE_ACCOUNTS"):
         Settings(**complete, allowed_apple_accounts="REPLACE_WITH_YOUR_APPLE_EMAIL").validate_production()
     Settings(**complete, allowed_apple_accounts="001234.owner").validate_production()
+    # The shell decides who can sign in, so running inside it needs neither Apple nor the allowlist.
+    Settings(
+        environment="production",
+        secret_key="x" * 40,
+        dev_login=False,
+        public_url="https://shell.example.com",
+        shell_url="https://shell.example.com/",
+        base_path="/apps/tasks",
+        database_url="postgresql://localhost/tasks",
+    ).validate_production()
 
 
 def test_mcp_rejects_cookie_auth(client):
@@ -324,6 +334,19 @@ def test_body_limit_applies_without_content_length(client):
     assert "content-length" not in response.request.headers
 
 
+def test_the_largest_valid_task_fits_the_body_limit(client):
+    wide = "\U0001d4b3"  # Four bytes in UTF-8.
+    task = {
+        "title": wide * 500,
+        "description": wide * 10000,
+        "checklist": [{"title": wide * 500} for _ in range(100)],
+    }
+    body = json.dumps(task, ensure_ascii=False).encode()
+    assert len(body) > 240_000
+    response = client.post("/api/v1/tasks", content=body, headers={"Content-Type": "application/json"})
+    assert response.status_code == 201, response.text[:200]
+
+
 def run_body_limit(pieces):
     """Drive the middleware with separate network reads, which the test client always joins into one."""
     received, sent, reads = [], [], iter(pieces)
@@ -343,12 +366,13 @@ def run_body_limit(pieces):
 
 
 def test_body_limit_counts_every_read_and_replays_accepted_bodies():
-    piece = {"type": "http.request", "body": b"a" * 60_000, "more_body": True}
+    size = MAX_BODY_BYTES // 2 + 10_000
+    piece = {"type": "http.request", "body": b"a" * size, "more_body": True}
     last = {"type": "http.request", "body": b"b", "more_body": False}
     received, sent = run_body_limit([piece, piece, last])
     assert not received and sent[0]["status"] == 413
     received, sent = run_body_limit([piece, last])
-    assert received == [{"type": "http.request", "body": b"a" * 60_000 + b"b", "more_body": False}] and not sent
+    assert received == [{"type": "http.request", "body": b"a" * size + b"b", "more_body": False}] and not sent
 
 
 def test_rate_limit_uses_the_address_the_proxy_reports(client, monkeypatch):
@@ -525,8 +549,29 @@ def test_reference_page_is_served_from_its_own_directory(client, tmp_path, monke
     (tmp_path / "index.html").write_text("app")
     (tmp_path / "docs" / "index.html").write_text("reference")
     monkeypatch.setattr(main, "static", tmp_path)
-    assert client.get("/docs").text == "reference"
+    moved = client.get("/docs", follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "/docs/"
     assert client.get("/docs/").text == "reference"
     assert client.get("/today").text == "app"
     assert client.get("/").text == "app"
-    assert client.get("/docs").headers["Content-Security-Policy"].startswith("default-src 'self'; script-src 'self';")
+    assert client.get("/docs/").headers["Content-Security-Policy"].startswith("default-src 'self'; script-src 'self';")
+
+
+def test_rate_limit_applies_under_the_base_path(client, monkeypatch):
+    client.headers.pop("Authorization")
+    monkeypatch.setattr(settings, "base_path", "/apps/tasks")
+    codes = [client.get("/apps/tasks/auth/nothing").status_code for _ in range(31)]
+    assert codes[-1] == 429
+
+
+def test_body_limit_passes_live_event_streams_through():
+    """GET requests with no body reach the app at once, so the event stream is not held back."""
+    received, sent = run_body_limit([{"type": "http.request", "body": b"", "more_body": False}])
+    assert received == [{"type": "http.request", "body": b"", "more_body": False}] and not sent
+
+
+def test_rate_limit_counts_only_sign_in_attempts(client):
+    client.headers.pop("Authorization")
+    for path in ("/auth/logout", "/auth/dev"):
+        assert {client.post(path).status_code for _ in range(35)} <= {401, 403, 404}
+    assert client.get("/auth/config").status_code == 200

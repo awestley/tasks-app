@@ -163,8 +163,8 @@ async def unlink_item(ctx: Context, link_id: str, task_id: str | None = None, pr
 
 
 @mcp.tool(annotations=read_only)
-async def find_linked(ctx: Context, ref: str) -> list:
-    """Find the tasks and projects that link to a reference, for example the tasks for a note (pc://notes/note/<id>)."""
+async def find_linked(ctx: Context, ref: str) -> dict:
+    """Find the tasks and projects that link to a reference, for example the tasks for a note (pc://notes/note/<id>). Returns items with each one's ref, title and url."""
     return await call(ctx, "/references", params={"target": ref})
 
 

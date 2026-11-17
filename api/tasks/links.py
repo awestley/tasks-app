@@ -1,14 +1,15 @@
-"""Links from tasks and projects to items in other apps, and the shared resolve and references endpoints."""
+"""Links from tasks and projects to items in other apps. Finding what links to an item, and resolving one of
+this app's refs, are part of the app contract (contract.py)."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import authenticate
 from .db import Link, Project, Task, get_db
-from .refs import APP, format_ref, own_url, parse_ref, ref_from_url, url_for
-from .schemas import LinkIn, LinkOut, ReferenceOut
+from .refs import parse_ref, ref_from_url, url_for
+from .schemas import LinkIn, LinkOut
 
 router = APIRouter(prefix="/api/v1", tags=["Links"])
 MAX_LINKS = 50
@@ -113,40 +114,3 @@ def link_project(
 @router.delete("/projects/{project_id}/links/{link_id}", status_code=204)
 def unlink_project(project_id: str, link_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
     drop_link(db, "project", project_id, link_id, user)
-
-
-def summary(kind, item):
-    return ReferenceOut(
-        ref=format_ref(APP, kind, item.id),
-        type=kind,
-        id=item.id,
-        title=item.title if kind == "task" else item.name,
-        completed=item.completed if kind == "task" else None,
-        updated=item.updated_at if kind == "task" else item.created_at,
-        url=own_url(kind, item.id),
-    )
-
-
-@router.get("/references", response_model=list[ReferenceOut])
-def references(target: str = Query(max_length=500), user=Depends(authenticate), db: Session = Depends(get_db)):
-    """Tasks and projects that link to the target reference, such as pc://notes/note/<id>."""
-    if not parse_ref(target):
-        raise HTTPException(422, "target must look like pc://app/type/id")
-    rows = db.execute(select(Link.owner_type, Link.owner_id).where(Link.user_id == user.id, Link.ref == target)).all()
-    found = []
-    for kind, model in OWNERS.items():
-        ids = [owner_id for owner_type, owner_id in rows if owner_type == kind]
-        if ids:
-            items = db.scalars(select(model).where(model.id.in_(ids), model.user_id == user.id)).all()
-            found += [summary(kind, item) for item in items]
-    return found
-
-
-@router.get("/resolve", response_model=ReferenceOut)
-def resolve(ref: str = Query(max_length=500), user=Depends(authenticate), db: Session = Depends(get_db)):
-    """Summary of one of this app's items, for link previews in other apps."""
-    parsed = parse_ref(ref)
-    if not parsed or parsed[0] != APP or parsed[1] not in OWNERS:
-        raise HTTPException(404, "Resource not found")
-    _, kind, item_id = parsed
-    return summary(kind, owner(db, kind, item_id, user))

@@ -119,4 +119,4 @@ echo "Open http://localhost:$port and choose Open local workspace. Press Control
 cd api
 # The browser's origin must match PUBLIC_URL for local sign-in, so it follows the port.
 export PUBLIC_URL="http://localhost:$port"
-exec .venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port "$port"
+exec .venv/bin/uvicorn tasks.main:app --host 127.0.0.1 --port "$port" --timeout-graceful-shutdown 5

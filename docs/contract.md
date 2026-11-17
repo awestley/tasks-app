@@ -1,12 +1,12 @@
 # API contract
 
-All application resources live under `/api/v1` and belong to the authenticated user. Bearer credentials or an HttpOnly session cookie are required. Cookie writes require the configured Origin. Invalid credentials return 401, missing or other-user resources 404, invalid input 422, stale task versions 409, request bodies over 100 KB 413. No cross-user IDs are accepted. Due dates must fall between the years 1900 and 2999. Responses describe what is stored: a task whose schedule no longer validates, for example after a time zone rule change, stays readable, and PATCH returns 422 until the schedule is corrected.
+All application resources live under `/api/v1` and belong to the authenticated user. Bearer credentials or an HttpOnly session cookie are required. Cookie writes require the configured Origin. Invalid credentials return 401, missing or other-user resources 404, invalid input 422, stale task versions 409, request bodies over 300 KB 413. No cross-user IDs are accepted. Due dates must fall between the years 1900 and 2999. Responses describe what is stored: a task whose schedule no longer validates, for example after a time zone rule change, stays readable, and PATCH returns 422 until the schedule is corrected.
 
 - GET /me: profile.
 - GET/POST /projects; PATCH/DELETE /projects/{id}: project management. PATCH changes only the fields it receives. Deleting a project moves its tasks into Inbox.
 - GET /tasks: paginated tasks, with `offset`, `limit` (max 200), optional `q`, `project_id`, `completed`, `label`, `due_before`. Dates use ISO calendar dates, interpreted in the user's local calendar.
-- GET /tasks/revision: a value that changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list.
-- POST /tasks: title, description, project_id, due_date, priority (1 urgent through 4 normal), labels, checklist, recurrence (daily, weekly, monthly or null).
+- GET /tasks/revision: a value that changes whenever a task is added, edited or deleted, so a client can skip downloading an unchanged list. It is the task count and the latest `updated_at`, which a client can also work out from the tasks it holds.
+- POST /tasks: title, description, project_id, due_date, priority (1 urgent through 4 normal), labels, checklist, recurrence (daily, weekly, monthly or null). `completed` and `completed_at` restore a deleted task as it was.
 - PATCH /tasks/{id}: edits require `version` from the last read. Atomic compare-and-swap prevents lost updates.
 - POST /tasks/{id}/complete: requires version, completes once and creates the next occurrence when recurring. Restoring an occurrence does not recreate its already generated successor.
 - DELETE /tasks/{id}?version=N: version-checked permanent deletion.
@@ -20,14 +20,14 @@ All application resources live under `/api/v1` and belong to the authenticated u
 - POST /auth/apple/challenge; POST /auth/apple/native: native one-time nonce + authorization code exchange. Token returned only to native client. The challenge answers 503 when Apple is not configured and 400 for a bundle ID outside `APPLE_NATIVE_CLIENT_IDS`. An account outside `ALLOWED_APPLE_ACCOUNTS` receives 403, or `auth_error=denied` in the browser flow.
 - POST /auth/logout: revoke current credential and clear cookie.
 
-OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web UI refreshes after mutations, and on focus and periodically when the task revision has changed. Native clients refresh on activation. First release is online-first, without collaboration, attachments, or offline conflict merging. Every server publishes the schema at `GET /api/v1/openapi.json` without authentication, and an interactive reference at `/docs`. The reference page bundles Swagger UI into the web build, so it loads no third-party scripts. Its requests use the browser session when signed in, or a token entered under Authorize. `docs/openapi.json` holds the same schema.
+OpenAPI is generated from the same validated schemas used by the server and saved to `docs/openapi.json`. API tokens work with the MCP stdio adapter. The web app follows server-sent events and refreshes when focused, downloading tasks only when the revision has changed. An event stream ends when the session or shell token that opened it ends, and a client with a valid session reconnects. Native clients refresh on activation. Every server publishes the schema at `GET /api/v1/openapi.json` without authentication, and an interactive reference at `/docs`. The reference page bundles Swagger UI into the web build, so it loads no third-party scripts. Its requests use the browser session when signed in, or a token entered under Authorize. `docs/openapi.json` holds the same schema.
 
 ## Links and references
 
 Items are named across apps by `pc://<app>/<type>/<id>` references (the shared app contract). This app owns `pc://tasks/task/<id>` and `pc://tasks/project/<id>`; tasks and projects return theirs as `ref`.
 
 - GET/POST /tasks/{id}/links; DELETE /tasks/{id}/links/{link_id}; the same under /projects/{id}: a link has `ref` (a reference, or null for a plain web page), `title` (up to 200 characters) and `url`. POST takes `ref`, `url` or both; a pasted Notebook or Tasks address is stored as its reference, and a known reference gets its address. Posting a reference the owner already links to updates that link and returns 200. At most 50 links per owner. URLs must be HTTPS, except localhost. Links do not change a task's version. Deleting a task or project deletes its links; a recurring task's next occurrence copies them. GET /tasks/{id} includes `links`.
-- GET /references?target=<ref>: the caller's tasks and projects that link to the target, as `{ref, type, id, title, completed, updated, url}`.
+- GET /references?target=<ref>: `{items}`, the caller's tasks and projects with a stored link to the target, and tasks whose description links to or embeds it, in the app contract's summary shape (`ref`, `type`, `title`, `subtitle`, `url`, `updated`, `version`).
 - GET /resolve?ref=<ref>: the same summary for one of this app's tasks or projects; 404 for anything else.
 
 ## Agent

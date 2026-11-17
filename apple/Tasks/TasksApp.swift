@@ -10,7 +10,7 @@ import SwiftUI
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup {
-            RootView().environmentObject(store).tint(Clean.inverse)
+            RootView().environmentObject(store).tint(Glassive.accent)
                 .task { Notifications.shared.attach(store); await store.restore() }
                 .onChange(of: phase) { _, next in
                     if next == .active, store.profile != nil { Task { await store.restore() } }

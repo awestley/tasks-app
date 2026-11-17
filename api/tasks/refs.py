@@ -27,7 +27,7 @@ def parse_ref(ref: str):
 
 
 def own_url(kind: str, item_id: str) -> str:
-    return f"{settings.public_url}/#{kind}/{item_id}"
+    return f"{settings.public_url}{settings.base_path}/#/{kind}/{quote(item_id, safe='')}"
 
 
 def url_for(ref: str) -> str | None:
@@ -47,13 +47,15 @@ def ref_from_url(url: str) -> str | None:
     """Recognize a pasted Notebook or Tasks address, so it is stored as a reference other apps can find."""
     parts = urlsplit(url or "")
     origin = f"{parts.scheme}://{parts.netloc}"
-    fragment = unquote(parts.fragment)
-    for prefix, app, kind in (
-        (settings.notebook_web_url, "notes", "note"),
-        (settings.public_url, APP, "task"),
-        (settings.public_url, APP, "project"),
+    # The web app's routes are #/task/<id>; earlier addresses were #task/<id>.
+    fragment = unquote(parts.fragment).removeprefix("/")
+    own = origin == settings.public_url and parts.path.rstrip("/") == settings.base_path
+    for app, kind, matches in (
+        ("notes", "note", bool(settings.notebook_web_url) and origin == settings.notebook_web_url),
+        (APP, "task", own),
+        (APP, "project", own),
     ):
-        if prefix and origin == prefix and fragment.startswith(kind + "/") and len(fragment) > len(kind) + 1:
+        if matches and fragment.startswith(kind + "/") and len(fragment) > len(kind) + 1:
             return format_ref(app, kind, fragment[len(kind) + 1 :])
     return None
 

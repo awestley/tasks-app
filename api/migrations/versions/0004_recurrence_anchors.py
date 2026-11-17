@@ -8,8 +8,12 @@ down_revision = "0003"
 
 
 def upgrade():
-    op.add_column("tasks", sa.Column("recurrence_day", sa.Integer()))
-    op.add_column("tasks", sa.Column("recurrence_time", sa.String(5)))
+    # A database from the shell's branch may already have these columns; see env.py.
+    existing = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("tasks")}
+    if "recurrence_day" not in existing:
+        op.add_column("tasks", sa.Column("recurrence_day", sa.Integer()))
+    if "recurrence_time" not in existing:
+        op.add_column("tasks", sa.Column("recurrence_time", sa.String(5)))
 
 
 def downgrade():

@@ -1,0 +1,400 @@
+/* Glassive — static renditions of the theme's glass controls.
+   Hand-written from flyingfolder/obsidian-glassive@57eaca9 (main1/**.scss); every value is a token from tokens.json
+   except the liquid control fills, which the source writes as gradients (copied verbatim below). */
+
+.gl-root {
+  font-family: var(--font-interface);
+  color: var(--text-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A stand-in for the workspace behind glass: editor ground with some text to blur. */
+.gl-stage {
+  position: relative;
+  background: var(--background-primary);
+  padding: 20px;
+  overflow: hidden;
+}
+.gl-stage.is-secondary { background: var(--background-secondary); }
+.gl-stage .gl-ghost {
+  position: absolute; inset: 0; padding: 18px 22px;
+  font-size: 17px; line-height: 1.5; color: var(--text-muted);
+  pointer-events: none; user-select: none;
+}
+.gl-stage .gl-ghost b { color: var(--text-normal); }
+.gl-stage .gl-ghost i { color: var(--text-accent); font-style: normal; text-decoration: underline; }
+.gl-layer { position: relative; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+/* ---- liquid control fill (themes/_liquid-variables.scss, focused window) ---- */
+.gl-liquid {
+  --gl-control-bg: linear-gradient(rgb(255 255 255 / 40%), rgb(255 255 255 / 20%)), rgb(255 255 255 / 20%);
+  --gl-control-filter: var(--glassive-control-backdrop-filter-light);
+  --gl-control-hover: var(--color-base-30);
+}
+[data-theme="dark"] .gl-liquid {
+  --gl-control-bg: linear-gradient(color-mix(in oklch, var(--color-accent) 5%, transparent), color-mix(in oklch, var(--color-accent) 5%, transparent)), rgb(255 255 255 / 10%);
+  --gl-control-filter: var(--glassive-control-backdrop-filter-dark);
+  --gl-control-hover: color-mix(in oklch, rgb(80 80 80) 95%, var(--interactive-accent));
+}
+
+/* ---- ToolbarButton (abstracts/_mixins-glassive-controls.scss) ---- */
+.gl-toolbar-button, .gl-toolbar-group {
+  color: var(--mono-100);
+  box-shadow: var(--shadow-raised-control-item), var(--shadow-glass-border);
+  border: 0;
+  padding: var(--liquid-toolbar-padding);
+  border-radius: var(--radius-pill);
+  corner-shape: squircle;
+  background: var(--gl-control-bg);
+  backdrop-filter: var(--gl-control-filter);
+  -webkit-backdrop-filter: var(--gl-control-filter);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box;
+  font: inherit; font-size: 13px; line-height: 16px;
+  cursor: default;
+}
+.gl-toolbar-button { min-width: var(--control-height-l); min-height: var(--control-height-l); }
+.gl-toolbar-button.is-text { padding: 0 12px; }
+.gl-toolbar-button:hover, .gl-toolbar-button.is-active { background-color: var(--gl-control-hover); }
+.gl-toolbar-button.is-toggled { background: var(--interactive-accent); color: var(--text-on-accent); }
+.gl-toolbar-group { gap: var(--liquid-toolbar-padding); }
+.gl-toolbar-group > .gl-toolbar-button {
+  background: none; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+  padding: 2px; min-width: var(--control-height-s); min-height: var(--control-height-s);
+}
+.gl-toolbar-group > .gl-toolbar-button:hover,
+.gl-toolbar-group > .gl-toolbar-button.is-active { background-color: var(--gl-control-hover); }
+.gl-icon { width: 16px; height: 16px; stroke: currentColor; stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- Button (components/_buttons.scss, components/_modals.scss) ---- */
+.gl-button {
+  height: var(--control-height-m);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  corner-shape: squircle;
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  font: inherit; font-size: 13px; line-height: 16px;
+  box-shadow: var(--shadow-card-mini), var(--shadow-glass-border), 0 0 1px var(--background-modifier-seperator);
+  cursor: default;
+}
+.gl-button:hover { background: var(--interactive-hover); }
+.gl-button.mod-cta { background: var(--interactive-accent); color: var(--text-on-accent); }
+.gl-button.mod-cta:hover { background: var(--interactive-accent-hover); }
+.gl-button.mod-destructive { background: color-mix(in oklch, var(--background-modifier-error) 25%, transparent); }
+.gl-button.mod-destructive.mod-cta { background: color-mix(in oklch, var(--background-modifier-error) 90%, transparent); color: var(--text-on-accent); }
+.gl-button.is-modal { height: var(--control-height-l); border-radius: var(--menu-radius); corner-shape: round; }
+.gl-button.is-modal:hover { background: var(--color-base-35); }
+.gl-dropdown {
+  height: var(--control-height-m);
+  padding: 0 30px 0 12px;
+  border-radius: var(--radius-pill);
+  corner-shape: squircle;
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  box-shadow: 0 0 0 1px var(--background-modifier-border);
+  display: inline-flex; align-items: center; font-size: 13px; position: relative; text-align: end;
+}
+.gl-dropdown::after { content: "⌄"; position: absolute; right: 12px; top: 3px; color: var(--text-muted); }
+.gl-search {
+  height: var(--control-height-m); width: 220px; box-sizing: border-box;
+  padding: 0 12px; border: 0; border-radius: var(--radius-pill); corner-shape: squircle;
+  background: var(--background-modifier-form-field); color: var(--text-normal); font: inherit; font-size: 13px;
+  box-shadow: 0 0 0 1px var(--background-modifier-border);
+}
+.gl-search.is-focused { box-shadow: 0 0 0 2px var(--background-modifier-border-focus); outline: none; }
+.gl-search::placeholder { color: var(--text-faint); }
+
+/* ---- glass panels (abstracts/_mixins-liquid-SidebarandToolbar.scss) ---- */
+.gl-glass {
+  background-color: var(--background-glass);
+  backdrop-filter: var(--backdrop-filter-glass-light);
+  -webkit-backdrop-filter: var(--backdrop-filter-glass-light);
+  border: 1px solid var(--background-modifier-hover-strong);
+}
+.gl-glass-subtle {
+  background-color: var(--background-glass-subtle);
+  backdrop-filter: var(--backdrop-filter-glass-subtle-light);
+  -webkit-backdrop-filter: var(--backdrop-filter-glass-subtle-light);
+}
+[data-theme="dark"] .gl-glass { backdrop-filter: var(--backdrop-filter-glass-dark); -webkit-backdrop-filter: var(--backdrop-filter-glass-dark); }
+[data-theme="dark"] .gl-glass-subtle { backdrop-filter: var(--backdrop-filter-glass-subtle-dark); -webkit-backdrop-filter: var(--backdrop-filter-glass-subtle-dark); }
+
+/* ---- Menu (components/_menus.scss) ---- */
+.gl-menu {
+  width: 220px; padding: 4px; box-sizing: border-box;
+  border-radius: var(--menu-radius); corner-shape: squircle;
+  box-shadow: var(--menu-shadow), var(--glass-shadow-inset-l);
+  font-size: 13px; line-height: 16px;
+}
+.gl-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: var(--menu-radius); corner-shape: squircle;
+}
+.gl-menu-item .gl-icon { width: 14px; height: 14px; stroke-width: 2.4; padding-inline-start: 4px; color: var(--text-muted); }
+.gl-menu-item.selected { background: var(--color-accent); color: var(--text-on-accent); }
+.gl-menu-item.selected .gl-icon { color: var(--text-on-accent); }
+.gl-menu-item.is-warning, .gl-menu-item.is-warning .gl-icon { color: var(--text-error); }
+.gl-menu-item .gl-shortcut { margin-left: auto; color: var(--text-muted); }
+.gl-menu-item.selected .gl-shortcut { color: var(--text-muted-on-accent); }
+.gl-menu-separator { height: 1px; margin: var(--menu-group-gap) 12px; background: var(--background-modifier-border); }
+
+/* ---- Modal (components/_modals.scss) ---- */
+.gl-modal {
+  width: 380px; box-sizing: border-box;
+  background-color: var(--background-secondary);
+  border-radius: var(--modal-radius); corner-shape: squircle;
+  padding: 0 var(--modal-padding) var(--modal-padding);
+  box-shadow: var(--shadow-raised-xl);
+  position: relative;
+}
+.gl-modal-title { padding: 8px 0 20px; font-size: 20px; line-height: 32px; font-weight: 600; }
+.gl-modal-close { position: absolute; top: 8px; right: 8px; }
+.gl-modal-body { font-size: 15px; line-height: 1.5; color: var(--text-muted); }
+.gl-modal-buttons {
+  display: flex; justify-content: flex-end; gap: 20px;
+  padding: var(--modal-padding);
+  margin: 24px calc(var(--modal-padding) * -1) calc(var(--modal-padding) * -1);
+  border-top: 1px solid var(--background-modifier-seperator);
+}
+
+/* ---- Tooltip (components/_tooltips.scss) ---- */
+.gl-tooltip {
+  display: inline-block;
+  background: var(--gl-control-bg);
+  backdrop-filter: var(--backdrop-filter-tooltip); -webkit-backdrop-filter: var(--backdrop-filter-tooltip);
+  color: var(--mono-100);
+  font-size: 12px; line-height: 16px;
+  padding: 4px 8px;
+  border-radius: var(--tooltip-radius); corner-shape: squircle;
+  box-shadow: var(--shadow-card-mini), var(--shadow-glass-border);
+}
+
+/* ---- Notice (components/_notice.scss) ---- */
+.gl-notice {
+  max-width: 300px;
+  padding: 12px 20px;
+  border-radius: var(--notice-radius); corner-shape: squircle;
+  color: var(--text-normal);
+  font-size: 13px; line-height: 16px;
+  box-shadow: var(--shadow-card), var(--shadow-glass-border-tilted);
+}
+
+/* ---- CommandPalette (components/_prompt.scss) ---- */
+.gl-prompt { width: 440px; display: flex; flex-direction: column; gap: 12px; }
+.gl-prompt-input {
+  height: var(--toolbar-height); box-sizing: border-box;
+  display: flex; align-items: center; padding: 0 16px;
+  font-size: 20px; line-height: 1.333334;
+  border-radius: var(--modal-radius);
+  box-shadow: var(--glass-shadow-inset-l), var(--shadow-glass-border), var(--shadow-raised-xl);
+}
+.gl-prompt-input .gl-caret { color: var(--text-faint); }
+.gl-prompt-results {
+  padding: 8px; border-radius: var(--modal-radius); corner-shape: squircle;
+  box-shadow: var(--glass-shadow-inset-l), var(--glass-shadow-inset-edge), var(--shadow-raised-xl);
+}
+.gl-suggestion { padding: 6px 12px; border-radius: var(--modal-radius); corner-shape: squircle; font-size: 15px; line-height: 20px; }
+.gl-suggestion small { display: block; font-size: 13px; line-height: 16px; color: var(--text-muted); }
+.gl-suggestion.is-selected { background: var(--interactive-accent); color: var(--text-on-accent); }
+.gl-suggestion.is-selected small { color: rgb(255 255 255 / 55%); }
+.gl-suggestion b { font-weight: 600; }
+
+/* ===== Added in the second pass: the rest of the source's UI families ===== */
+
+/* ---- SuggestionPopup (components/_suggestions.scss) ---- */
+.gl-suggest {
+  width: 320px; box-sizing: border-box;
+  border-radius: var(--suggestion-radius); corner-shape: squircle;
+  box-shadow: var(--glass-shadow-inset-l), var(--shadow-card), var(--glass-shadow-inset-edge);
+  overflow: hidden;
+}
+.gl-suggest-list { padding: 8px; }
+.gl-suggest-item {
+  min-width: 160px; padding: 6px 12px;
+  border-radius: var(--suggestion-radius); corner-shape: squircle;
+  font-size: 13px; line-height: 16px;
+}
+.gl-suggest-item small { display: block; color: var(--text-muted); font-size: 12px; line-height: 14px; }
+.gl-suggest-item.is-selected { background: var(--background-modifier-hover); }
+.gl-suggest-footer {
+  min-height: 24px; padding: 0 20px; display: flex; align-items: center; gap: 16px;
+  border-top: 1px solid var(--background-modifier-seperator);
+  font-size: 12px; color: var(--text-muted);
+}
+.gl-suggest-footer span { white-space: nowrap; }
+
+/* ---- Popover (components/_popovers.scss) ---- */
+.gl-popover {
+  width: var(--popover-width); max-width: 100%; box-sizing: border-box;
+  padding: 20px 24px;
+  background: var(--background-primary);
+  border-radius: var(--modal-radius); corner-shape: squircle;
+  box-shadow: var(--shadow-card), var(--shadow-glass-border-tilted);
+  position: relative;
+  font-family: var(--font-text); font-size: 14px; line-height: 1.5;
+}
+.gl-popover h4 { margin: 0 0 6px; font-size: 17px; }
+.gl-popover p { margin: 0 0 8px; }
+.gl-popover blockquote { margin: 0; padding-inline-start: 20px; border-inline-start: 2px solid var(--color-accent); color: var(--text-muted); }
+.gl-popover-link { position: absolute; top: 8px; right: 8px; padding: 6px; border-radius: var(--radius-pill); color: var(--text-muted); display: inline-flex; }
+
+/* ---- FileTree (components/_nav-items.scss, _nav-headers.scss, _vault-profile.scss) ---- */
+.gl-sidebar {
+  width: 260px; height: 100%; box-sizing: border-box; position: relative;
+  background: var(--background-secondary);
+  padding: 0 8px; overflow: hidden;
+}
+.gl-nav-header { min-height: var(--nav-header-height); padding: 6px 0; display: flex; justify-content: center; align-items: center; }
+.gl-tree-item {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 4px 8px 4px var(--nav-item-padding-start);
+  margin-bottom: 1px;
+  border-radius: var(--menu-radius); corner-shape: squircle;
+  font-size: 13px; line-height: 16px; color: var(--text-normal);
+  white-space: pre;
+}
+.gl-tree-item.is-folder { padding-inline-start: 8px; }
+.gl-tree-item.is-folder::before { content: "›"; width: 10px; color: var(--text-faint); }
+.gl-tree-item.is-child { padding-inline-start: calc(var(--nav-item-padding-start) + 12px); }
+.gl-tree-item:hover, .gl-tree-item.is-hover { background: var(--background-modifier-hover); }
+.gl-tree-item.is-active { background: var(--nav-item-background-selected); }
+.gl-tree-item .gl-tag { margin-left: auto; font-size: 9px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.gl-vault-profile {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 12px 10px;
+  background: linear-gradient(to bottom, transparent 0, color-mix(in oklch, var(--background-secondary) 60%, transparent) 20px, color-mix(in oklch, var(--background-secondary) 90%, transparent) 60px);
+  display: flex; align-items: center; justify-content: space-between; font-size: 13px;
+}
+
+/* ---- TabBar (themes/tab-header/_tab-header-container-in-root.scss, components/_tab-header.scss) ---- */
+.gl-tabbar { display: flex; gap: 0; padding: 6px 8px 0; background: var(--top-header-bg); }
+.gl-tab { padding: 0 4px 4px; flex: 0 1 200px; min-width: 0; }
+.gl-tab-inner {
+  height: var(--control-height-m); padding: 0 10px; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  border-radius: var(--radius-pill); corner-shape: squircle;
+  background: var(--background-modifier-hover-exsubtle);
+  font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden;
+}
+.gl-tab.is-active .gl-tab-inner { background: var(--card-background); color: var(--text-normal); box-shadow: var(--glass-shadow-inset-for-control), var(--shadow-card-mini); }
+.gl-tab-inner .gl-icon { width: 12px; height: 12px; color: var(--text-muted); flex: none; }
+.gl-tab-new { align-self: flex-start; height: var(--control-height-m); width: var(--control-height-m); display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.gl-viewheader { height: 35px; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--top-header-bg); font-size: 13px; color: var(--text-muted); }
+.gl-viewheader b { color: var(--text-normal); font-weight: 400; }
+
+/* ---- SidebarTabs (themes/tab-header/_tab-header-container-in-sidebar.scss) ---- */
+.gl-sidetabs {
+  display: flex; gap: var(--sidebar-tab-padding); padding: var(--sidebar-tab-padding);
+  border-radius: var(--radius-pill);
+  background: var(--gl-control-bg); backdrop-filter: var(--gl-control-filter); -webkit-backdrop-filter: var(--gl-control-filter);
+  box-shadow: var(--shadow-raised-control-item), var(--shadow-glass-border);
+}
+.gl-sidetab { flex: 1 1 0; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); color: var(--text-normal); }
+.gl-sidetab.is-active { background: var(--background-modifier-hover); color: var(--interactive-accent); }
+
+/* ---- SettingGroup (components/_setting-items.scss, _sliders-toggles.scss, abstracts/_mixins-forms.scss) ---- */
+.gl-setting-heading { margin: var(--setting-heading-gap) 0 8px; font-size: 17px; font-weight: 600; }
+.gl-setting-heading:first-child { margin-top: 0; }
+.gl-setting-items {
+  background: var(--background-primary);
+  border-radius: var(--setting-items-radius); corner-shape: squircle;
+  padding: 4px 0;
+}
+.gl-setting-item {
+  display: flex; align-items: center; gap: 16px;
+  padding: var(--setting-items-padding-y) var(--setting-items-padding-x);
+  margin: 0 var(--setting-items-padding-x);
+  padding-left: 0; padding-right: 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.gl-setting-item:first-child { border-top: 0; }
+.gl-setting-info { flex: 1; min-width: 0; }
+.gl-setting-name { font-size: 14px; line-height: 28px; }
+.gl-setting-desc { font-size: 12px; line-height: 16px; color: var(--text-muted); padding-bottom: 6px; }
+.gl-setting-control { min-height: var(--control-height-m); display: flex; align-items: center; gap: 8px; padding: 4px 2px 0 0; }
+.gl-toggle {
+  width: var(--toggle-s-width); height: calc(var(--toggle-s-thumb-height) + 3px); box-sizing: border-box;
+  border-radius: var(--radius-pill); padding: 1.5px; display: inline-flex;
+  background: var(--background-modifier-hover-strong);
+}
+.gl-toggle::before {
+  content: ""; width: var(--toggle-s-thumb-width); height: var(--toggle-s-thumb-height);
+  border-radius: var(--radius-pill); background: #ffffff; box-shadow: var(--shadow-card-mini);
+}
+.gl-toggle.is-enabled { background: var(--interactive-accent); justify-content: flex-end; }
+.gl-slider { width: 64px; height: var(--slider-track-height); border-radius: var(--radius-pill); background: var(--background-modifier-hover-strong); position: relative; }
+.gl-slider-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--interactive-accent); }
+.gl-slider-thumb {
+  position: absolute; top: 50%; translate: -50% -50%;
+  width: var(--slider-thumb-width); height: var(--slider-thumb-height); border-radius: var(--radius-pill);
+  background: #ffffff; box-shadow: var(--shadow-card-mini), var(--shadow-glass-border);
+}
+.gl-slider-value { font-size: 12px; color: var(--text-muted); }
+
+/* ---- SettingsModal (pages/_settings.scss, abstracts/_mixins-liquid-SidebarandToolbar.scss) ---- */
+.gl-settings {
+  display: flex; width: 600px; height: 340px; box-sizing: border-box; padding-left: 7px;
+  background: var(--background-primary);
+  border-radius: var(--modal-radius); corner-shape: squircle;
+  box-shadow: var(--shadow-raised-xl); overflow: hidden; position: relative;
+}
+.gl-settings-side {
+  width: 180px; flex: none; margin: 7px 0; padding: 9px; box-sizing: border-box;
+  background: var(--background-secondary);
+  border-radius: var(--sidebar-radius); corner-shape: squircle;
+  box-shadow: var(--liquid-sidebar-shadow), var(--shadow-glass-border-tilted);
+}
+.gl-settings-group-label { font-size: 12px; color: var(--text-muted); padding: 8px 8px 4px; }
+.gl-settings-nav {
+  height: var(--control-height-l); display: flex; align-items: center; gap: 8px; padding: 0 8px;
+  border-radius: var(--radius-pill); corner-shape: squircle;
+  font-size: 14px; line-height: 16px; color: var(--text-normal);
+}
+.gl-settings-nav .gl-icon { width: 14px; height: 14px; }
+.gl-settings-nav.is-active { background: var(--background-modifier-hover); color: var(--text-accent); }
+.gl-settings-main { flex: 1; padding: 0 16px 16px; overflow: hidden; }
+.gl-settings-titlebar { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 40px 0 8px; font-size: 13px; font-weight: 500; }
+
+/* ---- Callout (editor/_callouts.scss) ---- */
+.gl-callout {
+  --gl-callout-color: var(--color-cyan);
+  padding: 14px 24px;
+  border-radius: var(--callout-radius); corner-shape: squircle;
+  border: 1px solid var(--background-modifier-hover);
+  background-color: color-mix(in oklch, var(--gl-callout-color) 6%, transparent);
+  box-shadow: var(--shadow-glass-border), var(--glass-shadow-inset-l);
+  font-family: var(--font-text); font-size: 17px; line-height: 1.5;
+}
+.gl-callout-title { color: var(--gl-callout-color); font-weight: 600; margin-bottom: 4px; }
+.gl-callout.is-note { --gl-callout-color: var(--color-blue); }
+.gl-callout.is-warning { --gl-callout-color: var(--color-orange); }
+.gl-callout.is-danger { --gl-callout-color: var(--color-red); }
+
+/* ---- Table (editor/_tables.scss) ---- */
+.gl-table-wrap {
+  display: inline-block; padding: 8px 8px 36px; position: relative;
+  border-radius: var(--callout-radius); corner-shape: squircle;
+}
+.gl-table-wrap.has-focus { box-shadow: var(--shadow-glass-border-tilted), var(--shadow-card); }
+.gl-table { border-collapse: collapse; font-family: var(--font-text); font-size: 14px; line-height: 20px; min-width: 320px; }
+.gl-table th, .gl-table td { padding: var(--table-cell-padding); text-align: left; vertical-align: top; border-top: 1px solid var(--background-modifier-border); }
+.gl-table thead th { border-top: 0; color: var(--text-normal); font-weight: 600; }
+.gl-table td { color: var(--table-text-color); }
+.gl-table td.is-selected { background: var(--table-selection); }
+.gl-table-btn {
+  position: absolute; bottom: 4px;
+  height: var(--table-button-height); padding: 0 8px; display: inline-flex; align-items: center;
+  border-radius: var(--radius-pill); corner-shape: squircle;
+  font-size: 13px; color: var(--text-muted); background: var(--background-modifier-hover-subtle);
+}
+.gl-table-btn.is-row { left: 8px; }
+.gl-table-btn.is-col { right: 8px; }
+
+/* ---- DragGhost (components/_ghost.scss) ---- */
+.gl-ghost-card {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+  border-radius: var(--modal-radius); corner-shape: squircle;
+  opacity: .9; background: var(--background-primary); box-shadow: var(--shadow-raised-xl);
+  font-size: 13px;
+}

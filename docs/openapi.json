@@ -811,114 +811,6 @@
         }
       }
     },
-    "/api/v1/references": {
-      "get": {
-        "tags": [
-          "Links"
-        ],
-        "summary": "References",
-        "description": "Tasks and projects that link to the target reference, such as pc://notes/note/<id>.",
-        "operationId": "references_api_v1_references_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          },
-          {
-            "APIKeyCookie": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "target",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 500,
-              "title": "Target"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ReferenceOut"
-                  },
-                  "title": "Response References Api V1 References Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/resolve": {
-      "get": {
-        "tags": [
-          "Links"
-        ],
-        "summary": "Resolve",
-        "description": "Summary of one of this app's items, for link previews in other apps.",
-        "operationId": "resolve_api_v1_resolve_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          },
-          {
-            "APIKeyCookie": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "ref",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 500,
-              "title": "Ref"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReferenceOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/agent": {
       "get": {
         "tags": [
@@ -1202,7 +1094,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectIn"
+                "$ref": "#/components/schemas/ProjectCreate"
               }
             }
           },
@@ -1241,6 +1133,54 @@
       }
     },
     "/api/v1/projects/{project_id}": {
+      "get": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Get Project",
+        "operationId": "get_project_api_v1_projects__project_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Workspace"
@@ -1533,7 +1473,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TaskIn"
+                "$ref": "#/components/schemas/TaskCreate"
               }
             }
           }
@@ -2116,6 +2056,282 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/resolve": {
+      "get": {
+        "tags": [
+          "Personal Command"
+        ],
+        "summary": "Resolve",
+        "description": "A summary of one task or project, for link previews and fallbacks.",
+        "operationId": "resolve_api_v1_resolve_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "title": "Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": [
+          "Personal Command"
+        ],
+        "summary": "Search",
+        "description": "The shared search contract (docs/search.md): tasks by title, description, checklist and labels;\nprojects by name.",
+        "operationId": "search_api_v1_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Types"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "updated_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/references": {
+      "get": {
+        "tags": [
+          "Personal Command"
+        ],
+        "summary": "References",
+        "description": "Tasks and projects that point at the target: a stored link (POST /tasks/{id}/links), or a task\ndescription that links to or embeds it ([[type:id]], ![[type:id]] or the full ref).",
+        "operationId": "references_api_v1_references_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "title": "Target"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/companion/badge": {
+      "get": {
+        "tags": [
+          "Personal Command"
+        ],
+        "summary": "Companion Badge",
+        "description": "The count on the companion's collapsed strip: open tasks due today or overdue, in each task's zone.",
+        "operationId": "companion_badge_api_v1_companion_badge_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "tags": [
+          "Personal Command"
+        ],
+        "summary": "Stream Events",
+        "description": "Server-sent events { ref, kind: updated|deleted, version } for this user's tasks and projects.",
+        "operationId": "stream_events_api_v1_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     }
   },
@@ -2705,7 +2921,7 @@
         ],
         "title": "Profile"
       },
-      "ProjectIn": {
+      "ProjectCreate": {
         "properties": {
           "name": {
             "type": "string",
@@ -2718,6 +2934,18 @@
             "pattern": "^#[0-9a-fA-F]{6}$",
             "title": "Color",
             "default": "#2563eb"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
           }
         },
         "additionalProperties": false,
@@ -2725,7 +2953,7 @@
         "required": [
           "name"
         ],
-        "title": "ProjectIn"
+        "title": "ProjectCreate"
       },
       "ProjectOut": {
         "properties": {
@@ -2808,64 +3036,6 @@
           "apns_enabled"
         ],
         "title": "PushConfigOut"
-      },
-      "ReferenceOut": {
-        "properties": {
-          "ref": {
-            "type": "string",
-            "title": "Ref"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type"
-          },
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "completed": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed"
-          },
-          "updated": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "ref",
-          "type",
-          "id",
-          "title",
-          "url"
-        ],
-        "title": "ReferenceOut",
-        "description": "A task or project that links to a given reference, in the shared resolve shape."
       },
       "SessionOut": {
         "properties": {
@@ -3049,6 +3219,159 @@
         ],
         "title": "SubscriptionOut"
       },
+      "TaskCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Description",
+            "default": ""
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Time"
+          },
+          "time_zone": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Time Zone",
+            "default": "UTC"
+          },
+          "reminder_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10080.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Minutes"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Priority",
+            "default": 4
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Labels"
+          },
+          "checklist": {
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItem"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Checklist"
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "daily",
+                  "weekly",
+                  "monthly"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence"
+          },
+          "alert_style": {
+            "type": "string",
+            "enum": [
+              "notification",
+              "alarm"
+            ],
+            "title": "Alert Style",
+            "default": "notification"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed",
+            "default": false
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "TaskCreate"
+      },
       "TaskDetailOut": {
         "properties": {
           "id": {
@@ -3225,130 +3548,6 @@
           "ref"
         ],
         "title": "TaskDetailOut"
-      },
-      "TaskIn": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Title"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 10000,
-            "title": "Description",
-            "default": ""
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "due_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due Date"
-          },
-          "due_time": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due Time"
-          },
-          "time_zone": {
-            "type": "string",
-            "maxLength": 100,
-            "title": "Time Zone",
-            "default": "UTC"
-          },
-          "reminder_minutes": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 10080.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reminder Minutes"
-          },
-          "priority": {
-            "type": "integer",
-            "maximum": 4.0,
-            "minimum": 1.0,
-            "title": "Priority",
-            "default": 4
-          },
-          "labels": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 20,
-            "title": "Labels"
-          },
-          "checklist": {
-            "items": {
-              "$ref": "#/components/schemas/ChecklistItem"
-            },
-            "type": "array",
-            "maxItems": 100,
-            "title": "Checklist"
-          },
-          "recurrence": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "daily",
-                  "weekly",
-                  "monthly"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recurrence"
-          },
-          "alert_style": {
-            "type": "string",
-            "enum": [
-              "notification",
-              "alarm"
-            ],
-            "title": "Alert Style",
-            "default": "notification"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "title"
-        ],
-        "title": "TaskIn"
       },
       "TaskOut": {
         "properties": {
@@ -3696,6 +3895,17 @@
               }
             ],
             "title": "Alert Style"
+          },
+          "undo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undo"
           }
         },
         "additionalProperties": false,

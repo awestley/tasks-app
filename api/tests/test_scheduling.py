@@ -219,3 +219,42 @@ def test_stored_task_that_no_longer_validates_stays_readable_and_fixable(workspa
     assert response.status_code == 422 and "does not exist" in response.json()["detail"]
     response = client.patch(path, json={"version": 1, "due_time": "03:30"})
     assert response.status_code == 200 and response.json()["due_time"] == "03:30"
+
+
+def quick_add_cases():
+    import json
+    from pathlib import Path
+
+    data = json.loads((Path(__file__).parent / "quick_add_cases.json").read_text())
+    projects = [SimpleNamespace(**p) for p in data["projects"]]
+    instant = datetime.fromisoformat(data["now"])
+    return [(case, data["zone"], projects, instant) for case in data["cases"]]
+
+
+@pytest.mark.parametrize(
+    "case,zone,projects,instant", quick_add_cases(), ids=lambda v: v["text"] if isinstance(v, dict) else ""
+)
+def test_shared_quick_add_cases(case, zone, projects, instant):
+    # The web app runs the same cases against web/src/parse.ts (web/tests/unit/parse.test.ts).
+    result = parse_task(case["text"], zone, projects=projects, instant=instant)
+    got = {
+        "title": result.title,
+        "due_date": str(result.due_date) if result.due_date else None,
+        "due_time": result.due_time,
+        "recurrence": result.recurrence,
+        "priority": result.priority,
+        "labels": result.labels,
+        "project": result.project_id,
+        "reminder_minutes": result.reminder_minutes,
+    }
+    want = {
+        "title": case["title"],
+        "due_date": case.get("due_date"),
+        "due_time": case.get("due_time"),
+        "recurrence": case.get("recurrence"),
+        "priority": case.get("priority"),
+        "labels": case.get("labels", []),
+        "project": case.get("project"),
+        "reminder_minutes": case.get("reminder_minutes"),
+    }
+    assert got == want

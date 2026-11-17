@@ -56,7 +56,7 @@ struct LoginView: View {
             .padding(.horizontal, 16).padding(.vertical, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             #endif
-            .background(Clean.canvas)
+            .background(Glassive.backgroundSecondary)
         .task {
             server = store.server
             // Offer the saved server's sign-in methods right away. A new server waits for Continue.
@@ -67,7 +67,7 @@ struct LoginView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Sign in").font(.title2.weight(.semibold))
             VStack(alignment: .leading, spacing: 6) {
-                Text("Server").font(.subheadline.weight(.medium)).foregroundStyle(Clean.text).accessibilityHidden(true)
+                Text("Server").font(.subheadline.weight(.medium)).foregroundStyle(Color.primary).accessibilityHidden(true)
                 TextField("Your server URL", text: $server, prompt: Text(verbatim: "https://tasks.example.com"))
                     .labelsHidden()
                     // Hiding the label also removes it from VoiceOver, which would then read only the example URL.
@@ -90,14 +90,14 @@ struct LoginView: View {
                 Button { Task { await check(fromPerson: true) } } label: {
                     Text(checking ? "Checking..." : "Continue").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(CleanPrimaryButtonStyle())
+                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large)
                 .disabled(checking || Store.origin(server).isEmpty)
             }
             if let error = store.error {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.circle").accessibilityHidden(true)
                     Text(error).accessibilityIdentifier("signInError").fixedSize(horizontal: false, vertical: true)
-                }.font(.callout).foregroundStyle(Clean.danger)
+                }.font(.callout).foregroundStyle(Glassive.red)
             }
             #if DEBUG
             DisclosureGroup("Local development", isExpanded: $showDevelopment) {
@@ -117,8 +117,8 @@ struct LoginView: View {
             #endif
         }
         .padding(32)
-        .background(Clean.surface, in: RoundedRectangle(cornerRadius: Clean.radiusXL, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Clean.radiusXL, style: .continuous).stroke(Clean.border))
+        .background(Glassive.backgroundPrimary, in: RoundedRectangle(cornerRadius: Glassive.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Glassive.cardRadius, style: .continuous).stroke(Glassive.border))
         .shadow(color: .black.opacity(0.14), radius: 24, y: 12)
     }
     /// Matches the web sign-in: Apple when configured, the local workspace on a development server, otherwise a note.
@@ -132,13 +132,13 @@ struct LoginView: View {
                     Task { await finishApple(result, challenge: challenge) }
                 }
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 44).clipShape(RoundedRectangle(cornerRadius: Clean.radiusMD, style: .continuous))
+                .frame(height: 44).clipShape(Capsule())
                 .disabled(store.busy)
             } else if loadingChallenge {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)
             } else {
                 Button { Task { await loadChallenge() } } label: { Text("Try again").frame(maxWidth: .infinity) }
-                    .buttonStyle(CleanSecondaryButtonStyle())
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
             }
         }
         #if DEBUG
@@ -146,11 +146,11 @@ struct LoginView: View {
             Button { Task { await openLocalWorkspace() } } label: {
                 Text(store.busy ? "Opening..." : "Open local workspace").frame(maxWidth: .infinity)
             }
-            .buttonStyle(CleanPrimaryButtonStyle()).disabled(store.busy)
+            .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large).disabled(store.busy)
         }
         #endif
         if !methods.apple_enabled {
-            Text("Apple sign-in is not configured.").font(.callout).foregroundStyle(Clean.textSecondary)
+            Text("Apple sign-in is not configured.").font(.callout).foregroundStyle(Color.secondary)
         }
     }
     /// Asks the server in the field which sign-in methods it offers.
@@ -290,7 +290,7 @@ struct WorkspaceView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if selection == "today", search.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Clean.textMuted)
+                        Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Color.secondary)
                     }.padding(24)
                 }
                 if filtered.isEmpty {
@@ -301,37 +301,37 @@ struct WorkspaceView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 Button { Task { await store.toggle(task) } } label: {
                                     Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3).foregroundStyle(task.completed ? Clean.inverse : Clean.priority(task.priority))
+                                        .font(.title3).foregroundStyle(task.completed ? Glassive.accent : Glassive.priority(task.priority))
                                 }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(task.completed ? "Restore \(task.title)" : "Complete \(task.title)")
                                 Button { editor = TaskEditorSelection(task: task) } label: {
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Clean.textMuted : Clean.text)
-                                        if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Clean.textSecondary).lineLimit(1) }
+                                        Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Color.secondary : Color.primary)
+                                        if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1) }
                                         HStack(spacing: 8) {
                                             if let due = task.due_date {
                                                 Label(DateOnly.date(due).formatted(date: .abbreviated, time: .omitted), systemImage: task.recurrence == nil ? "calendar" : "repeat")
-                                                    .foregroundStyle(due < today && !task.completed ? Clean.danger : due == today ? Clean.text : Clean.textMuted)
+                                                    .foregroundStyle(due < today && !task.completed ? Glassive.red : due == today ? Glassive.textAccent : Color.secondary)
                                             }
-                                            if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Clean.textMuted) }
+                                            if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Color.secondary) }
                                             if task.reminder_minutes != nil {
                                                 Image(systemName: task.isAlarm ? "alarm" : "bell").accessibilityLabel(task.isAlarm ? "Alarm set" : "Reminder set")
                                             }
                                             if let snoozed = task.snoozedInstant, snoozed > Date() {
                                                 Label(snoozed.formatted(date: .omitted, time: .shortened), systemImage: "zzz")
-                                                    .foregroundStyle(Clean.textMuted).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
+                                                    .foregroundStyle(Color.secondary).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
                                             }
                                             if !task.checklist.isEmpty {
                                                 Label("\(task.checklist.filter { $0.completed }.count)/\(task.checklist.count)", systemImage: "checklist")
-                                                    .foregroundStyle(Clean.textMuted)
+                                                    .foregroundStyle(Color.secondary)
                                                     .accessibilityLabel("\(task.checklist.filter { $0.completed }.count) of \(task.checklist.count) checklist items completed")
                                             }
-                                            if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Clean.textMuted) }
+                                            if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Color.secondary) }
                                         }.font(.caption)
                                     }.frame(maxWidth: .infinity, alignment: .leading)
                                 }.buttonStyle(.plain)
                             }.padding(.vertical, 6)
-                            .listRowBackground(Clean.surface)
-                            .listRowSeparatorTint(Clean.border)
+                            .listRowBackground(Glassive.backgroundPrimary)
+                            .listRowSeparatorTint(Glassive.border)
                             .contextMenu {
                                 TaskMenu(task: task, edit: { editor = TaskEditorSelection(task: task) },
                                          goToProject: { search = ""; selection = task.project_id ?? "inbox" },
@@ -340,17 +340,17 @@ struct WorkspaceView: View {
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 Button { Task { await store.toggle(task) } } label: {
                                     Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward" : "checkmark")
-                                }.tint(task.completed ? Clean.accent : Clean.success)
+                                }.tint(task.completed ? Glassive.accent : Glassive.green)
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Clean.danger)
-                                Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Clean.accent)
+                                Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Glassive.red)
+                                Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Glassive.accent)
                             }
                         }
                     }.listStyle(.plain).scrollContentBackground(.hidden).refreshable { await store.perform { try await store.refresh() } }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Clean.surface)
+                .background(Glassive.backgroundPrimary)
                 .navigationTitle(search.isEmpty ? title : "Search results")
                 .searchable(text: $search, prompt: "Search tasks")
                 .toolbar {
@@ -397,9 +397,9 @@ struct TaskMenu: View {
     }
     var dates: [(String, String, String, Color)] {
         let weekday = Calendar.current.component(.weekday, from: Date()) // Sunday is 1
-        let options = [(Self.day(0), "Today", "calendar", Clean.textMuted), (Self.day(1), "Tomorrow", "sunrise", Clean.textMuted),
-                       (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Clean.textMuted),
-                       (Self.day((9 - weekday) % 7 == 0 ? 7 : (9 - weekday) % 7), "Next week", "arrow.right.to.line", Clean.textMuted)]
+        let options = [(Self.day(0), "Today", "calendar", Color.secondary), (Self.day(1), "Tomorrow", "sunrise", Color.secondary),
+                       (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Color.secondary),
+                       (Self.day((9 - weekday) % 7 == 0 ? 7 : (9 - weekday) % 7), "Next week", "arrow.right.to.line", Color.secondary)]
         // The weekend can be today or tomorrow; keep one choice per date.
         return options.filter { option in options.first { $0.0 == option.0 }?.1 == option.1 }
     }
@@ -416,13 +416,13 @@ struct TaskMenu: View {
             })) {
                 // Palette pickers color each symbol with its tint.
                 ForEach(dates, id: \.0) { date, name, symbol, color in Label(name, systemImage: symbol).tint(color).tag(date) }
-                Label("No date", systemImage: "circle.slash").tint(Clean.textMuted).tag("")
+                Label("No date", systemImage: "circle.slash").tint(Color.secondary).tag("")
             }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
         }
         Section("Priority") {
             Picker("Priority", selection: Binding(get: { task.priority }, set: { value in Task { await store.update(task, ["priority": value]) } })) {
                 ForEach([(1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Normal")], id: \.0) { value, name in
-                    Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Clean.priority(value)).tag(value)
+                    Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Glassive.priority(value)).tag(value)
                 }
             }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
         }
@@ -543,9 +543,9 @@ struct TaskEditorView: View {
         NavigationStack {
             Form {
                 TextField("Task title, e.g. Order pizza Friday afternoon", text: $draft.title)
-                Toggle("Detect dates, times and details", isOn: $smart).tint(Clean.success)
+                Toggle("Detect dates, times and details", isOn: $smart).tint(Glassive.green)
                 if parsing { ProgressView("Reading details...") }
-                if !parseError.isEmpty { Text(parseError + " Turn off detail detection to enter fields manually.").foregroundStyle(Clean.danger) }
+                if !parseError.isEmpty { Text(parseError + " Turn off detail detection to enter fields manually.").foregroundStyle(Glassive.red) }
                 if let value = detected {
                     Section("Detected details") {
                         Text(value.title).font(.headline)
@@ -572,7 +572,7 @@ struct TaskEditorView: View {
                         }.disabled(task?.completed == true)
                     }
                     if task?.completed == true {
-                        Text("Reopen this task to change its checklist.").font(.caption).foregroundStyle(Clean.textSecondary)
+                        Text("Reopen this task to change its checklist.").font(.caption).foregroundStyle(Color.secondary)
                     } else {
                         Button { draft.checklist.append(ChecklistItem()) } label: { Label("Add item", systemImage: "plus") }
                             .disabled(draft.checklist.count >= 100)
@@ -587,10 +587,10 @@ struct TaskEditorView: View {
                     Text("Inbox").tag(nil as String?)
                     ForEach(store.projects) { Text($0.name).tag(Optional($0.id)) }
                 }
-                Toggle("Due date", isOn: $hasDate).tint(Clean.success)
+                Toggle("Due date", isOn: $hasDate).tint(Glassive.green)
                 if hasDate {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
-                    Toggle("Due time", isOn: $hasTime).tint(Clean.success)
+                    Toggle("Due time", isOn: $hasTime).tint(Glassive.green)
                     if hasTime {
                         DatePicker("Time", selection: $clock, displayedComponents: .hourAndMinute)
                         Picker("Time zone", selection: $draft.time_zone) {
@@ -615,7 +615,7 @@ struct TaskEditorView: View {
                             }
                             #if os(iOS)
                             if alarmDenied && draft.alert_style == "alarm" {
-                                Text("Alarms are off for this app in Settings. This device will show a notification instead.").font(.caption).foregroundStyle(Clean.textSecondary)
+                                Text("Alarms are off for this app in Settings. This device will show a notification instead.").font(.caption).foregroundStyle(Color.secondary)
                             }
                             #endif
                         }
@@ -746,7 +746,7 @@ struct SettingsView: View {
             Form {
                 Section("Account") {
                     Text(store.profile?.email ?? "")
-                    Text(store.server).font(.caption).foregroundStyle(Clean.textMuted)
+                    Text(store.server).font(.caption).foregroundStyle(Color.secondary)
                     Button("Sign out") { Task { await store.perform { try await store.signOut(); dismiss() } } }
                     // Best effort on the server. Unregistering below makes APNs retire this device's token anyway.
                     Button("Remove local session") { Task { await store.perform { try? await notifications.disable(); try store.forgetSession(); dismiss() } } }
@@ -761,7 +761,7 @@ struct SettingsView: View {
                     Section {
                         Toggle("Morning summary", isOn: Binding(get: { loaded.summary_time != nil }, set: { on in
                             savePreferences { $0.summary_time = on ? "08:00" : nil }
-                        })).tint(Clean.success)
+                        })).tint(Glassive.green)
                         if let time = loaded.summary_time {
                             DatePicker("Summary time", selection: Binding(get: { Self.clock(time) }, set: { value in
                                 savePreferences { $0.summary_time = value.formatted(.verbatim("\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)", timeZone: .current, calendar: .current)) }

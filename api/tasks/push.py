@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import httpx
 import jwt
@@ -246,21 +246,27 @@ def apns_payload(message):
     return {"apns-push-type": "alert", "apns-priority": "10" if message.level != "passive" else "5"}, body
 
 
-def web_payload(message, delivery_id):
+def web_payload(message, delivery_id, tag=None):
     return {
         "title": message.title,
         "subtitle": message.subtitle,
         "body": message.body,
         "task_id": message.task_id,
         "kind": message.kind,
-        "tag": message.collapse or delivery_id,
+        "tag": tag or message.collapse or delivery_id,
         "badge": message.badge,
         "url": message.url,
         "actions": message.kind in ("reminder", "snooze", "overdue"),
     }
 
 
-def send_push(subscription, message, delivery_id):
+def reminder_tag(task_id, scheduled_for):
+    """Notification tag shared with the app's own reminders (web/src/reminders.ts), so a reminder
+    delivered both ways shows once."""
+    return f"reminder-{task_id}-{int(scheduled_for.replace(tzinfo=UTC).timestamp() * 1000)}"
+
+
+def send_push(subscription, message, delivery_id, tag=None):
     details = subscription.details
     if subscription.kind == "web":
         import requests
@@ -282,7 +288,7 @@ def send_push(subscription, message, delivery_id):
                         "endpoint": endpoint,
                         "keys": {"p256dh": details["p256dh"], "auth": details["auth"]},
                     },
-                    data=json.dumps(web_payload(message, delivery_id)),
+                    data=json.dumps(web_payload(message, delivery_id, tag)),
                     vapid_private_key=settings.vapid_private_key.replace("\\n", "\n"),
                     vapid_claims={"sub": settings.vapid_subject},
                     ttl=3600,

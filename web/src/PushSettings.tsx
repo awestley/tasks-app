@@ -10,16 +10,26 @@ type Preferences = {
   time_sensitive_priority: number;
 };
 
-/** Removes this browser's notifications for tasks that are no longer open, and updates the app badge. */
+/** What was last sent to the service worker, so an unchanged list sends nothing. */
+let lastSent = "";
+
+/** Removes this browser's notifications for tasks that are no longer open, and updates the app badge.
+ * Only where this browser may show notifications; otherwise there is nothing to remove. */
 export function clearStaleNotifications(tasks: Task[]) {
-  if (!("serviceWorker" in navigator)) return;
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
   const open = tasks.filter((t) => !t.completed);
   const today = localDate();
-  navigator.serviceWorker.controller?.postMessage({
+  const message = {
     type: "open-tasks",
     ids: open.map((t) => t.id),
     badge: open.filter((t) => t.due_date && t.due_date <= today).length,
-  });
+  };
+  const key = JSON.stringify(message);
+  const worker = navigator.serviceWorker.controller;
+  if (!worker || key === lastSent) return;
+  lastSent = key;
+  worker.postMessage(message);
 }
 
 export function NotificationPreferences() {
@@ -127,7 +137,7 @@ export async function disableBrowserPush() {
     }
   }
   if ("serviceWorker" in navigator) {
-    const registration = await navigator.serviceWorker.getRegistration("/");
+    const registration = await navigator.serviceWorker.getRegistration("./");
     await (await registration?.pushManager.getSubscription())?.unsubscribe();
   }
   localStorage.removeItem("tasks-push-id");
@@ -171,7 +181,7 @@ export function PushSettings() {
       throw new Error(
         "Notifications are blocked. Allow them in browser settings to receive reminders.",
       );
-    await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.register("./sw.js");
     const registration = await navigator.serviceWorker.ready;
     const key = config!.vapid_public_key!.replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(

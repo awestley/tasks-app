@@ -1,0 +1,36 @@
+{
+  "name": "@awestley/glassive",
+  "version": "0.1.0",
+  "description": "Glassive design system: tokens, component classes and a theme helper.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awestley/obsidian-glassive.git",
+    "directory": "package"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": ["dist"],
+  "main": "./dist/theme.js",
+  "types": "./dist/theme.d.ts",
+  "exports": {
+    ".": { "types": "./dist/theme.d.ts", "default": "./dist/theme.js" },
+    "./theme": { "types": "./dist/theme.d.ts", "default": "./dist/theme.js" },
+    "./glassive.css": "./dist/glassive.css",
+    "./tokens.css": "./dist/tokens.css",
+    "./accent.css": "./dist/accent.css",
+    "./bundle.css": "./dist/bundle.css",
+    "./tokens.json": "./dist/tokens.json",
+    "./components.d.ts": "./dist/components.d.ts"
+  },
+  "sideEffects": ["*.css"],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs && node --test test/*.test.js",
+    "prepublishOnly": "npm test"
+  },
+  "engines": { "node": ">=20" }
+}

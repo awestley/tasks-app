@@ -1,0 +1,32 @@
+// Types for @awestley/pc-runtime (docs/app-contract.md, section 7).
+export type Placement = 'new-column' | 'replace' | 'split' | 'tab' | 'companion';
+export type SurfaceKind = 'pane' | 'docked' | 'floating' | 'sheet' | 'window';
+export interface Surface { kind: SurfaceKind; width: number; height: number; detent?: 'peek' | 'half' | 'full' }
+export type NoticeKind = 'info' | 'success' | 'warning' | 'error';
+export interface Theme { mode: 'light' | 'dark' | 'system'; accent: string; fontSize: number }
+export interface Command { id: string; label: string; shortcut?: string }
+// Takes any theme-shaped value, so a design system with narrower types (e.g. glassive applyTheme) fits.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ApplyTheme = (theme: any, root?: HTMLElement, win?: Window) => unknown;
+
+export interface PcClient {
+  readonly PROTOCOL: string;
+  /** Resolves true once the shell answers, false when the app runs on its own. */
+  readonly ready: Promise<boolean>;
+  isHosted(): boolean;
+  paneId(): string | null;
+  theme(): Theme;
+  surface(): Surface;
+  on(event: 'theme', fn: (theme: Theme) => void): () => void;
+  on(event: 'surface', fn: (surface: Surface) => void): () => void;
+  on(event: 'command', fn: (detail: { id: string }) => void): () => void;
+  open(target: string, options?: { placement?: Placement }): void;
+  notify(text: string, kind?: NoticeKind): void;
+  registerCommands(commands: Command[]): void;
+  setTitle(title: string): void;
+  companion: { show(): void; hide(): void };
+}
+
+export const PROTOCOL: string;
+export function connect(options?: { app?: string; applyTheme?: ApplyTheme; win?: Window }): PcClient;
+export { parseRef, formatRef, findShortRefs, shortRef } from './refs.js';

@@ -1,0 +1,62 @@
+/* App-level Glassive additions. The tokens themselves come from the shared package
+   (@awestley/glassive, imported in main.tsx); data-theme is set by the theme the shell sends,
+   or by the system appearance when the app runs on its own. */
+/* Liquid control fill (focused window), copied from the system's component stylesheet. */
+:root {
+  --gl-control-bg:
+    linear-gradient(rgb(255 255 255 / 40%), rgb(255 255 255 / 20%)),
+    rgb(255 255 255 / 20%);
+  --gl-control-filter: var(--glassive-control-backdrop-filter-light);
+  --gl-control-hover: var(--color-base-30);
+  --gl-glass-filter: var(--backdrop-filter-glass-light);
+  --gl-glass-subtle-filter: var(--backdrop-filter-glass-subtle-light);
+}
+:root[data-theme="dark"] {
+  --gl-control-bg:
+    linear-gradient(
+      color-mix(in oklch, var(--color-accent) 5%, transparent),
+      color-mix(in oklch, var(--color-accent) 5%, transparent)
+    ),
+    rgb(255 255 255 / 10%);
+  --gl-control-filter: var(--glassive-control-backdrop-filter-dark);
+  --gl-control-hover: color-mix(
+    in oklch,
+    rgb(80 80 80) 95%,
+    var(--interactive-accent)
+  );
+  --gl-glass-filter: var(--backdrop-filter-glass-dark);
+  --gl-glass-subtle-filter: var(--backdrop-filter-glass-subtle-dark);
+}
+
+/* Entrances: modals pop in subtly, notices and popovers pop in with an overshoot. */
+@keyframes gl-pop-in-subtle {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes gl-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes gl-fade-in {
+  from {
+    opacity: 0;
+  }
+}

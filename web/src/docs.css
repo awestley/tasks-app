@@ -8,7 +8,11 @@ body {
 .swagger-ui .opblock-tag,
 .swagger-ui .opblock .opblock-summary-description,
 .swagger-ui .btn {
-  font-family: "Inter Variable", system-ui, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
 }
 
 .swagger-ui .wrapper {

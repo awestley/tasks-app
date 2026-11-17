@@ -18,10 +18,17 @@ class Settings(BaseSettings):
     apple_native_client_ids: str = ""
     apple_base_url: str = "https://appleid.apple.com"
     static_directory: str = "../web/dist"
-    # Comma-separated Apple subjects or verified email addresses that may sign in. Required in production.
+    # Comma-separated Apple subjects or verified email addresses that may sign in. Required in production,
+    # unless the shell handles sign in.
     allowed_apple_accounts: str = ""
     # Header a trusted proxy sets to the client's address, such as x-forwarded-for or do-connecting-ip.
     client_ip_header: str = ""
+
+    # Personal Command: when SHELL_URL is set, the app runs inside the shell at that origin. People sign
+    # in through the shell, and this API verifies the shell's tokens instead of running its own sign in.
+    shell_url: str = ""
+    shell_jwks_url: str = ""
+    base_path: str = ""
 
     vapid_public_key: str = ""
     vapid_private_key: str = ""
@@ -51,7 +58,7 @@ class Settings(BaseSettings):
         "review_auto_link"
     )
 
-    @field_validator("public_url", "notebook_web_url")
+    @field_validator("public_url", "notebook_web_url", "shell_url")
     @classmethod
     def origin_without_trailing_slash(cls, value):
         # Browsers send Origin without one, so a trailing slash would fail every cookie write.
@@ -64,6 +71,14 @@ class Settings(BaseSettings):
     @property
     def production(self):
         return self.environment == "production"
+
+    @property
+    def shell_mode(self):
+        return bool(self.shell_url)
+
+    @property
+    def jwks_url(self):
+        return self.shell_jwks_url or self.shell_url.rstrip("/") + "/auth/.well-known/jwks.json"
 
     @property
     def apple_ready(self):
@@ -90,11 +105,19 @@ class Settings(BaseSettings):
                 raise RuntimeError("PUBLIC_URL must be an origin, without a path")
             if self.notebook_web_url and not self.notebook_web_url.startswith("https://"):
                 raise RuntimeError("NOTEBOOK_WEB_URL must use HTTPS in production")
-            if self.apple_base_url != "https://appleid.apple.com" or not self.apple_ready:
-                raise RuntimeError("Production requires configured Sign in with Apple")
-            if not self.apple_account_allowlist or "REPLACE" in self.allowed_apple_accounts:
-                raise RuntimeError("Production requires ALLOWED_APPLE_ACCOUNTS so only your accounts can sign in")
+            if self.shell_mode:
+                if not self.shell_url.startswith("https://") or self.public_url != self.shell_url:
+                    raise RuntimeError("Production in the shell requires an HTTPS SHELL_URL equal to PUBLIC_URL")
+                if not self.base_path.startswith("/apps/"):
+                    raise RuntimeError("Production in the shell requires BASE_PATH, such as /apps/tasks")
+            else:
+                # The shell decides who can sign in. On its own, this server has to.
+                if self.apple_base_url != "https://appleid.apple.com" or not self.apple_ready:
+                    raise RuntimeError("Production requires configured Sign in with Apple")
+                if not self.apple_account_allowlist or "REPLACE" in self.allowed_apple_accounts:
+                    raise RuntimeError("Production requires ALLOWED_APPLE_ACCOUNTS so only your accounts can sign in")
 
 
 settings = Settings()
+settings.base_path = settings.base_path.rstrip("/")
 settings.validate_production()

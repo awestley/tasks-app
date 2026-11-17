@@ -85,13 +85,9 @@ async def exercise(session):
     link = linked.structuredContent or json.loads(linked.content[0].text)
     found = await session.call_tool("find_linked", {"ref": note})
     assert not found.isError, found
-    # A list result arrives as one content block per item, or as {"result": [...]} when structured.
-    found_items = (
-        found.structuredContent["result"]
-        if found.structuredContent
-        else [json.loads(block.text) for block in found.content]
-    )
-    assert task["id"] in {item["id"] for item in found_items}
+    # The app contract's references shape: {"items": [summary, ...]}, each with the item's ref.
+    found_items = (found.structuredContent or json.loads(found.content[0].text))["items"]
+    assert task["ref"] in {item["ref"] for item in found_items}
     detail = await session.call_tool("get_task", {"task_id": task["id"]})
     assert not detail.isError, detail
     unlinked = await session.call_tool("unlink_item", {"task_id": task["id"], "link_id": link["id"]})

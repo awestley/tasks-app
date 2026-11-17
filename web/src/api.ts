@@ -13,7 +13,9 @@ export type Task = {
   labels: string[];
   checklist: ChecklistItem[];
   recurrence: string | null;
+  /** "alarm" rings the reminder as an alarm on iPhone; other devices show a notification. */
   alert_style: "notification" | "alarm";
+  /** Set by Snooze on a notification; read-only here. */
   snoozed_until: string | null;
   completed: boolean;
   completed_at: string | null;
@@ -50,13 +52,36 @@ export class APIError extends Error {
     super(message);
   }
 }
+/** Network failures and an unreachable app behind the proxy: the request may be retried later. */
+export const isOffline = (e: unknown) =>
+  e instanceof TypeError ||
+  [0, 502, 503, 504].includes((e as APIError)?.status);
+/** The server had a problem or asked to wait, which says nothing about the request itself. */
+export const isTemporary = (e: unknown) => {
+  const status = (e as APIError)?.status;
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+};
+let refreshing: Promise<boolean> | null = null;
+/** Inside Personal Command the shell's access token is short-lived; renew it once on a 401. */
+function renewShellSession() {
+  refreshing ||= fetch("/auth/refresh", {
+    method: "POST",
+    credentials: "same-origin",
+  })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .finally(() => setTimeout(() => (refreshing = null), 5000));
+  return refreshing;
+}
 export async function api<T>(
   path: string,
   method = "GET",
   data?: unknown,
+  retry = true,
 ): Promise<T> {
+  // Relative to the page, so the app works at the root and under the shell's /apps/tasks/.
   const response = await fetch(
-    path.startsWith("/auth") ? path : "/api/v1" + path,
+    (path.startsWith("/auth") ? path : "/api/v1" + path).slice(1),
     {
       method,
       credentials: "same-origin",
@@ -64,13 +89,22 @@ export async function api<T>(
       body: data ? JSON.stringify(data) : undefined,
     },
   );
+  if (
+    response.status === 401 &&
+    retry &&
+    location.pathname.startsWith("/apps/") &&
+    (await renewShellSession())
+  )
+    return api<T>(path, method, data, false);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new APIError(
       response.status,
       typeof body.detail === "string"
         ? body.detail
-        : "Please check your input and try again.",
+        : response.status >= 500
+          ? "The server had a problem. Please try again."
+          : "Please check your input and try again.",
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
@@ -86,23 +120,6 @@ export async function allTasks(): Promise<Task[]> {
 export function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-export function dateLabel(value: string | null) {
-  if (!value) return "";
-  const today = localDate();
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (value === today) return "Today";
-  if (value === localDate(tomorrow)) return "Tomorrow";
-  const date = new Date(value + "T12:00:00");
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() !== new Date().getFullYear() && {
-      year: "numeric",
-    }),
-  });
-}
-
 export type ParsedTask = {
   title: string;
   due_date: string | null;

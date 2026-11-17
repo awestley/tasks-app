@@ -1,0 +1,835 @@
+/* The phone layout (phone.tsx): large titles, a bottom tab bar, a + button, a quick add sheet on
+   the keyboard, swipe actions and the task full screen. Safe areas come from env() on its own, and
+   from Personal Command's --pc-safe-* variables when it is the app on screen there (env() reads 0
+   inside a frame). */
+:root {
+  --safe-t: max(env(safe-area-inset-top, 0px), var(--pc-safe-top, 0px));
+  --safe-r: max(env(safe-area-inset-right, 0px), var(--pc-safe-right, 0px));
+  --safe-b: max(env(safe-area-inset-bottom, 0px), var(--pc-safe-bottom, 0px));
+  --safe-l: max(env(safe-area-inset-left, 0px), var(--pc-safe-left, 0px));
+  --tabbar-h: 52px;
+  --phone-bar-h: 48px;
+}
+@property --dx {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+.focus-proxy {
+  position: fixed;
+  top: var(--safe-t);
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.app-shell.is-phone {
+  display: block;
+  min-height: 100dvh;
+  padding: 0 var(--safe-r) calc(var(--tabbar-h) + var(--safe-b) + 96px)
+    var(--safe-l);
+  background: var(--background-primary);
+}
+.phone-page {
+  min-width: 0;
+}
+
+/* Title: a slim bar that stays, and a large title that scrolls under it. */
+.phone-head {
+  display: contents;
+}
+.phone-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: calc(var(--phone-bar-h) + var(--safe-t));
+  padding: var(--safe-t) 6px 0 8px;
+  background: color-mix(in oklch, var(--background-primary) 92%, transparent);
+  backdrop-filter: var(--gl-glass-filter);
+  -webkit-backdrop-filter: var(--gl-glass-filter);
+  transition: box-shadow 0.2s;
+}
+.is-scrolled .phone-bar {
+  box-shadow: 0 0.5px 0 var(--background-modifier-border);
+}
+.phone-bar-title {
+  max-width: 56vw;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.is-scrolled .phone-bar-title {
+  opacity: 1;
+}
+.phone-bar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+.phone-bar .icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--text-normal);
+}
+.phone-bar .icon-button svg {
+  width: 21px;
+  height: 21px;
+}
+.phone-bar .bell-button.is-on {
+  color: var(--text-accent);
+}
+.phone-bar .sync-status {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.phone-back {
+  justify-self: start;
+  height: 40px;
+  padding: 0 8px 0 0;
+  gap: 0;
+  font-size: 17px;
+  color: var(--text-accent);
+}
+.phone-head h1 {
+  margin: 4px 16px 0;
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  overflow-wrap: anywhere;
+}
+.phone-head h1 .project-hash {
+  margin-right: 4px;
+}
+.phone-sub {
+  margin: 2px 16px 0;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--text-muted);
+}
+.is-phone .expired-banner {
+  margin: 12px 16px 0;
+}
+
+/* Tabs and the + button */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  padding: 0 calc(4px + var(--safe-r)) var(--safe-b) calc(4px + var(--safe-l));
+  background: color-mix(in oklch, var(--background-primary) 86%, transparent);
+  backdrop-filter: var(--gl-glass-filter);
+  -webkit-backdrop-filter: var(--gl-glass-filter);
+  box-shadow: 0 -0.5px 0 var(--background-modifier-border);
+}
+.tabbar button {
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  height: var(--tabbar-h);
+  padding: 6px 0 4px;
+  font-size: 10.5px;
+  line-height: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  -webkit-tap-highlight-color: transparent;
+}
+.tabbar button.is-active {
+  color: var(--text-accent);
+}
+.tabbar button:active svg {
+  transform: scale(0.92);
+}
+.tab-day {
+  position: relative;
+  display: inline-flex;
+}
+.tab-day b {
+  position: absolute;
+  inset: 8px 0 0;
+  font-size: 9.5px;
+  line-height: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+.fab {
+  position: fixed;
+  right: calc(18px + var(--safe-r));
+  bottom: calc(var(--tabbar-h) + var(--safe-b) + 18px);
+  z-index: 30;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / 20%),
+    0 2px 6px rgb(0 0 0 / 12%);
+  transition:
+    transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    background-color 0.15s;
+}
+.fab:active {
+  transform: scale(0.94);
+}
+.is-phone.has-toast .fab {
+  transform: translateY(-64px);
+}
+/* With the keyboard up, the tabs and the + button would only crowd what is being typed. */
+:root.has-keyboard .is-phone .tabbar,
+:root.has-keyboard .is-phone .fab {
+  display: none;
+}
+
+/* The list */
+.is-phone .task-main {
+  padding: 0 16px;
+}
+.is-phone .task-groups {
+  margin-top: 4px;
+}
+.is-phone .task-section {
+  margin-top: 18px;
+}
+.is-phone .task-section h3 {
+  position: sticky;
+  top: calc(var(--phone-bar-h) + var(--safe-t));
+  z-index: 5;
+  margin: 0 -16px;
+  padding: 0 16px;
+  min-height: 40px;
+  font-size: 15px;
+  background: var(--background-primary);
+  box-shadow: 0 0.5px 0 var(--background-modifier-border-subtle);
+}
+.is-phone .task-section h3 > button {
+  height: 32px;
+  font-size: 15px;
+}
+.is-phone .task-row {
+  margin: 0 -16px;
+  padding: 12px 16px;
+  gap: 14px;
+  min-height: 60px;
+  border-radius: 0;
+  background: var(--background-primary);
+  touch-action: pan-y;
+  overflow: hidden;
+  transition: background-color 0.15s;
+}
+.is-phone .task-row::after {
+  left: 52px;
+  right: 0;
+}
+.is-phone .task-row:hover {
+  background: var(--background-primary);
+}
+.is-phone .task-row:active:not(.is-swiping),
+.is-phone .task-row.menu-target {
+  background: var(--background-modifier-hover-exsubtle);
+}
+.is-phone .task-row.is-selected {
+  box-shadow: none;
+}
+.is-phone .check-task {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin-top: 0;
+  border-width: 1.75px;
+}
+.is-phone .check-task::before {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+.is-phone .task-title {
+  font-size: 16px;
+  line-height: 22px;
+}
+.is-phone .task-description {
+  font-size: 14px;
+  line-height: 19px;
+}
+.is-phone .task-meta {
+  width: 100%;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.is-phone .task-meta > span {
+  font-size: 13px;
+  line-height: 16px;
+}
+.is-phone .task-meta svg {
+  width: 13px;
+  height: 13px;
+}
+.is-phone .row-project {
+  margin-left: auto;
+}
+.is-phone .row-actions,
+.is-phone .task-project,
+.is-phone .row-menu {
+  display: none;
+}
+.is-phone .add-task-row {
+  width: calc(100% + 32px);
+  min-height: 48px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  gap: 14px;
+  border-radius: 0;
+  font-size: 15px;
+}
+.is-phone .add-task-row > svg {
+  width: 22px;
+  height: 22px;
+}
+.is-phone .empty-state {
+  padding-top: 64px;
+}
+.is-phone .week-strip {
+  margin: 14px 16px 0;
+}
+.is-phone .week-strip strong {
+  font-size: 17px;
+  line-height: 26px;
+  min-width: 30px;
+}
+
+/* Swipe right to complete, left to schedule. */
+.is-phone .task-row > :not(.swipe-act) {
+  transform: translateX(var(--dx));
+}
+.is-phone .task-row.is-settling {
+  transition: --dx 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.swipe-act {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  overflow: hidden;
+  color: #fff;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+}
+.swipe-act svg {
+  flex-shrink: 0;
+  margin: 0 22px;
+}
+.task-row[data-swipe="right"] .swipe-act.is-done,
+.task-row[data-swipe="done"] .swipe-act.is-done,
+.task-row[data-swipe="left"] .swipe-act.is-date,
+.task-row[data-swipe="date"] .swipe-act.is-date,
+.task-row.is-settling .swipe-act {
+  display: flex;
+}
+.swipe-act.is-done {
+  left: 0;
+  width: max(var(--dx), 0px);
+  justify-content: flex-start;
+  background: var(--color-green);
+}
+.swipe-act.is-date {
+  right: 0;
+  width: max(calc(var(--dx) * -1), 0px);
+  justify-content: flex-end;
+  background: var(--color-purple);
+}
+.task-row[data-swipe="done"] .swipe-act,
+.task-row[data-swipe="date"] .swipe-act {
+  opacity: 1;
+}
+.task-row[data-swipe="done"] .swipe-act svg,
+.task-row[data-swipe="date"] .swipe-act svg {
+  animation: swipe-armed 0.2s ease-out;
+}
+@keyframes swipe-armed {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+/* Browse */
+.phone-group {
+  margin: 16px 16px 0;
+  overflow: hidden;
+  border-radius: var(--card-radius);
+  corner-shape: squircle;
+  background: var(--background-secondary);
+}
+.phone-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 26px 8px -8px 30px;
+}
+.phone-group-head h2 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.phone-group-head .icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text-accent);
+}
+.phone-cell {
+  position: relative;
+  width: 100%;
+  min-height: 50px;
+  padding: 0 12px 0 16px;
+  justify-content: flex-start;
+  gap: 14px;
+  font-size: 16px;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.phone-cell + .phone-cell::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 54px;
+  right: 0;
+  height: 0.5px;
+  background: var(--background-modifier-border);
+}
+.phone-cell:active {
+  background: var(--background-modifier-hover);
+}
+.phone-cell-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.phone-cell-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-cell small {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.phone-cell-chevron {
+  color: var(--text-faint);
+}
+.phone-group-hint {
+  margin: 0;
+  padding: 15px 16px;
+  font-size: 14px;
+  line-height: 19px;
+  color: var(--text-muted);
+}
+
+/* Search */
+.search-box.phone-search {
+  width: auto;
+  height: 44px;
+  margin: 12px 16px 4px;
+  padding: 0 6px 0 12px;
+  gap: 8px;
+  border-radius: 12px;
+}
+.search-box.phone-search > svg {
+  width: 18px;
+  height: 18px;
+}
+.search-box.phone-search input:not([type="checkbox"]) {
+  min-height: 0;
+  font-size: 17px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-box.phone-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-box.phone-search button {
+  width: 32px;
+  height: 32px;
+}
+.phone-hint {
+  margin: 40px 32px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--text-muted);
+}
+
+/* Notices sit above the tab bar, or at the top while the quick add sheet is up. */
+.is-phone .toast {
+  left: calc(12px + var(--safe-l));
+  right: calc(12px + var(--safe-r));
+  bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
+  width: auto;
+  max-width: none;
+  translate: none;
+  z-index: 45;
+}
+.is-phone.has-detail .toast {
+  bottom: calc(var(--safe-b) + 12px);
+  z-index: 55;
+}
+.is-phone .toast.is-top {
+  top: calc(var(--safe-t) + 8px);
+  bottom: auto;
+  z-index: 70;
+}
+
+/* The quick add sheet, on the keyboard */
+.modal-backdrop.is-quick.is-sheet {
+  align-items: flex-end;
+  padding: var(--safe-t) 0 0;
+}
+.modal-backdrop.is-quick.is-sheet .modal {
+  width: 100%;
+  max-width: none;
+  margin-bottom: var(--kb, 0px);
+  padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
+  border-radius: 24px 24px 0 0;
+  background: var(--background-primary);
+  animation: sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: margin-bottom 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+:root.has-keyboard .modal-backdrop.is-quick.is-sheet .modal {
+  padding-bottom: 0;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+.quick-add-box.is-sheet {
+  padding: 18px 16px 0;
+}
+.quick-add-box.is-sheet .qa-backdrop,
+.quick-add-box.is-sheet .qa-field textarea.qa-input {
+  font-family: inherit;
+  font-size: 18px;
+  line-height: 26px;
+  letter-spacing: normal;
+  word-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.quick-add-box.is-sheet .qa-field textarea.qa-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  max-height: 30vh;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
+  caret-color: var(--text-normal);
+  resize: none;
+  overflow-y: auto;
+}
+.quick-add-box.is-sheet .qa-field textarea.qa-input:focus {
+  box-shadow: none;
+}
+.quick-add-box.is-sheet .qa-field textarea.qa-input::placeholder {
+  color: var(--text-faint);
+}
+.quick-add-box.is-sheet input.qa-description {
+  min-height: 0;
+  height: 28px;
+  font-size: 16px;
+}
+.quick-add-box.is-sheet .qa-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 10px 16px 12px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-add-box.is-sheet .qa-chips::-webkit-scrollbar {
+  display: none;
+}
+.quick-add-box.is-sheet .qa-chip,
+.quick-add-box.is-sheet .qa-chip-wrap {
+  flex-shrink: 0;
+}
+.quick-add-box.is-sheet .qa-chip {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.quick-add-box.is-sheet .qa-chip-wrap.has-clear .qa-chip {
+  padding-right: 38px;
+}
+.quick-add-box.is-sheet .qa-chip-clear {
+  right: 5px;
+  width: 28px;
+  height: 28px;
+}
+.quick-add-box.is-sheet .qa-footer {
+  padding: 8px 12px 10px 10px;
+}
+.quick-add-box.is-sheet .qa-project {
+  height: 38px;
+  font-size: 15px;
+}
+.qa-send {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+.qa-send:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.qa-send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.quick-add-box.is-sheet .qa-suggest {
+  top: auto;
+  bottom: calc(100% + 28px);
+  left: 0;
+  right: 0;
+  max-width: none;
+  max-height: 40vh;
+  transform-origin: bottom left;
+}
+.quick-add-box.is-sheet .qa-suggest button {
+  height: 44px;
+  font-size: 16px;
+}
+
+/* The task, full screen */
+.is-phone .detail.is-overlay {
+  z-index: 50;
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
+  animation: phone-push 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes phone-push {
+  from {
+    transform: translateX(28%);
+    opacity: 0.3;
+  }
+}
+.is-phone .detail-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: calc(52px + var(--safe-t));
+  padding: var(--safe-t) 6px 0;
+  border-bottom: 0;
+  background: color-mix(in oklch, var(--background-primary) 86%, transparent);
+  backdrop-filter: var(--gl-glass-filter);
+  -webkit-backdrop-filter: var(--gl-glass-filter);
+  box-shadow: 0 0.5px 0 var(--background-modifier-border-subtle);
+}
+.is-phone .detail-head .icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.is-phone .detail-head .icon-button svg {
+  width: 22px;
+  height: 22px;
+}
+.is-phone .detail-crumb {
+  height: 34px;
+  font-size: 15px;
+}
+.is-phone .detail-body {
+  overflow: visible;
+}
+.is-phone .detail.is-overlay .detail-body {
+  max-width: none;
+}
+.is-phone .detail-main {
+  padding: 18px 16px 8px;
+}
+.is-phone .detail-title .check-task {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  margin-top: 2px;
+}
+.is-phone .detail .detail-title-input {
+  font-size: 22px;
+  line-height: 28px;
+}
+.is-phone .detail .detail-description {
+  padding-left: 36px;
+  font-size: 16px;
+  line-height: 22px;
+}
+.is-phone .detail .linked-items,
+.is-phone .detail-main .checklist-editor {
+  margin-left: 36px;
+}
+.is-phone .detail-side {
+  margin: 12px 16px 16px;
+  padding: 0;
+}
+.is-phone .detail-field {
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 52px;
+  padding: 0 14px 0 16px;
+  box-shadow: 0 0.5px 0 var(--background-modifier-border-subtle);
+}
+.is-phone .detail-field > span {
+  font-size: 15px;
+}
+.is-phone .detail-field > button,
+.is-phone .detail-select {
+  height: 44px;
+  font-size: 16px;
+}
+.is-phone .detail .detail-select select {
+  font-size: 16px;
+  min-height: 0;
+}
+.is-phone .detail .detail-labels input:not([type="checkbox"]) {
+  height: 36px;
+  min-height: 0;
+  font-size: 16px;
+}
+.is-phone .label-chip {
+  height: 30px;
+  font-size: 14px;
+}
+.is-phone .detail-more {
+  padding: 14px 16px;
+  font-size: 13px;
+}
+.is-phone .detail-foot {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 12px;
+  padding: 4px 16px 32px;
+  border-top: 0;
+  text-align: center;
+  font-size: 13px;
+}
+.is-phone .detail-foot .danger-button {
+  height: 50px;
+  border-radius: var(--card-radius);
+  corner-shape: squircle;
+  background: var(--background-secondary);
+  font-size: 16px;
+}
+.is-phone .detail-foot .danger-button.mod-cta {
+  background: var(--color-red);
+  color: #fff;
+}
+
+/* Sheets clear the home indicator, wherever the safe area comes from. */
+.menu-sheet {
+  padding-bottom: calc(8px + var(--safe-b));
+}
+.is-phone .menu-sheet-backdrop,
+.is-phone .popover-backdrop {
+  padding: 8px calc(8px + var(--safe-r)) 8px calc(8px + var(--safe-l));
+}
+.is-phone .menu-sheet .menu-item {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+/* The companion as a sheet on a phone */
+@media (pointer: coarse) {
+  .companion .task-row {
+    min-height: 54px;
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+  .companion .check-task {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+  }
+  .companion .check-task::before {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
+  .companion .task-title {
+    font-size: 16px;
+    line-height: 22px;
+  }
+  .companion .task-meta > span {
+    font-size: 13px;
+  }
+  .companion-head .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+}
+.companion.is-sheet .companion-list {
+  padding-bottom: calc(12px + var(--safe-b));
+}
+
+/* Inside Personal Command the shell's bar already stays at the top with the app's name, so the
+   app's own bar scrolls away with the page instead of stacking a second sticky bar. */
+.is-phone.hosted .phone-bar {
+  position: relative;
+  height: 44px;
+  padding-top: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.is-phone.hosted .phone-bar-title {
+  visibility: hidden;
+}
+.is-phone.hosted .phone-head h1 {
+  margin-top: 0;
+}
+.is-phone.hosted .task-section h3 {
+  top: 0;
+}
+/* Keep the bottom of the open task clear of a notice. */
+.is-phone.has-toast .detail.is-overlay {
+  padding-bottom: calc(var(--safe-b) + 76px);
+}

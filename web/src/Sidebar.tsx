@@ -1,108 +1,96 @@
-import React from "react";
 import {
   CalendarDays,
   CheckCheck,
   ChevronDown,
   Inbox,
   Layers,
+  PanelLeft,
   Plus,
   Settings,
   Sun,
   Tag,
 } from "lucide-react";
-import type { Profile, Project, Task } from "./api";
-import type { View } from "./tasks";
+import React from "react";
+import { store, viewNames } from "./routes";
+import type { W } from "./workspaceContext";
 
-const icons = {
+const viewIcons = {
   today: Sun,
   inbox: Inbox,
   upcoming: CalendarDays,
   all: Layers,
   completed: CheckCheck,
 };
-type Press = React.HTMLAttributes<HTMLButtonElement>;
 
-export function Sidebar({
-  user,
-  mobile,
-  view,
-  search,
-  today,
-  active,
-  total,
-  projects,
-  labels,
-  navigate,
-  openSettings,
-  addTask,
-  addProject,
-  taskListPress,
-  projectPress,
-}: {
-  user: Profile;
-  mobile: boolean;
-  view: string;
-  search: string;
-  today: string;
-  active: Task[];
-  total: number;
-  projects: Project[];
-  labels: string[];
-  navigate: (next: View) => void;
-  openSettings: () => void;
-  addTask: () => void;
-  addProject: () => void;
-  taskListPress: (item: "inbox" | "today" | "upcoming" | "all") => Press;
-  projectPress: (project: Project) => Press;
-}) {
+export function Sidebar({ w, status }: { w: W; status: React.ReactNode }) {
+  const {
+    hosted,
+    wide,
+    user,
+    projects,
+    active,
+    labels,
+    counts,
+    view,
+    search,
+    drawer,
+    setSidebarPref,
+    navigate,
+    openQuick,
+    menuFor,
+    addTaskIn,
+    projectMenu,
+    setProjectEditor,
+    setSettings,
+  } = w;
   return (
-    <aside className={`sidebar ${mobile ? "open" : ""}`}>
-      <button className="workspace-switch" onClick={openSettings}>
-        <span className="avatar">{user.name.slice(0, 1)}</span>
-        <span>
-          {user.name}
-          <small>Personal workspace</small>
-        </span>
-        <ChevronDown size={14} />
-      </button>
-      <button className="quick-add" onClick={addTask}>
+    <aside
+      className={`sidebar ${drawer ? "open" : ""}`}
+      aria-label="Navigation"
+    >
+      <div className="sidebar-top">
+        <span />
+        {wide && (
+          <button
+            className="icon-button"
+            aria-label="Hide sidebar"
+            title="Hide sidebar (M)"
+            onClick={() => {
+              setSidebarPref(false);
+              store("tasks.sidebar", "hidden");
+            }}
+          >
+            <PanelLeft size={17} />
+          </button>
+        )}
+      </div>
+      {!hosted && (
+        <button className="workspace-switch" onClick={() => setSettings(true)}>
+          <span className="avatar">{user.name.slice(0, 1)}</span>
+          <span>
+            {user.name}
+            <small>Personal workspace</small>
+          </span>
+          <ChevronDown size={14} />
+        </button>
+      )}
+      <button className="quick-add" onClick={() => openQuick()}>
         <Plus size={18} /> Add task <kbd>Q</kbd>
       </button>
       <nav>
         {(["inbox", "today", "upcoming", "all", "completed"] as const).map(
           (item) => {
-            const Icon = icons[item];
-            const count =
-              item === "today"
-                ? active.filter((t) => t.due_date && t.due_date <= today).length
-                : item === "inbox"
-                  ? active.filter((t) => !t.project_id).length
-                  : item === "upcoming"
-                    ? active.filter((t) => t.due_date && t.due_date > today)
-                        .length
-                    : item === "completed"
-                      ? total - active.length
-                      : active.length;
+            const Icon = viewIcons[item];
             return (
               <button
                 className={view === item && !search ? "active" : ""}
                 onClick={() => navigate(item)}
                 key={item}
-                {...(item !== "completed" && taskListPress(item))}
+                {...(item !== "completed" && menuFor(() => addTaskIn(item)))}
               >
-                <Icon size={18} />
-                <span>
-                  {
-                    {
-                      inbox: "Inbox",
-                      today: "Today",
-                      upcoming: "Upcoming",
-                      all: "All tasks",
-                      completed: "Completed",
-                    }[item]
-                  }
-                </span>
-                <small>{count || ""}</small>
+                <Icon size={18} className={`nav-${item}`} />
+                <span>{viewNames[item]}</span>
+                <small>{counts[item] || ""}</small>
               </button>
             );
           },
@@ -113,7 +101,7 @@ export function Sidebar({
         <button
           className="icon-button"
           aria-label="Add project"
-          onClick={addProject}
+          onClick={() => setProjectEditor("new")}
         >
           <Plus size={16} />
         </button>
@@ -124,7 +112,7 @@ export function Sidebar({
             key={p.id}
             className={view === `project:${p.id}` ? "active" : ""}
             onClick={() => navigate(`project:${p.id}`)}
-            {...projectPress(p)}
+            {...menuFor(() => projectMenu(p), p.name)}
           >
             <span className="project-hash" style={{ color: p.color }}>
               #
@@ -135,6 +123,11 @@ export function Sidebar({
             </small>
           </button>
         ))}
+        {!projects.length && (
+          <p className="sidebar-hint">
+            Add one with +, or type #Name in quick add
+          </p>
+        )}
       </nav>
       <div className="sidebar-heading">
         Labels
@@ -149,12 +142,18 @@ export function Sidebar({
           >
             <span className="label-dot" />
             <span>{l}</span>
+            <small>
+              {active.filter((t) => t.labels.includes(l)).length || ""}
+            </small>
           </button>
         ))}
-        {!labels.length && <p className="sidebar-hint">No labels</p>}
+        {!labels.length && (
+          <p className="sidebar-hint">Type @label in quick add</p>
+        )}
       </nav>
       <div className="sidebar-bottom">
-        <button onClick={openSettings}>
+        {status}
+        <button onClick={() => setSettings(true)}>
           <Settings size={17} /> Settings & integrations
         </button>
       </div>

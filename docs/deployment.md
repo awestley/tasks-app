@@ -6,7 +6,7 @@
 - A GitHub repository containing this source, if using App Platform.
 - The production domain and DNS access.
 - Apple Developer Team ID, key ID, private key, web Services ID, and grouped native bundle IDs.
-- The Apple accounts allowed to sign in, for `ALLOWED_APPLE_ACCOUNTS`. See [Apple setup](apple-auth.md).
+- The Apple accounts allowed to sign in, for `ALLOWED_APPLE_ACCOUNTS`, unless the app runs inside the Personal Command shell. See [Apple setup](apple-auth.md).
 
 `doctl` may have multiple saved contexts. Select the intended context explicitly; do not assume the current account is the right one. No deployment or resource creation has been performed.
 
