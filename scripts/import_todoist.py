@@ -29,11 +29,7 @@ from zoneinfo import ZoneInfo
 TODOIST_URL = os.environ.get("TODOIST_API_URL", "https://api.todoist.com/api/v1")
 TASKS_URL = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000")
 TOKEN_FILE = Path.home() / ".todoist_token"
-STATE_FILE = Path(
-    os.environ.get(
-        "TODOIST_IMPORT_STATE", Path.home() / ".config/tasks/todoist-import.json"
-    )
-)
+STATE_FILE = Path(os.environ.get("TODOIST_IMPORT_STATE", Path.home() / ".config/tasks/todoist-import.json"))
 
 # Todoist's named project colors.
 COLORS = {
@@ -85,13 +81,9 @@ def request(method, url, token, body=None, form=False):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as error:
         detail = error.read().decode(errors="replace")[:500]
-        raise Failure(
-            f"{method} {urllib.parse.urlsplit(url).path} returned {error.code}: {detail}"
-        ) from None
+        raise Failure(f"{method} {urllib.parse.urlsplit(url).path} returned {error.code}: {detail}") from None
     except urllib.error.URLError as error:
-        raise Failure(
-            f"Could not reach {urllib.parse.urlsplit(url).netloc}: {error.reason}"
-        ) from None
+        raise Failure(f"Could not reach {urllib.parse.urlsplit(url).netloc}: {error.reason}") from None
 
 
 def todoist_token():
@@ -100,11 +92,7 @@ def todoist_token():
         for line in TOKEN_FILE.read_text().splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
-                token = (
-                    line.split("=", 1)[1].strip()
-                    if line.startswith("TODOIST_TOKEN=")
-                    else line
-                )
+                token = line.split("=", 1)[1].strip() if line.startswith("TODOIST_TOKEN=") else line
                 break
     if not token:
         raise Failure(f"Set TODOIST_TOKEN or put the token in {TOKEN_FILE}")
@@ -121,10 +109,7 @@ def fetch_todoist(token):
         {"sync_token": "*", "resource_types": json.dumps(kinds)},
         form=True,
     )
-    return {
-        kind: [x for x in data.get(kind) or [] if not x.get("is_deleted")]
-        for kind in kinds
-    }
+    return {kind: [x for x in data.get(kind) or [] if not x.get("is_deleted")] for kind in kinds}
 
 
 def local_zone():
@@ -139,11 +124,7 @@ def parse_due(due, default_zone):
     if "T" not in raw:
         return date.fromisoformat(raw[:10]), None, zone
     if raw.endswith("Z"):
-        moment = (
-            datetime.fromisoformat(raw[:-1])
-            .replace(tzinfo=UTC_ZONE)
-            .astimezone(ZoneInfo(zone))
-        )
+        moment = datetime.fromisoformat(raw[:-1]).replace(tzinfo=UTC_ZONE).astimezone(ZoneInfo(zone))
     else:
         moment = datetime.fromisoformat(raw[:19])
     return moment.date(), moment.strftime("%H:%M"), zone
@@ -156,25 +137,17 @@ def recurrence(text):
         s = "every " + s[6:].strip()
     plain = re.sub(r"\b(at|from|until|starting|ending)\b.*$", "", s).strip()
     # Intervals such as "every 2 weeks" or "every other day" cannot be expressed exactly.
-    exact = (
-        not re.search(r"every\s+(other|\d+)\b", plain)
-        and "," not in plain
-        and " and " not in plain
-    )
+    exact = not re.search(r"every\s+(other|\d+)\b", plain) and "," not in plain and " and " not in plain
     if re.search(r"\b(years?|annual)", plain) or re.search(MONTHS, plain):
         return None, False
-    if re.search(r"\b(months?|monthly)\b", plain) or re.search(
-        r"\b\d+(st|nd|rd|th)\b|\blast day\b", plain
-    ):
+    if re.search(r"\b(months?|monthly)\b", plain) or re.search(r"\b\d+(st|nd|rd|th)\b|\blast day\b", plain):
         # "every 3rd friday" repeats monthly here, but on the date rather than the weekday.
         return "monthly", exact and not re.search(WEEKDAYS, plain)
     if re.search(r"\bweekday|workday", plain):
         return "daily", False
     if re.search(r"\b(weeks?|weekly)\b", plain) or re.search(WEEKDAYS, plain):
         return "weekly", exact
-    if re.search(
-        r"\b(days?|daily)\b|\bhours?\b|^every (morning|evening|night|afternoon)", plain
-    ):
+    if re.search(r"\b(days?|daily)\b|\bhours?\b|^every (morning|evening|night|afternoon)", plain):
         return "daily", exact and "hour" not in plain
     return None, False
 
@@ -204,9 +177,7 @@ def tasks_token():
     if token:
         return token
     # Local workspace sign-in for development servers; it answers only requests from this computer.
-    req = urllib.request.Request(
-        TASKS_URL + "/auth/dev/native", data=b"", method="POST"
-    )
+    req = urllib.request.Request(TASKS_URL + "/auth/dev/native", data=b"", method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             return json.loads(response.read())["access_token"]
@@ -216,18 +187,14 @@ def tasks_token():
             "or set TASKS_TOKEN to an integration token."
         ) from None
     except urllib.error.URLError as error:
-        raise Failure(
-            f"Could not reach {TASKS_URL}: {error.reason}. Is the server running?"
-        ) from None
+        raise Failure(f"Could not reach {TASKS_URL}: {error.reason}. Is the server running?") from None
 
 
 def build_plan(data, sections_as_labels, default_zone):
     notes = []
     projects = [p for p in data["projects"] if not p.get("is_archived")]
     open_project_ids = {p["id"] for p in projects}
-    sections = {
-        s["id"]: s["name"] for s in data["sections"] if not s.get("is_archived")
-    }
+    sections = {s["id"]: s["name"] for s in data["sections"] if not s.get("is_archived")}
     comments = {}
     for note in sorted(data["notes"], key=lambda n: n.get("posted_at") or ""):
         comments.setdefault(note["item_id"], []).append(note)
@@ -235,11 +202,7 @@ def build_plan(data, sections_as_labels, default_zone):
     for reminder in data["reminders"]:
         reminders.setdefault(reminder.get("item_id"), []).append(reminder)
 
-    items = [
-        i
-        for i in data["items"]
-        if not i.get("checked") and i.get("project_id") in open_project_ids
-    ]
+    items = [i for i in data["items"] if not i.get("checked") and i.get("project_id") in open_project_ids]
     by_id = {i["id"]: i for i in items}
     children = {}
     for item in sorted(items, key=lambda i: i.get("child_order") or 0):
@@ -252,9 +215,7 @@ def build_plan(data, sections_as_labels, default_zone):
             yield from descendants(child["id"])
 
     planned_projects = []
-    for project in sorted(
-        projects, key=lambda p: (not p.get("inbox_project"), p.get("child_order") or 0)
-    ):
+    for project in sorted(projects, key=lambda p: (not p.get("inbox_project"), p.get("child_order") or 0)):
         if project.get("inbox_project"):
             continue
         name = project["name"][:100]
@@ -266,17 +227,13 @@ def build_plan(data, sections_as_labels, default_zone):
             }
         )
         if project.get("parent_id") in open_project_ids:
-            notes.append(
-                f"Project '{name}' was nested in Todoist and becomes a top-level project."
-            )
+            notes.append(f"Project '{name}' was nested in Todoist and becomes a top-level project.")
     project_names = {p["id"]: p["name"] for p in projects}
     inbox_ids = {p["id"] for p in projects if p.get("inbox_project")}
 
     planned_tasks = []
     top_level = [i for i in items if i.get("parent_id") not in by_id]
-    for item in sorted(
-        top_level, key=lambda i: (i["project_id"], i.get("child_order") or 0)
-    ):
+    for item in sorted(top_level, key=lambda i: (i["project_id"], i.get("child_order") or 0)):
         title = item["content"].strip() or "Untitled"
         where = f"'{title[:60]}'"
         description = (item.get("description") or "").strip()
@@ -304,48 +261,33 @@ def build_plan(data, sections_as_labels, default_zone):
                     task["recurrence"] = repeat
                 if not exact:
                     kept = f"repeats {repeat}" if repeat else "does not repeat here"
-                    notes.append(
-                        f"{where}: Todoist repeat '{due.get('string')}' {kept}."
-                    )
+                    notes.append(f"{where}: Todoist repeat '{due.get('string')}' {kept}.")
                     description += f"\n\nRepeated in Todoist: {due.get('string')}"
         if item.get("deadline"):
             description += f"\n\nDeadline in Todoist: {item['deadline'].get('date')}"
 
         offsets = []
         for reminder in reminders.get(item["id"], []):
-            if (
-                reminder.get("type") == "relative"
-                and reminder.get("minute_offset") is not None
-            ):
+            if reminder.get("type") == "relative" and reminder.get("minute_offset") is not None:
                 offsets.append(int(reminder["minute_offset"]))
             elif (
-                reminder.get("type") == "absolute"
-                and task.get("due_time")
-                and (reminder.get("due") or {}).get("date")
+                reminder.get("type") == "absolute" and task.get("due_time") and (reminder.get("due") or {}).get("date")
             ):
                 at_day, at_clock, _ = parse_due(reminder["due"], task["time_zone"])
-                due_at = datetime.fromisoformat(
-                    f"{task['due_date']}T{task['due_time']}"
-                )
-                at = datetime.fromisoformat(
-                    f"{at_day.isoformat()}T{at_clock or '00:00'}"
-                )
+                due_at = datetime.fromisoformat(f"{task['due_date']}T{task['due_time']}")
+                at = datetime.fromisoformat(f"{at_day.isoformat()}T{at_clock or '00:00'}")
                 minutes = int((due_at - at).total_seconds() // 60)
                 if minutes >= 0:
                     offsets.append(minutes)
                 else:
                     notes.append(f"{where}: a reminder after the due time was skipped.")
             else:
-                notes.append(
-                    f"{where}: a {reminder.get('type', 'unknown')} reminder was skipped."
-                )
+                notes.append(f"{where}: a {reminder.get('type', 'unknown')} reminder was skipped.")
         offsets = [m for m in offsets if 0 <= m <= 10080]
         if offsets and task.get("due_time"):
             task["reminder_minutes"] = max(offsets)
             if len(offsets) > 1:
-                notes.append(
-                    f"{where}: kept the earliest-firing of {len(offsets)} reminders."
-                )
+                notes.append(f"{where}: kept the earliest-firing of {len(offsets)} reminders.")
         elif offsets:
             notes.append(f"{where}: reminder skipped because the task has no due time.")
 
@@ -358,9 +300,7 @@ def build_plan(data, sections_as_labels, default_zone):
                     f"{where}: subtask '{text[:40]}' became a checklist item without its {', '.join(lost) or 'comments'}."
                 )
         if len(task["checklist"]) > CHECKLIST_LIMIT:
-            notes.append(
-                f"{where}: only the first {CHECKLIST_LIMIT} of {len(task['checklist'])} subtasks were kept."
-            )
+            notes.append(f"{where}: only the first {CHECKLIST_LIMIT} of {len(task['checklist'])} subtasks were kept.")
             task["checklist"] = task["checklist"][:CHECKLIST_LIMIT]
 
         for note in comments.get(item["id"], []):
@@ -378,20 +318,14 @@ def build_plan(data, sections_as_labels, default_zone):
         task["labels"] = labels[:LABEL_LIMIT]
         description = description.strip()
         if len(description) > DESCRIPTION_LIMIT:
-            notes.append(
-                f"{where}: description and comments shortened to {DESCRIPTION_LIMIT} characters."
-            )
+            notes.append(f"{where}: description and comments shortened to {DESCRIPTION_LIMIT} characters.")
             description = description[: DESCRIPTION_LIMIT - 1] + "…"
         task["description"] = description
         planned_tasks.append(
             {
                 "todoist_id": item["id"],
-                "project": None
-                if item["project_id"] in inbox_ids
-                else item["project_id"],
-                "project_name": "Inbox"
-                if item["project_id"] in inbox_ids
-                else project_names[item["project_id"]],
+                "project": None if item["project_id"] in inbox_ids else item["project_id"],
+                "project_name": "Inbox" if item["project_id"] in inbox_ids else project_names[item["project_id"]],
                 "task": task,
             }
         )
@@ -399,12 +333,8 @@ def build_plan(data, sections_as_labels, default_zone):
 
 
 def show(planned_projects, planned_tasks, notes, state):
-    new_projects = [
-        p for p in planned_projects if p["todoist_id"] not in state.get("projects", {})
-    ]
-    new_tasks = [
-        t for t in planned_tasks if t["todoist_id"] not in state.get("tasks", {})
-    ]
+    new_projects = [p for p in planned_projects if p["todoist_id"] not in state.get("projects", {})]
+    new_tasks = [t for t in planned_tasks if t["todoist_id"] not in state.get("tasks", {})]
     print(f"Projects: {len(planned_projects)} found, {len(new_projects)} to create")
     print(f"Tasks: {len(planned_tasks)} found, {len(new_tasks)} to create")
     current = None
@@ -415,10 +345,7 @@ def show(planned_projects, planned_tasks, notes, state):
         task = entry["task"]
         bits = []
         if task.get("due_date"):
-            bits.append(
-                task["due_date"]
-                + (" " + task["due_time"] if task.get("due_time") else "")
-            )
+            bits.append(task["due_date"] + (" " + task["due_time"] if task.get("due_time") else ""))
         if task.get("recurrence"):
             bits.append(task["recurrence"])
         if task["priority"] < 4:
@@ -438,10 +365,7 @@ def apply(planned_projects, planned_tasks, state):
     token = tasks_token()
     key = TASKS_URL.rstrip("/")
     server = state.setdefault(key, {"projects": {}, "tasks": {}})
-    existing = {
-        p["name"].lower(): p["id"]
-        for p in request("GET", TASKS_URL + "/api/v1/projects", token)
-    }
+    existing = {p["name"].lower(): p["id"] for p in request("GET", TASKS_URL + "/api/v1/projects", token)}
     made_projects = made_tasks = 0
     for project in planned_projects:
         if project["todoist_id"] in server["projects"]:
@@ -449,9 +373,7 @@ def apply(planned_projects, planned_tasks, state):
         local_id = existing.get(project["name"].lower())
         if not local_id:
             body = {"name": project["name"], "color": project["color"]}
-            local_id = request("POST", TASKS_URL + "/api/v1/projects", token, body)[
-                "id"
-            ]
+            local_id = request("POST", TASKS_URL + "/api/v1/projects", token, body)["id"]
             made_projects += 1
         server["projects"][project["todoist_id"]] = local_id
         save_state(state)
@@ -460,9 +382,7 @@ def apply(planned_projects, planned_tasks, state):
         if entry["todoist_id"] in server["tasks"]:
             continue
         body = dict(entry["task"])
-        body["project_id"] = (
-            server["projects"].get(entry["project"]) if entry["project"] else None
-        )
+        body["project_id"] = server["projects"].get(entry["project"]) if entry["project"] else None
         try:
             created = request("POST", TASKS_URL + "/api/v1/tasks", token, body)
         except Failure as error:
@@ -481,9 +401,7 @@ def apply(planned_projects, planned_tasks, state):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Copy open Todoist projects and tasks into Tasks."
-    )
+    parser = argparse.ArgumentParser(description="Copy open Todoist projects and tasks into Tasks.")
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -503,13 +421,9 @@ def main():
     try:
         ZoneInfo(args.time_zone)
         data = fetch_todoist(todoist_token())
-        planned_projects, planned_tasks, notes = build_plan(
-            data, not args.drop_sections, args.time_zone
-        )
+        planned_projects, planned_tasks, notes = build_plan(data, not args.drop_sections, args.time_zone)
         state = load_state()
-        show(
-            planned_projects, planned_tasks, notes, state.get(TASKS_URL.rstrip("/"), {})
-        )
+        show(planned_projects, planned_tasks, notes, state.get(TASKS_URL.rstrip("/"), {}))
         if not args.apply:
             print("\nDry run. Nothing was created. Run again with --apply to import.")
             return 0

@@ -70,9 +70,11 @@ jobs:
         run: api/.venv/bin/python scripts/check_mcp.py
       - run: docker build -t tasks:ci .
   apple:
-    runs-on: macos-latest
+    # The apps target macOS and iOS 27, which need the Xcode 27 SDKs. macos-latest has only Xcode 26.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
+      - run: sudo xcode-select --switch /Applications/Xcode_27.2.app
       - run: brew install xcodegen
       - run: xcodegen generate --spec apple/project.yml
       - run: xcodebuild -project apple/Tasks.xcodeproj -scheme Tasks-macOS -configuration Debug -derivedDataPath apple/DerivedData CODE_SIGNING_ALLOWED=NO build

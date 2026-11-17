@@ -516,7 +516,8 @@ def test_api_schema_is_public_and_not_cached(client):
     assert response.headers["Cache-Control"] == "no-store"
     assert "script-src 'self';" in response.headers["Content-Security-Policy"]
     for retired in ("/openapi.json", "/redoc"):
-        assert "application/json" not in client.get(retired).headers.get("content-type", "")
+        # Without a web build these answer 404; with one, the app page. Never the schema.
+        assert '"openapi"' not in client.get(retired).text
 
 
 def test_reference_page_is_served_from_its_own_directory(client, tmp_path, monkeypatch):
