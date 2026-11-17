@@ -48,7 +48,11 @@ if pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" && [ -n "$pids" ]; the
   for pid in $pids; do
     if ps -o command= -p "$pid" | grep -q 'tasks.main:app'; then
       step "Stopping the previous backend on port $port (process $pid)"
-      kill "$pid"
+      if ! kill "$pid" 2>/dev/null; then
+        echo "Process $pid belongs to the $(ps -o user= -p "$pid" | tr -d ' ') account and can't be stopped from $(id -un)." >&2
+        echo "Stop it from that account, or choose another port with --port." >&2
+        exit 1
+      fi
       for _ in {1..20}; do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
     elif $serve; then
       echo "Port $port is in use by another program: $(ps -o command= -p "$pid")" >&2
@@ -56,6 +60,12 @@ if pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" && [ -n "$pids" ]; the
       exit 1
     fi
   done
+fi
+# lsof can't see another account's processes, so also check whether anything still answers on the port.
+if $serve && nc -z 127.0.0.1 "$port" 2>/dev/null; then
+  echo "Port $port is still in use, probably by a backend another Mac account started." >&2
+  echo "Stop it from that account, or choose another port with --port." >&2
+  exit 1
 fi
 
 if $build_apple && pgrep -f 'xcodebuild -project apple/Tasks.xcodeproj' >/dev/null; then

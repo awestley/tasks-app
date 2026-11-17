@@ -27,7 +27,7 @@ Requirements: Python 3.12+, uv, Node 24+, npm. The Apple builds also need Xcode 
 ./scripts/start.sh
 ```
 
-This removes old builds, installs dependencies, builds the web app, builds the macOS and iOS Simulator apps, then starts the backend at http://localhost:8000. The backend serves the web app, so open http://localhost:8000 and choose **Open local workspace**. Press Control-C to stop. Running the script again stops an earlier backend on the same port first.
+This removes old builds, installs dependencies, builds the web app, builds the macOS and iOS Simulator apps, then starts the backend at http://localhost:8000. The backend serves the web app, so open http://localhost:8000 and choose **Open local workspace**. Press Control-C to stop. Running the script again stops an earlier backend on the same port first, if the same Mac account started it.
 
 | Option | Effect |
 | --- | --- |
