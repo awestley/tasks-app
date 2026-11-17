@@ -22,6 +22,8 @@ Source map:
 - `api/tasks/main.py`: resource routes, ownership checks, atomic writes, recurrence, HTTP MCP mount, static files.
 - `api/tasks/db.py`, `schemas.py`: persistence and validated contracts.
 - `api/tasks/mcp_server.py`: official SDK tools and API adapter.
+- `api/tasks/links.py`, `refs.py`: links to other apps' items by `pc://` reference, and the shared resolve and references endpoints.
+- `api/tasks/agent.py`: the Flesh out agent, an MCP client of this server and of configured servers such as Notebook.
 - `web/docs`, `web/src/docs.ts`: API reference page at `/docs`, a bundled Swagger UI reading `/api/v1/openapi.json`.
 - `web/src`: React app, API client, responsive styles. `clean.css` holds the Clean design tokens (light and dark) and loads the Inter font; `style.css` builds the interface from them.
 - `apple/Tasks`: SwiftUI app, API client, observable store and Keychain storage. `Clean.swift` mirrors the same color tokens and the primary and secondary button styles for the native apps.

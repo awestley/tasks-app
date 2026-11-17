@@ -520,6 +520,20 @@ struct TaskEditorView: View {
         draft.version = latest.version
         return APIError(message: "This task changed on another device. " + retry)
     }
+    func load(_ task: TodoTask) {
+        draft = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification", version: task.version)
+        labels = task.labels.joined(separator: ", ")
+        loadTime(task.due_time)
+        hasDate = task.due_date != nil
+        date = task.due_date.map(DateOnly.date) ?? Date()
+    }
+    /// Shows the agent's changes in the editor, so the next save uses the new version.
+    func agentChanged() {
+        Task {
+            try? await store.refresh()
+            if let latest = store.tasks.first(where: { $0.id == task?.id }) { load(latest) }
+        }
+    }
     func loadTime(_ value: String?) {
         hasTime = value != nil
         let parts = (value ?? "09:00").split(separator: ":").compactMap { Int($0) }
@@ -563,6 +577,10 @@ struct TaskEditorView: View {
                         Button { draft.checklist.append(ChecklistItem()) } label: { Label("Add item", systemImage: "plus") }
                             .disabled(draft.checklist.count >= 100)
                     }
+                }
+                if let task {
+                    LinksSection(owner: "/api/v1/tasks/\(task.id)")
+                    AgentSection(taskID: task.id, changed: agentChanged)
                 }
                 Section {
                 Picker("Project", selection: $draft.project_id) {
@@ -631,13 +649,7 @@ struct TaskEditorView: View {
         }.frame(idealWidth: 520, idealHeight: 560)
             .tasksErrorAlert()
             .onAppear {
-                if let task {
-                    draft = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification", version: task.version)
-                    labels = task.labels.joined(separator: ", ")
-                    loadTime(task.due_time)
-                    hasDate = task.due_date != nil
-                    date = task.due_date.map(DateOnly.date) ?? Date()
-                } else { smart = true; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
+                if let task { load(task) } else { smart = true; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
             }
             .task(id: draft.title + draft.time_zone + String(smart)) {
                 parsed = nil; parsedInput = ""; parseError = ""
@@ -682,6 +694,7 @@ struct ProjectEditorView: View {
                         Label(value, systemImage: "circle.fill").foregroundStyle(Color(hex: value)).tag(value)
                     }
                 }
+                if let project { LinksSection(owner: "/api/v1/projects/\(project.id)") }
                 if project != nil { Button("Delete project", role: .destructive) { confirmDelete = true } }
             }.formStyle(.grouped).navigationTitle(project == nil ? "Add project" : "Edit project")
                 .toolbar {
@@ -829,4 +842,116 @@ struct SettingsView: View {
     }
     func loadTokens() async throws { tokens = try await store.api.request("/api/v1/tokens") }
     func loadSessions() async throws { sessions = try await store.api.request("/api/v1/sessions") }
+}
+/// Asks the server's agent to work on the task, then shows what it changed. Hidden when the server has no agent.
+struct AgentSection: View {
+    @EnvironmentObject var store: Store
+    let taskID: String
+    /// Called when the agent finished changing the task.
+    let changed: () -> Void
+    @State private var availability: AgentAvailability?
+    @State private var run: AgentRun?
+    @State private var instruction = ""
+    var body: some View {
+        if let availability, availability.available {
+            Section {
+                TextField("Optional instruction", text: $instruction).disabled(run?.active == true)
+                Button { start() } label: {
+                    Label(run?.active == true ? "Working..." : "Flesh out", systemImage: "sparkles")
+                }.disabled(run?.active == true)
+                if let run, !run.active {
+                    if let error = run.error { Text(error).foregroundStyle(.red) }
+                    if !run.summary.isEmpty { Text(run.summary) }
+                    if !run.actions.isEmpty {
+                        DisclosureGroup("\(run.actions.count) steps") {
+                            ForEach(Array(run.actions.enumerated()), id: \.offset) { _, action in
+                                Text("\(action.server): \(action.tool)").foregroundStyle(action.ok ? Color.secondary : Color.red)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Flesh out")
+            } footer: {
+                if !availability.servers.isEmpty { Text("Uses \(availability.servers.joined(separator: ", "))") }
+            }
+        } else {
+            EmptyView().task(id: taskID) { await load() }
+        }
+    }
+    func load() async {
+        guard let value: AgentAvailability = try? await store.api.request("/api/v1/agent"), value.available else { return }
+        let runs: [AgentRun] = (try? await store.api.request("/api/v1/tasks/\(taskID)/agent-runs")) ?? []
+        run = runs.first
+        availability = value
+        if run?.active == true { await follow() }
+    }
+    func start() {
+        let text = instruction.trimmingCharacters(in: .whitespaces)
+        Task {
+            do {
+                run = try await store.api.request("/api/v1/tasks/\(taskID)/agent-runs", method: "POST", body: API.body(["instruction": text]))
+                instruction = ""
+                await follow()
+            } catch { store.report(error) }
+        }
+    }
+    /// Polls until the run ends. Stops when the editor closes, because the view's tasks are cancelled.
+    func follow() async {
+        while let current = run, current.active, !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2))
+            guard let next: AgentRun = try? await store.api.request("/api/v1/agent-runs/\(current.id)") else { continue }
+            run = next
+            if next.status == "done" { changed() }
+        }
+    }
+}
+/// Links save as soon as they are added or removed, separately from the task's other fields.
+struct LinksSection: View {
+    @EnvironmentObject var store: Store
+    /// The owner's API path, such as /api/v1/tasks/<id>.
+    let owner: String
+    @State private var links: [ItemLink] = []
+    @State private var target = ""
+    @State private var title = ""
+    var body: some View {
+        Section("Links") {
+            ForEach(links) { link in
+                HStack {
+                    if let address = link.url, let url = URL(string: address) {
+                        Link(destination: url) { Label(link.title, systemImage: "link") }
+                    } else {
+                        Label(link.title, systemImage: "link").help(link.ref ?? "")
+                    }
+                    Spacer()
+                    Button(role: .destructive) { remove(link) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).accessibilityLabel("Remove link \(link.title)")
+                }
+            }
+            TextField("Note or web address", text: $target)
+                .autocorrectionDisabled()
+            TextField("Title", text: $title)
+            Button { add() } label: { Label("Add link", systemImage: "plus") }
+                .disabled(target.trimmingCharacters(in: .whitespaces).isEmpty || store.busy)
+        }
+        .task(id: owner) {
+            do { links = try await store.api.request(owner + "/links") } catch { store.report(error) }
+        }
+    }
+    func add() {
+        let value = target.trimmingCharacters(in: .whitespaces)
+        let name = title.trimmingCharacters(in: .whitespaces)
+        Task { await store.perform {
+            let link: ItemLink = try await store.api.request(owner + "/links", method: "POST", body: API.body([value.hasPrefix("pc://") ? "ref" : "url": value, "title": name]))
+            links.removeAll { $0.id == link.id }
+            links.append(link)
+            target = ""; title = ""
+        } }
+    }
+    func remove(_ link: ItemLink) {
+        Task { await store.perform {
+            try await store.api.send(owner + "/links/\(link.id)", method: "DELETE")
+            links.removeAll { $0.id == link.id }
+        } }
+    }
 }

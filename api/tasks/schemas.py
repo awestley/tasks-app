@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .refs import APP, format_ref, parse_ref, safe_web_url
 from .scheduling import due_instant, zone_name
 
 # Far from the limits of datetime, so time zone and reminder arithmetic cannot overflow.
@@ -27,6 +28,49 @@ class ProjectPatch(Model):
 
 class ProjectOut(ProjectIn):
     id: str
+
+    @computed_field
+    @property
+    def ref(self) -> str:
+        return format_ref(APP, "project", self.id)
+
+
+class LinkIn(Model):
+    """Give a pc:// reference, a web address, or both. A pasted Notebook or Tasks address becomes a reference."""
+
+    ref: str | None = Field(default=None, max_length=500)
+    url: str | None = Field(default=None, max_length=2000)
+    title: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def target(self):
+        if self.ref is not None and not parse_ref(self.ref):
+            raise ValueError("ref must look like pc://app/type/id")
+        if self.url is not None and not safe_web_url(self.url):
+            raise ValueError("url must use HTTPS, except for localhost")
+        if not self.ref and not self.url:
+            raise ValueError("Give a ref or a url")
+        return self
+
+
+class LinkOut(Model):
+    id: str
+    ref: str | None
+    title: str
+    url: str | None
+    created_at: datetime
+
+
+class ReferenceOut(Model):
+    """A task or project that links to a given reference, in the shared resolve shape."""
+
+    ref: str
+    type: str
+    id: str
+    title: str
+    completed: bool | None = None
+    updated: datetime | None = None
+    url: str
 
 
 class ChecklistItem(Model):
@@ -129,6 +173,15 @@ class TaskOut(Model):
     created_at: datetime
     updated_at: datetime
     version: int
+
+    @computed_field
+    @property
+    def ref(self) -> str:
+        return format_ref(APP, "task", self.id)
+
+
+class TaskDetailOut(TaskOut):
+    links: list[LinkOut] = []
 
 
 class SnoozeIn(Model):

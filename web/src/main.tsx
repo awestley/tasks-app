@@ -67,7 +67,9 @@ function App() {
   const [mobile, setMobile] = useState(false),
     [sort, setSort] = useState("smart"),
     [priorityFilter, setPriorityFilter] = useState(false),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    // Changes when the agent edits the open task, to reload the editor without losing drafts in other cases.
+    [agentEdits, setAgentEdits] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -95,9 +97,28 @@ function App() {
       if (target) setEditor(target);
       history.replaceState(null, "", location.pathname);
     }
+    // Links from other apps: #task/<id> and #project/<id>, also with a leading slash.
+    const link = /^#\/?(task|project)\/([0-9a-fA-F-]{36})$/.exec(location.hash);
+    if (link) {
+      const [, kind, id] = link;
+      if (kind === "task") {
+        const target = nextTasks.find((t) => t.id === id);
+        if (target) setEditor(target);
+      } else if (nextProjects.some((p) => p.id === id)) {
+        setView(`project:${id}`);
+      }
+      history.replaceState(null, "", location.pathname);
+    }
     setProjects(nextProjects);
     return nextTasks;
   }, []);
+  useEffect(() => {
+    const opened = () => {
+      if (location.hash) refresh().catch(() => {});
+    };
+    window.addEventListener("hashchange", opened);
+    return () => window.removeEventListener("hashchange", opened);
+  }, [refresh]);
   // A notification action changed a task from the service worker.
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -854,8 +875,18 @@ function App() {
       )}
       {editor && (
         <TaskEditor
-          key={editor === "new" ? "new" : editor.id}
+          key={editor === "new" ? "new" : `${editor.id}:${agentEdits}`}
           task={editor === "new" ? null : editor}
+          agentChanged={
+            editor === "new"
+              ? undefined
+              : async () => {
+                  // Reopen with the agent's changes, so the next save uses the new version.
+                  const next = await refresh();
+                  setEditor(next.find((t) => t.id === editor.id) || null);
+                  setAgentEdits((count) => count + 1);
+                }
+          }
           projects={projects}
           initialProject={selectedProject?.id || null}
           initialDate={view === "today" ? today : null}

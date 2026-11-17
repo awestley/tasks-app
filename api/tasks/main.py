@@ -14,7 +14,10 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
+from .agent import interrupted_runs
+from .agent import router as agent_router
 from .auth import (
+    DELEGATED_KINDS,
     authenticate,
     clear_session_cookie,
     client_address,
@@ -26,6 +29,8 @@ from .auth import (
 from .auth import router as auth_router
 from .config import settings
 from .db import Credential, NotificationSettings, Project, SessionLocal, Task, get_db, now, uid
+from .links import copy_links, links_of, remove_links
+from .links import router as links_router
 from .mcp_server import http_app, mcp
 from .migrations import upgrade_local_database
 from .push import router as push_router
@@ -42,6 +47,7 @@ from .schemas import (
     ProjectPatch,
     SessionOut,
     SnoozeIn,
+    TaskDetailOut,
     TaskIn,
     TaskOut,
     TaskPatch,
@@ -56,6 +62,7 @@ from .schemas import (
 async def lifespan(app):
     if not settings.production:
         upgrade_local_database()
+    interrupted_runs()
     stop = asyncio.Event()
     worker = asyncio.create_task(background_work(stop))
     try:
@@ -236,6 +243,7 @@ def delete_project(project_id: str, user=Depends(authenticate), db: Session = De
         .where(Task.project_id == project.id, Task.user_id == user.id)
         .values(project_id=None, version=Task.version + 1, updated_at=now())
     )
+    remove_links(db, "project", project.id)
     db.delete(project)
     db.commit()
 
@@ -291,9 +299,11 @@ def create_task(data: TaskIn, user=Depends(authenticate), db: Session = Depends(
     return task
 
 
-@api.get("/tasks/{task_id}", response_model=TaskOut)
+@api.get("/tasks/{task_id}", response_model=TaskDetailOut)
 def get_task(task_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
-    return owned(db, Task, task_id, user)
+    """One task with its links."""
+    task = owned(db, Task, task_id, user)
+    return TaskDetailOut.model_validate(task).model_copy(update={"links": links_of(db, "task", task.id)})
 
 
 def next_date(value, recurrence, anchor_day=None):
@@ -371,6 +381,7 @@ def mutate(db, user, task_id, data):
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     if successor:
         db.add(successor)
+        copy_links(db, user.id, task.id, successor.id)
     if needs_sync:
         queue_sync(db, user.id, task.id, alarm=alarm)
     db.commit()
@@ -421,6 +432,7 @@ def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authentic
     result = db.execute(delete(Task).where(Task.id == task_id, Task.user_id == user.id, Task.version == version))
     if result.rowcount != 1:
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
+    remove_links(db, "task", task_id)
     db.commit()
 
 
@@ -474,7 +486,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
     session_only(request)
     rows = db.scalars(
         select(Credential)
-        .where(Credential.user_id == user.id, Credential.kind != "api", Credential.expires_at > now())
+        .where(Credential.user_id == user.id, Credential.kind.notin_(DELEGATED_KINDS), Credential.expires_at > now())
         .order_by(Credential.created_at.desc())
     )
     return [
@@ -493,7 +505,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
 def delete_session(session_id: str, request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
     session_only(request)
     session = owned(db, Credential, session_id, user)
-    if session.kind == "api":
+    if session.kind in DELEGATED_KINDS:
         raise HTTPException(404)
     if session.id == request.state.credential.id:
         raise HTTPException(422, "Use Sign out to end the session on this device.")
@@ -503,6 +515,8 @@ def delete_session(session_id: str, request: Request, user=Depends(authenticate)
 
 app.include_router(push_router)
 app.include_router(quick_router)
+app.include_router(links_router)
+app.include_router(agent_router)
 app.include_router(api)
 app.mount("/mcp", http_app(settings.public_url))
 static = Path(settings.static_directory).resolve()
