@@ -1,5 +1,4 @@
 import { Apple, CircleAlert } from "lucide-react";
-import { Logo } from "./Logo";
 
 export function SignIn({
   config,
@@ -15,7 +14,6 @@ export function SignIn({
   return (
     <main className="auth-screen">
       <section className="auth-card" aria-label="Sign in">
-        <Logo />
         <h1>Sign in</h1>
         <div className="auth-actions">
           {config.apple_enabled && (

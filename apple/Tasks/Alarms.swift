@@ -62,7 +62,7 @@ struct TaskAlarm: AlarmMetadata {
     private func configuration(_ task: TodoTask, at instant: Date) -> AlarmManager.AlarmConfiguration<TaskAlarm> {
         let snooze = AlarmButton(text: "Snooze", textColor: .white, systemImageName: "zzz")
         let alert = AlarmPresentation.Alert(title: "\(task.title)", secondaryButton: snooze, secondaryButtonBehavior: .custom)
-        let attributes = AlarmAttributes(presentation: AlarmPresentation(alert: alert), metadata: TaskAlarm(taskID: task.id), tintColor: Glassive.accent)
+        let attributes = AlarmAttributes(presentation: AlarmPresentation(alert: alert), metadata: TaskAlarm(taskID: task.id), tintColor: Clean.accent)
         return .alarm(
             schedule: .fixed(instant),
             attributes: attributes,

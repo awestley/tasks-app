@@ -22,8 +22,9 @@ Source map:
 - `api/tasks/main.py`: resource routes, ownership checks, atomic writes, recurrence, HTTP MCP mount, static files.
 - `api/tasks/db.py`, `schemas.py`: persistence and validated contracts.
 - `api/tasks/mcp_server.py`: official SDK tools and API adapter.
-- `web/src`: React app, API client, responsive styles. `glassive.css` holds the Glassive design tokens (light and dark); `style.css` builds the interface from them.
-- `apple/Tasks`: SwiftUI app, API client, observable store and Keychain storage. `Glassive.swift` mirrors the same color tokens for the native apps.
+- `web/docs`, `web/src/docs.ts`: API reference page at `/docs`, a bundled Swagger UI reading `/api/v1/openapi.json`.
+- `web/src`: React app, API client, responsive styles. `clean.css` holds the Clean design tokens (light and dark) and loads the Inter font; `style.css` builds the interface from them.
+- `apple/Tasks`: SwiftUI app, API client, observable store and Keychain storage. `Clean.swift` mirrors the same color tokens and the primary and secondary button styles for the native apps.
 - `api/migrations`: immutable deployment migrations.
 
 Known first-release limits are listed in the README. In particular, refresh polling is not real-time push; no offline write queue exists; PostgreSQL labels are stored as JSON and label filtering is currently performed after the user-scoped query, which should be moved to an indexed query if accounts grow very large.

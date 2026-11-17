@@ -6,4 +6,4 @@ Deployment and Apple Developer credentials will be provided later. Continue loca
 
 Never use an em dash in responses to the user.
 
-Do not show a product name in the interface. Keep the existing blue checkmark icon; use generic labels such as Tasks only where a browser tab or installed app requires a name.
+Do not show a product name in the interface. Keep the existing blue checkmark as the app icon and favicon only; do not show it inside the app. Use generic labels such as Tasks only where a browser tab or installed app requires a name.

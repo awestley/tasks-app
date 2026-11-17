@@ -35,10 +35,9 @@ import {
   type Project,
   type Profile,
 } from "./api";
-import "./glassive.css";
+import "./clean.css";
 import "./style.css";
 import { clearStaleNotifications, disableBrowserPush } from "./PushSettings";
-import { Logo } from "./Logo";
 import { ProjectEditor } from "./ProjectEditor";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
@@ -566,7 +565,6 @@ function App() {
   if (loading)
     return (
       <div className="loading">
-        <Logo />
         <LoaderCircle className="spin" />
         <p>Loading tasks...</p>
       </div>
@@ -602,31 +600,33 @@ function App() {
           </button>
         )}
       </h3>
-      {items.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          project={projects.find((p) => p.id === task.project_id)}
-          today={today}
-          busy={busy}
-          menuOpen={menu?.target === task.id}
-          pressProps={menuFor(() => taskEntries(task), task.title, task.id)}
-          setHovered={(id) => (hovered.current = id)}
-          toggle={toggle}
-          edit={setEditor}
-          goToProject={goToProject}
-          openMenu={(box) =>
-            setMenu({
-              x: box.right,
-              y: box.bottom + 4,
-              entries: taskEntries(task),
-              title: task.title,
-              target: task.id,
-              sheet: false,
-            })
-          }
-        />
-      ))}
+      <div className="task-list">
+        {items.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            project={projects.find((p) => p.id === task.project_id)}
+            today={today}
+            busy={busy}
+            menuOpen={menu?.target === task.id}
+            pressProps={menuFor(() => taskEntries(task), task.title, task.id)}
+            setHovered={(id) => (hovered.current = id)}
+            toggle={toggle}
+            edit={setEditor}
+            goToProject={goToProject}
+            openMenu={(box) =>
+              setMenu({
+                x: box.right,
+                y: box.bottom + 4,
+                entries: taskEntries(task),
+                title: task.title,
+                target: task.id,
+                sheet: false,
+              })
+            }
+          />
+        ))}
+      </div>
     </section>
   );
   return (

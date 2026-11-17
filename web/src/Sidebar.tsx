@@ -11,7 +11,6 @@ import {
   Tag,
 } from "lucide-react";
 import type { Profile, Project, Task } from "./api";
-import { Logo } from "./Logo";
 import type { View } from "./tasks";
 
 const icons = {
@@ -58,7 +57,6 @@ export function Sidebar({
 }) {
   return (
     <aside className={`sidebar ${mobile ? "open" : ""}`}>
-      <Logo />
       <button className="workspace-switch" onClick={openSettings}>
         <span className="avatar">{user.name.slice(0, 1)}</span>
         <span>
