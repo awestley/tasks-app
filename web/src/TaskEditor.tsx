@@ -7,6 +7,7 @@ import {
   type Project,
   type Task,
 } from "./api";
+import { AgentPanel } from "./AgentPanel";
 import { ChecklistEditor } from "./ChecklistEditor";
 import { LinksEditor } from "./LinksEditor";
 import { Modal } from "./Modal";
@@ -21,7 +22,9 @@ export function TaskEditor({
   close,
   save,
   remove,
+  agentChanged,
 }: {
+  agentChanged?: () => void;
   task: Task | null;
   projects: Project[];
   initialProject: string | null;
@@ -219,6 +222,9 @@ export function TaskEditor({
           onChange={(checklist) => setDraft({ ...draft, checklist })}
         />
         {task && <LinksEditor owner={`/tasks/${task.id}`} />}
+        {task && agentChanged && (
+          <AgentPanel taskId={task.id} changed={agentChanged} />
+        )}
         <div
           className="form-grid"
           onFocus={() => {

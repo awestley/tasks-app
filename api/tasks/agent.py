@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import anthropic
 from anthropic import AsyncAnthropic
 from anthropic.lib.tools.mcp import _convert_tool_result, beta_async_tool
 from fastapi import APIRouter, Depends, HTTPException
@@ -214,14 +215,35 @@ async def execute(run_id: str):
                 finish(db, run, "failed", actions, summary, "Stopped after the maximum number of steps.")
             else:
                 finish(db, run, "done", actions, summary or "Done.")
-        except TimeoutError:
-            finish(db, run, "failed", actions, error="Stopped after the time limit.")
         except Exception as error:
-            log.exception("Agent run %s failed", run_id)
-            finish(db, run, "failed", actions, error=f"The agent stopped: {type(error).__name__}.")
+            cause = root_cause(error)
+            if not isinstance(cause, TimeoutError):
+                log.exception("Agent run %s failed", run_id)
+            finish(db, run, "failed", actions, error=explain(cause))
         finally:
             db.execute(delete(Credential).where(Credential.id == credential.id))
             db.commit()
+
+
+def root_cause(error: BaseException) -> BaseException:
+    """MCP sessions run in task groups, which wrap the real error in exception groups."""
+    while isinstance(error, BaseExceptionGroup) and error.exceptions:
+        error = error.exceptions[0]
+    return error
+
+
+def explain(error: BaseException) -> str:
+    if isinstance(error, TimeoutError):
+        return "Stopped after the time limit."
+    if isinstance(error, anthropic.AuthenticationError):
+        return "The server's Anthropic API key was rejected."
+    if isinstance(error, anthropic.RateLimitError):
+        return "The model is busy or the account is over its limit. Try again later."
+    if isinstance(error, anthropic.APIConnectionError):
+        return "Could not reach the model. Try again later."
+    if isinstance(error, anthropic.APIStatusError):
+        return f"The model service returned an error ({error.status_code}). Try again later."
+    return f"The agent stopped: {type(error).__name__}."
 
 
 def finish(db, run, status, actions=None, summary="", error=None):

@@ -1847,3 +1847,22 @@ input[type="checkbox"] {
 .link-new input[type="text"]:last-of-type {
   max-width: 40%;
 }
+.agent-panel .checklist-item button.secondary {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.agent-result {
+  padding: 6px 0;
+  font-size: 14px;
+}
+.agent-summary {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+.agent-result details {
+  color: var(--text-muted);
+}
+.agent-result ol {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}

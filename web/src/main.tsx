@@ -873,8 +873,17 @@ function App() {
       )}
       {editor && (
         <TaskEditor
-          key={editor === "new" ? "new" : editor.id}
+          key={editor === "new" ? "new" : `${editor.id}:${editor.version}`}
           task={editor === "new" ? null : editor}
+          agentChanged={
+            editor === "new"
+              ? undefined
+              : async () => {
+                  // Reopen with the agent's changes, so the next save uses the new version.
+                  const next = await refresh();
+                  setEditor(next.find((t) => t.id === editor.id) || null);
+                }
+          }
           projects={projects}
           initialProject={selectedProject?.id || null}
           initialDate={view === "today" ? today : null}

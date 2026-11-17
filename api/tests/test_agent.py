@@ -151,6 +151,10 @@ def test_errors_are_recorded(harness, monkeypatch):
     monkeypatch.setattr(agent, "open_sessions", broken)
     run = wait(harness.client, harness.client.post(f"/api/v1/tasks/{task['id']}/agent-runs", json={}).json()["id"])
     assert run["status"] == "failed" and "ConnectionError" in run["error"]
+    # Errors from inside MCP task groups are reported by their cause.
+    assert agent.explain(agent.root_cause(ExceptionGroup("x", [ExceptionGroup("y", [TimeoutError()])]))) == (
+        "Stopped after the time limit."
+    )
     with harness.session() as db:
         assert not db.scalars(select(Credential).where(Credential.kind == "agent")).all()
 
