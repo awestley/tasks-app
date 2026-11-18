@@ -34,7 +34,7 @@ final class WorkspaceTests: XCTestCase {
         if temporarySession != nil {
             do {
                 let tasks = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
-                for task in tasks where task["title"] as? String == taskTitle {
+                for task in tasks where (task["title"] as? String)?.hasPrefix(taskTitle) == true {
                     _ = try await request("/api/v1/tasks/\(task["id"] as! String)?version=\(task["version"] as! Int)", method:"DELETE")
                 }
             } catch { XCTFail("Could not clean up the temporary test task") }
@@ -216,6 +216,62 @@ final class WorkspaceTests: XCTestCase {
         // Settings scrolled down to the device list; the account section is at the top.
         if !app.buttons["Remove local session"].exists { app.swipeDown() }
         XCTAssertTrue(app.buttons["Remove local session"].waitForExistence(timeout: 5), "This device stays signed in")
+    }
+    @MainActor func testSelectSeveralTasksAndChangeThemTogether() async throws {
+        let app = try await signedInApp()
+        var ids: [String: String] = [:]
+        // Due today, so they show in Today without searching. Searching hides the navigation bar.
+        let today = Date().formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
+        for letter in ["A", "B", "C"] {
+            let created = try await request("/api/v1/tasks", method: "POST", body: ["title": "\(taskTitle) \(letter)", "priority": 4, "due_date": today]) as! [String:Any]
+            ids[letter] = created["id"] as? String
+        }
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(taskTitle) C")).firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        // Phones have no modifier keys, so selecting starts from the toolbar.
+        XCTAssertTrue(app.buttons["Select"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Select"].firstMatch.tap()
+        app.buttons["Select \(taskTitle) A"].tap()
+        app.buttons["Select \(taskTitle) B"].tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["Select \(taskTitle) A"].isSelected)
+        app.buttons["Priority"].tap()
+        XCTAssertTrue(app.buttons["Urgent"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Urgent"].tap()
+        var priorities: [String: Int] = [:]
+        for _ in 0..<10 {
+            let tasks = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
+            for task in tasks { if let id = task["id"] as? String { priorities[id] = task["priority"] as? Int } }
+            if priorities[ids["B"]!] == 1 { break }
+            try await Task.sleep(for: .milliseconds(300))
+        }
+        XCTAssertEqual(priorities[ids["A"]!], 1)
+        XCTAssertEqual(priorities[ids["B"]!], 1)
+        XCTAssertEqual(priorities[ids["C"]!], 4, "Unselected tasks keep their priority")
+        // The selection survives the change, so it can be deleted next.
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Delete"].tap()
+        let confirm = app.buttons["Delete 2 tasks"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), app.debugDescription)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForNonExistence(timeout: 10), "Selection ends when its tasks are gone: " + app.debugDescription)
+        let remaining = (try await request("/api/v1/tasks?limit=200") as! [[String:Any]]).compactMap { $0["id"] as? String }
+        XCTAssertFalse(remaining.contains(ids["A"]!))
+        XCTAssertFalse(remaining.contains(ids["B"]!))
+        XCTAssertTrue(remaining.contains(ids["C"]!))
+        // A task's own menu can start a selection too.
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(taskTitle) C")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Select"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Select"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "iOS selection"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForNonExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["Complete \(taskTitle) C"].exists, app.debugDescription)
     }
     @MainActor func testQuickEntryAndPersistence() async throws {
         continueAfterFailure = false
