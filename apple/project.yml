@@ -24,7 +24,13 @@ targets:
   Tasks-iOS:
     type: application
     platform: iOS
-    sources: [Tasks]
+    sources:
+      - Tasks
+      - &appIcon
+        # Icon Composer bundle. Xcode builds the AppIcon from it in place of the image set.
+        path: ../design/app-icon/AppIcon.icon
+        type: file
+        buildPhase: resources
     dependencies:
       - target: Tasks-NotificationService-iOS
     info:
@@ -53,6 +59,7 @@ targets:
     sources:
       - path: Tasks
         excludes: [Alarms.swift, Info-iOS.plist]
+      - *appIcon
     dependencies:
       - target: Tasks-NotificationService-macOS
     settings:

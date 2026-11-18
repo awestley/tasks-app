@@ -167,10 +167,11 @@ python3 scripts/import_todoist.py
 The default is a dry run that lists what would be created and anything that needs checking. Add `--apply` to import. It signs in to the local workspace, so the server must run with local sign-in on; set `TASKS_API_URL` and `TASKS_TOKEN` to import into another server. Imported IDs are recorded in `~/.config/tasks/todoist-import.json`, so running it again adds only new tasks.
 
 - Subtasks become checklist items. Comments, attachment links and Todoist deadlines are added to the description.
+- Markdown links in titles keep their text; the URL moves to the description.
 - Sections become labels; `--drop-sections` ignores them.
 - Todoist priority 1 (urgent) becomes Urgent here.
 - Repeats map to daily, weekly or monthly. Others, such as yearly or every 2 weeks, keep the original rule in the description and are listed in the output.
-- One time-based reminder per task is kept (the earliest). Location reminders, completed tasks and archived projects are skipped.
+- One time-based reminder per task is kept (the earliest). An all-day task with a timed reminder on its due date becomes due at that time. Location reminders, completed tasks and archived projects are skipped.
 - Dates without a time zone use this Mac's zone; `--time-zone` overrides it.
 
 ## Deploy
