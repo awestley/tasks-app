@@ -11,7 +11,6 @@ import {
   Tag,
 } from "lucide-react";
 import React from "react";
-import { Logo } from "./SignIn";
 import { store, viewNames } from "./routes";
 import type { W } from "./workspaceContext";
 
@@ -50,7 +49,7 @@ export function Sidebar({ w, status }: { w: W; status: React.ReactNode }) {
       aria-label="Navigation"
     >
       <div className="sidebar-top">
-        {!hosted ? <Logo /> : <span />}
+        <span />
         {wide && (
           <button
             className="icon-button"

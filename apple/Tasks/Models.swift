@@ -23,13 +23,54 @@ struct TodoTask: Codable, Identifiable, Hashable {
     var labels: [String]
     var checklist: [ChecklistItem]
     var recurrence: String?
+    var alert_style: String? = "notification"
+    var snoozed_until: String?
     var completed: Bool
     var version: Int
+    var isAlarm: Bool { alert_style == "alarm" }
+    /// The due time as an instant, read in the task's own time zone.
+    var dueInstant: Date? {
+        guard let due_date, let due_time, let zone = TimeZone(identifier: time_zone) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let day = due_date.split(separator: "-").compactMap { Int($0) }
+        let clock = due_time.split(separator: ":").compactMap { Int($0) }
+        guard day.count == 3, clock.count == 2 else { return nil }
+        return calendar.date(from: DateComponents(year: day[0], month: day[1], day: day[2], hour: clock[0], minute: clock[1]))
+    }
+    var reminderInstant: Date? {
+        guard !completed, let reminder_minutes, let due = dueInstant else { return nil }
+        return due.addingTimeInterval(-Double(reminder_minutes) * 60)
+    }
+    var snoozedInstant: Date? {
+        guard !completed, let snoozed_until else { return nil }
+        return ServerDate.parse(snoozed_until)
+    }
+}
+/// The server sends UTC times without an offset, sometimes with fractional seconds.
+enum ServerDate {
+    static func parse(_ value: String) -> Date? {
+        var text = value.split(separator: ".").first.map(String.init) ?? value
+        if !text.hasSuffix("Z") && !text.contains("+") { text += "Z" }
+        return try? Date(text, strategy: .iso8601)
+    }
+}
+struct NotificationPreferences: Codable, Equatable {
+    var summary_time: String?
+    var summary_zone = TimeZone.current.identifier
+    var overdue_minutes: Int?
+    var time_sensitive_priority = 1
 }
 struct Profile: Codable {
     let id: String
     let name: String
     let email: String
+}
+/// The sign-in methods a server offers, from GET /auth/config.
+struct AuthConfig: Codable {
+    let apple_enabled: Bool
+    /// Only development servers on this computer offer it.
+    let dev_login: Bool
 }
 struct AppleChallenge: Codable {
     let challenge_id: String
@@ -61,8 +102,9 @@ struct TaskDraft: Encodable {
     var labels: [String] = []
     var checklist: [ChecklistItem] = []
     var recurrence: String?
+    var alert_style = "notification"
     var version: Int?
-    enum CodingKeys: String, CodingKey { case title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes }
+    enum CodingKeys: String, CodingKey { case title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes, alert_style }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(title, forKey: .title)
@@ -76,6 +118,7 @@ struct TaskDraft: Encodable {
         try container.encode(labels, forKey: .labels)
         try container.encode(checklist, forKey: .checklist)
         try container.encode(recurrence, forKey: .recurrence)
+        try container.encode(alert_style, forKey: .alert_style)
         try container.encodeIfPresent(version, forKey: .version)
     }
 }
@@ -104,4 +147,22 @@ struct ParsedTask: Decodable {
     let labels: [String]
     let project_id: String?
     let recognized: [String]
+}
+struct AgentAvailability: Codable { var available: Bool; var servers: [String] }
+struct AgentAction: Codable, Hashable { var server: String; var tool: String; var ok: Bool }
+/// One request to the server's agent to work on a task.
+struct AgentRun: Codable, Identifiable, Hashable {
+    let id: String
+    var status: String
+    var summary: String
+    var actions: [AgentAction]
+    var error: String?
+    var active: Bool { status == "queued" || status == "running" }
+}
+/// A task or project points at an item in another app (a pc:// reference) or a web page.
+struct ItemLink: Codable, Identifiable, Hashable {
+    let id: String
+    var ref: String?
+    var title: String
+    var url: String?
 }

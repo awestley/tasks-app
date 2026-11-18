@@ -13,11 +13,22 @@ export type Task = {
   labels: string[];
   checklist: ChecklistItem[];
   recurrence: string | null;
+  /** "alarm" rings the reminder as an alarm on iPhone; other devices show a notification. */
+  alert_style: "notification" | "alarm";
+  /** Set by Snooze on a notification; read-only here. */
+  snoozed_until: string | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
   version: number;
+};
+export type Link = {
+  id: string;
+  ref: string | null;
+  title: string;
+  url: string | null;
+  created_at: string;
 };
 export type Profile = { id: string; name: string; email: string };
 export type Token = {

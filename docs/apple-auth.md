@@ -10,7 +10,7 @@
 6. Set `ALLOWED_APPLE_ACCOUNTS` to the comma-separated Apple accounts that may use this server. Each entry is an Apple subject or a verified email address. Production refuses to start without it, unless the app runs inside the Personal Command shell, where the shell decides who can sign in. Apple's private relay gives a different email address, so prefer the subject if you hide your email: a refused sign-in writes its subject to the application log, ready to copy. Removing an entry stops new sign-ins, while existing sessions and tokens last until they expire or are revoked.
 7. Add your signing team in Xcode. Regenerate provisioning profiles after enabling Sign in with Apple. Test a first-time login and returning login on each platform, including Apple's private email relay option.
 
-Web sign-in requires a registered HTTPS domain. The browser-binding cookie is Secure and SameSite=None because Apple sends the callback as a cross-site form POST. The application session is HttpOnly, Secure in production, and SameSite=Lax. Browser mutations additionally require the configured Origin.
+Web sign-in requires a registered HTTPS domain. The browser-binding cookie, `__Host-apple_binding`, is Secure and SameSite=None because Apple sends the callback as a cross-site form POST. The application session, `__Host-tasks_session` in production, is HttpOnly, Secure, host-only and SameSite=Lax. Browser mutations additionally require the configured Origin.
 
 ## Verification behavior
 

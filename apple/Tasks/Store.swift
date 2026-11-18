@@ -7,7 +7,7 @@ import Combine
     @Published var profile: Profile?
     @Published var error: String?
     @Published var busy = false
-    @Published var server = UserDefaults.standard.string(forKey: "serverURL") ?? "https://tasks.example.com"
+    @Published var server = UserDefaults.standard.string(forKey: "serverURL") ?? ""
     var api: API { API(server: server, token: Keychain.read(server: server)) }
     private var waiting: [CheckedContinuation<Void, Never>] = []
     /// Runs work one at a time, in order. Work started during a refresh waits its turn instead of being lost.
@@ -28,8 +28,13 @@ import Combine
         projects = []
         error = "Your session has ended. Sign in again."
     }
+    /// True once the person has chosen a server.
+    var serverSaved: Bool { !server.isEmpty }
+    static func origin(_ server: String) -> String {
+        server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
     func connect(server: String) throws {
-        let value = server.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let value = Store.origin(server)
         guard let url = URL(string: value), let host = url.host, url.query == nil, url.fragment == nil,
               url.path.isEmpty, url.user == nil, url.password == nil,
               url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1"].contains(host))
@@ -59,9 +64,17 @@ import Combine
         projects = nextProjects
         tasks = all
         Notifications.shared.attach(self)
+        // Not awaited: system notification and alarm calls must never hold up the task list.
+        Task { await Notifications.shared.didRefresh(all) }
     }
     func signIn(code: String, challenge: String) async throws {
         let result: AccessToken = try await api.request("/auth/apple/native", method: "POST", body: API.body(["code": code, "challenge_id": challenge]))
+        try Keychain.save(result.access_token, server: server)
+        try await refresh()
+    }
+    /// Signs in to the local development workspace. Development servers offer this to this computer only.
+    func signInLocally() async throws {
+        let result: AccessToken = try await api.request("/auth/dev/native", method: "POST")
         try Keychain.save(result.access_token, server: server)
         try await refresh()
     }
@@ -82,9 +95,17 @@ import Combine
             try await self.refresh()
         }
     }
+    /// Notifies every enabled device about the task again later.
+    func snooze(_ task: TodoTask, minutes: Int? = nil, until: Date? = nil) async {
+        await perform {
+            let body: [String: Any] = until.map { ["until": $0.formatted(.iso8601)] } ?? ["minutes": minutes ?? 15]
+            let _: TodoTask = try await self.api.request("/api/v1/tasks/\(task.id)/snooze", method: "POST", body: API.body(body))
+            try await self.refresh()
+        }
+    }
     func duplicate(_ task: TodoTask) async {
         await perform {
-            let copy = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist.map { ChecklistItem(title: $0.title, completed: $0.completed) }, recurrence: task.recurrence)
+            let copy = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist.map { ChecklistItem(title: $0.title, completed: $0.completed) }, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification")
             try await self.save(copy, id: nil)
         }
     }

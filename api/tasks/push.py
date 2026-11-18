@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import time
-from datetime import UTC
+from datetime import UTC, datetime, timezone
 
 import httpx
 import jwt
@@ -138,7 +138,8 @@ def subscribe(data: SubscriptionIn, user=Depends(authenticate), db: Session = De
         raise HTTPException(422, "Remove an old device before adding another (maximum 20)")
     subscription = existing or PushSubscription(user_id=user.id, identity=identity, kind=data.kind)
     subscription.name = data.name
-    subscription.details = data.model_dump(exclude_none=True)
+    armed = (existing.details or {}).get("armed") if existing else None
+    subscription.details = data.model_dump(exclude_none=True) | ({"armed": armed} if armed else {})
     db.add(subscription)
     try:
         db.commit()
@@ -156,6 +157,36 @@ def unsubscribe(subscription_id: str, user=Depends(authenticate), db: Session = 
     if not subscription:
         raise HTTPException(404, "Device not found")
     db.delete(subscription)
+    db.commit()
+
+
+class ArmedAlarm(Model):
+    task_id: str = Field(min_length=1, max_length=36)
+    at: datetime
+
+
+class ArmedAlarmsIn(Model):
+    alarms: list[ArmedAlarm] = Field(max_length=64)
+
+
+def armed_value(instant):
+    """The stored form of an alarm time: naive UTC to the second, matching delivery times."""
+    if instant.tzinfo:
+        instant = instant.astimezone(timezone.utc).replace(tzinfo=None)
+    return instant.replace(microsecond=0).isoformat()
+
+
+@router.put("/subscriptions/{subscription_id}/alarms", status_code=204)
+def armed_alarms(subscription_id: str, data: ArmedAlarmsIn, user=Depends(authenticate), db: Session = Depends(get_db)):
+    """The alarms an iPhone has scheduled with AlarmKit. Their reminders are not also sent to it as notifications."""
+    subscription = db.scalar(
+        select(PushSubscription).where(PushSubscription.id == subscription_id, PushSubscription.user_id == user.id)
+    )
+    if not subscription or subscription.kind != "apns":
+        raise HTTPException(404, "Device not found")
+    armed = [{"task_id": alarm.task_id, "at": armed_value(alarm.at)} for alarm in data.alarms]
+    # Assign a new dictionary so the JSON column records the change.
+    subscription.details = {**subscription.details, "armed": armed}
     db.commit()
 
 
@@ -183,16 +214,60 @@ def apns_token():
     return token
 
 
+def apns_payload(message):
+    """Headers and body for one APNs request."""
+    if message.kind == "sync":
+        # A background push: no alert, sound or badge, so the system wakes the app to remove stale notifications.
+        return {"apns-push-type": "background", "apns-priority": "5"}, {
+            "aps": {"content-available": 1},
+            "sync": message.sync,
+        }
+    aps = {
+        "alert": {"title": message.title, "body": message.body},
+        "sound": "default",
+        "thread-id": message.thread,
+        "category": message.category,
+        "interruption-level": message.level,
+        "relevance-score": message.relevance,
+        # The notification service extension adds the task's App Intents entity for Siri.
+        "mutable-content": 1,
+    }
+    if message.subtitle:
+        aps["alert"]["subtitle"] = message.subtitle
+    if message.task_id:
+        aps["target-content-id"] = message.task_id
+    if message.badge is not None:
+        aps["badge"] = message.badge
+    if message.level == "passive":
+        aps.pop("sound")
+    body = {"aps": aps, "kind": message.kind}
+    if message.task_id:
+        body["task_id"] = message.task_id
+    return {"apns-push-type": "alert", "apns-priority": "10" if message.level != "passive" else "5"}, body
+
+
+def web_payload(message, delivery_id, tag=None):
+    return {
+        "title": message.title,
+        "subtitle": message.subtitle,
+        "body": message.body,
+        "task_id": message.task_id,
+        "kind": message.kind,
+        "tag": tag or message.collapse or delivery_id,
+        "badge": message.badge,
+        "url": message.url,
+        "actions": message.kind in ("reminder", "snooze", "overdue"),
+    }
+
+
 def reminder_tag(task_id, scheduled_for):
     """Notification tag shared with the app's own reminders (web/src/reminders.ts), so a reminder
     delivered both ways shows once."""
     return f"reminder-{task_id}-{int(scheduled_for.replace(tzinfo=UTC).timestamp() * 1000)}"
 
 
-def send_push(subscription, task, delivery_id, tag=None):
+def send_push(subscription, message, delivery_id, tag=None):
     details = subscription.details
-    # Limit payload size. Never include notes, checklist text or credentials.
-    title = task.title[:160]
     if subscription.kind == "web":
         import requests
         from pywebpush import WebPushException, webpush
@@ -203,6 +278,7 @@ def send_push(subscription, task, delivery_id, tag=None):
             raise DeliveryError(400, invalid=True)
         if settings.push_simulation_url:
             endpoint = settings.push_simulation_url.rstrip("/") + "/web/" + details.get("token", "send")
+        topic = re.sub(r"[^A-Za-z0-9_-]", "", message.collapse or delivery_id)[-32:]
         try:
             with requests.Session() as session:
                 # The address was checked above; a redirect could lead anywhere, so it fails the delivery.
@@ -212,14 +288,12 @@ def send_push(subscription, task, delivery_id, tag=None):
                         "endpoint": endpoint,
                         "keys": {"p256dh": details["p256dh"], "auth": details["auth"]},
                     },
-                    data=json.dumps(
-                        {"title": "Task reminder", "body": title, "task_id": task.id, "tag": tag or delivery_id}
-                    ),
+                    data=json.dumps(web_payload(message, delivery_id, tag)),
                     vapid_private_key=settings.vapid_private_key.replace("\\n", "\n"),
                     vapid_claims={"sub": settings.vapid_subject},
                     ttl=3600,
                     timeout=10,
-                    headers={"Urgency": "high", "Topic": delivery_id.replace("-", "")[:32]},
+                    headers={"Urgency": "normal" if message.level == "passive" else "high", "Topic": topic},
                     requests_session=session,
                 )
         except WebPushException as error:
@@ -230,21 +304,20 @@ def send_push(subscription, task, delivery_id, tag=None):
         host = "https://api.sandbox.push.apple.com" if details["sandbox"] else "https://api.push.apple.com"
         if settings.push_simulation_url:
             host = settings.push_simulation_url.rstrip("/")
+        headers, body = apns_payload(message)
+        if message.collapse:
+            # Also the notification's identifier on the device, so a snooze or follow-up replaces the earlier one.
+            headers["apns-collapse-id"] = message.collapse
         with httpx.Client(http2=True, timeout=10) as client:
             response = client.post(
                 host + "/3/device/" + details["token"],
                 headers={
                     "authorization": "bearer " + auth,
                     "apns-topic": details["topic"],
-                    "apns-push-type": "alert",
-                    "apns-priority": "10",
                     "apns-expiration": str(int(time.time()) + 3600),
-                    "apns-collapse-id": delivery_id,
+                    **headers,
                 },
-                json={
-                    "aps": {"alert": {"title": "Task reminder", "body": title}, "sound": "default"},
-                    "task_id": task.id,
-                },
+                json=body,
             )
         if response.status_code != 200:
             try:

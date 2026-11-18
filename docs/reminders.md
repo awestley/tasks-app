@@ -14,6 +14,30 @@ The server checks every 15 seconds while push is configured. A durable delivery 
 
 Completion, deletion, removing a reminder, or rescheduling suppresses pending deliveries when the worker next checks them. A delivery already accepted by a provider cannot be recalled. Editing a title does not resend a delivered reminder. Reopening the same occurrence does not resend its already-delivered reminder; changing the reminder time creates a new delivery. Recurring successors retain the time zone, time, and reminder offset, with a fresh date. A recurring time in a spring-forward gap shifts forward by that gap for that date only, and later occurrences return to the original time. Monthly tasks clamp to the end of a short month and then return to their original day. Choosing a new date, time or recurrence starts a new series from those values. An explicitly entered nonexistent time is rejected; an ambiguous fall-back time uses its first occurrence.
 
+## Notification content and behavior
+
+Every notification is short and factual. A task notification shows the task title, its project as a subtitle, and timing such as `Due 15:00`, `Due tomorrow 09:00`, `Due now` or `Overdue since 15:00`. Notes and checklist contents are never sent.
+
+- **Actions.** Task notifications offer Complete, Snooze 15 min, Snooze 1 hour and Tomorrow on Apple devices, and Complete and Snooze 15 min in browsers that support actions. Actions call the API directly and work without opening the app. If an action fails, the Apple apps post a "Could not update task" notification and browsers open the task instead.
+- **Snooze.** `POST /api/v1/tasks/{id}/snooze` stores `snoozed_until` on the task, so every enabled device is notified again, including the web. Snoozing does not need the task's version and works for tasks without a due date. Completing the task or changing its date, time, time zone or reminder clears a snooze. Recurring successors do not inherit it. The task menus offer 15 minutes, 1 hour, 3 hours and tomorrow at 09:00.
+- **Replacement.** Notifications for one task share an identifier (`task-<id>`), so a snooze or follow-up replaces the earlier notification instead of adding another.
+- **Grouping.** Apple devices group notifications by project (`thread-id`), with Inbox tasks together and the summary on its own.
+- **Urgency.** Tasks at or above a chosen priority are Time Sensitive and can break through Focus (default: Urgent only; can be Urgent and high, or off). Other reminders are Active and the summary is Passive. Each notification has a relevance score from its priority, raised for overdue follow-ups, which the system uses to order summaries.
+- **Badge.** Each push carries the count of open tasks due today or overdue. The apps and the web app update the badge after each refresh.
+- **Stale notifications.** When a task that was notified in the last day is completed, deleted, rescheduled or snoozed, the server sends a background push to Apple devices, which remove that notification and refresh. The web app closes notifications for tasks that are no longer open whenever it loads tasks.
+- **Overdue follow-up.** Optional, 30 minutes to 4 hours after the due time, for open tasks that have a reminder. One follow-up per occurrence. A snooze past the follow-up time replaces it.
+- **Morning summary.** Optional, at a chosen local time: for example `2 due today, 1 overdue`. Nothing is sent when both counts are zero, and a summary more than two hours late is dropped. A summary time in a spring-forward gap moves forward by the gap.
+
+Settings for the summary, follow-ups and Time Sensitive apply to every device and are under **Settings > Reminders & notifications** (`GET`/`PUT /api/v1/notifications/settings`). The summary uses the time zone of the device that last saved the settings.
+
+## Siri, Shortcuts and alarms (iOS 27 and macOS 27)
+
+The Apple apps require iOS 27 and macOS 27.
+
+- A notification service extension tags each pushed task notification with the task's App Intents entity (`appEntityIdentifiers`, new in iOS 27). Siri can then act on the task the notification is about, for example when it announces the notification.
+- **Complete Task**, **Snooze Task** and **Open Task** are App Intents, available in Siri and Shortcuts.
+- A task with a reminder can use **Alert: Alarm on iPhone**. On iPhone and iPad the reminder then rings with AlarmKit, through silent mode and Focus, with a Snooze button (10 minutes) and the task's entity attached so Siri can act on the ringing alarm. The app schedules alarms for the next 7 days after each refresh and reports them to the server (`PUT /api/v1/push/subscriptions/{id}/alarms`), which then skips that device's notification for the same reminder. Other devices, including Macs and browsers, get a normal notification. The app asks for alarm permission the first time a task is set to Alarm; without it, the device gets a notification. Alarms are scheduled on the device, so a change made elsewhere reaches it on the next refresh or background push.
+
 ## Browser push
 
 Generate a stable VAPID key pair using your contact address:
@@ -39,7 +63,7 @@ Configure these backend values when your Apple Developer setup is available:
 - `APNS_PRIVATE_KEY`: the `.p8` key, using literal `\n` between lines in an environment value.
 - `APPLE_NATIVE_CLIENT_IDS`: comma-separated allowed iOS and macOS bundle identifiers.
 
-The Sign in with Apple key is not assumed to have APNs permission. Enable Push Notifications for both app identifiers and regenerate provisioning profiles. The XcodeGen project includes the platform-specific push entitlements and uses development APNs for Debug and production APNs for Release. Make sure the build configuration matches its provisioning environment.
+The Sign in with Apple key is not assumed to have APNs permission. Enable Push Notifications and Time Sensitive Notifications for both app identifiers, register the notification service extensions (`com.example.tasks.ios.notifications`, `com.example.tasks.macos.notifications`), and regenerate provisioning profiles. The iOS app also uses the remote-notification background mode for stale-notification removal, and AlarmKit. The XcodeGen project includes the platform-specific push entitlements and uses development APNs for Debug and production APNs for Release. Make sure the build configuration matches its provisioning environment.
 
 Native settings let you enable or disable notifications for that device. The app registers with APNs, refreshes its device token on launch, and uploads the token for the signed-in account. Notification taps refresh the workspace and open the matching task, including a tap that launches the app. Apple signing, provisioning and real-device delivery remain required release checks. See [Apple's APNs request contract](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns).
 

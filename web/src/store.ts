@@ -30,7 +30,13 @@ export type Config = {
 };
 type TaskFields = Omit<
   Task,
-  "id" | "completed" | "completed_at" | "created_at" | "updated_at" | "version"
+  | "id"
+  | "completed"
+  | "completed_at"
+  | "created_at"
+  | "updated_at"
+  | "version"
+  | "snoozed_until"
 >;
 export type TaskChanges = Partial<TaskFields> & {
   completed?: boolean;
@@ -599,6 +605,7 @@ async function send(op: Op) {
     } = op.task;
     const { reminder_minutes, priority, labels, checklist, recurrence } =
       op.task;
+    const alert_style = op.task.alert_style ?? "notification";
     const { completed, completed_at } = op.task;
     const task = await api<Task>("/tasks", "POST", {
       id,
@@ -613,6 +620,7 @@ async function send(op: Op) {
       labels,
       checklist,
       recurrence,
+      alert_style,
       ...(completed ? { completed, completed_at } : {}),
     });
     server = { ...server, tasks: upsert(server.tasks, task) };
@@ -669,6 +677,7 @@ export const blankTask = (): TaskFields => ({
   labels: [],
   checklist: [],
   recurrence: null,
+  alert_style: "notification",
 });
 
 export function createTask(
@@ -682,6 +691,7 @@ export function createTask(
     id: fields.id || crypto.randomUUID(),
     completed: fields.completed ?? false,
     completed_at: fields.completed_at ?? null,
+    snoozed_until: null,
     created_at: stamp,
     updated_at: stamp,
     version: 1,

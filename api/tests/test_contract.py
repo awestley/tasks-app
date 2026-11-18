@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 
 from tasks import auth, events, main
-from tasks.config import Settings, settings
+from tasks.config import settings
 from tasks.db import Credential, User
 from tasks.search import SearchError, fold, make_snippet, parse_params, score_match, search_docs
 
@@ -186,7 +186,7 @@ def test_base_path_frames_and_manifest(shell):
     assert {p["id"] for p in manifest["panes"]} >= {"today", "inbox", "upcoming", "completed"}
     assert manifest["offline"]["precache"] == ["/apps/tasks/", "/apps/tasks/companion.html", "/apps/tasks/embed.js"]
     assert client.get("/apps/tasks/manifest.json").status_code == 401
-    openapi = client.get("/apps/tasks/openapi.json").json()
+    openapi = client.get("/apps/tasks/api/v1/openapi.json").json()
     assert "/api/v1/resolve" in openapi["paths"] and openapi["servers"][0]["url"] == "/apps/tasks"
 
 
@@ -371,12 +371,6 @@ def test_search_survives_an_absurd_cursor_and_refuses_an_absurd_date(client):
     assert client.get("/api/v1/search", params={"q": "findable", "cursor": "o" + "z" * 30}).status_code == 200
     response = client.get("/api/v1/search", params={"q": "findable", "updated_after": "0001-01-01T00:00:00+14:00"})
     assert (response.status_code, response.json()) == (422, {"error": "bad_updated_after"})
-
-
-def test_production_publishes_the_api_description_only_inside_the_shell():
-    assert main.openapi_path(Settings(environment="production", shell_url="https://shell.example")) == "/openapi.json"
-    assert main.openapi_path(Settings(environment="production", shell_url="")) is None
-    assert main.openapi_path(Settings(environment="development", shell_url="")) == "/openapi.json"
 
 
 def test_several_first_requests_for_a_shell_user_share_one_user(workspace, monkeypatch):

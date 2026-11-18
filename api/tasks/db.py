@@ -27,6 +27,16 @@ def uid():
     return str(uuid.uuid4())
 
 
+def delivery_key(kind, task_id, instant):
+    """Identifies one notification for one device, so repeated checks cannot send it twice."""
+    return f"{kind}:{task_id}:{instant.isoformat(timespec='seconds')}"
+
+
+def default_delivery_key(context):
+    values = context.get_current_parameters()
+    return delivery_key(values.get("kind") or "reminder", values["task_id"], values["scheduled_for"])
+
+
 url = settings.database_url
 if url.startswith("postgres://"):
     url = url.replace("postgres://", "postgresql+psycopg://", 1)
@@ -117,6 +127,45 @@ class Task(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    # A one-off repeat of the reminder, chosen with Snooze. Cleared when the schedule changes or the task closes.
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime)
+    # "notification" or "alarm". Alarm-style reminders ring as AlarmKit alarms on iPhone.
+    alert_style: Mapped[str] = mapped_column(String(12), default="notification", server_default="notification")
+
+
+class Link(Base):
+    """A task or project points at something else: an item in another app (by pc:// reference) or a web page."""
+
+    __tablename__ = "links"
+    __table_args__ = (UniqueConstraint("owner_type", "owner_id", "ref", name="uq_link_owner_ref"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # "task" or "project". Polymorphic, so the delete routes remove an owner's links.
+    owner_type: Mapped[str] = mapped_column(String(10))
+    owner_id: Mapped[str] = mapped_column(String(36), index=True)
+    # Canonical reference such as pc://notes/note/<id>, or null for a plain web link.
+    ref: Mapped[str | None] = mapped_column(String(500), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    url: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AgentRun(Base):
+    """One request to the in-app agent to work on a task, with what it did."""
+
+    __tablename__ = "agent_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Kept when the task is deleted, so the record of what happened survives.
+    task_id: Mapped[str] = mapped_column(String(36), index=True)
+    instruction: Mapped[str] = mapped_column(Text, default="")
+    # queued, running, done or failed.
+    status: Mapped[str] = mapped_column(String(10), default="queued")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 def get_db():
@@ -135,11 +184,27 @@ class PushSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class NotificationSettings(Base):
+    __tablename__ = "notification_settings"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    summary_time: Mapped[str | None] = mapped_column(String(5))
+    summary_zone: Mapped[str] = mapped_column(String(100), default="UTC")
+    overdue_minutes: Mapped[int | None] = mapped_column(Integer)
+    # Tasks with this priority or more urgent are Time Sensitive. 0 turns it off.
+    time_sensitive_priority: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class ReminderDelivery(Base):
+    """One notification for one device: a task reminder, snooze or overdue follow-up, a summary, or a sync."""
+
     __tablename__ = "reminder_deliveries"
-    __table_args__ = (UniqueConstraint("task_id", "subscription_id", "scheduled_for", name="uq_reminder_delivery"),)
+    __table_args__ = (UniqueConstraint("subscription_id", "key", name="uq_reminder_delivery_key"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    # Null for summaries and syncs. A sync names its task in the key, because the task may have been deleted.
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(10), default="reminder", server_default="reminder")
+    key: Mapped[str] = mapped_column(String(120), default=default_delivery_key)
     subscription_id: Mapped[str] = mapped_column(ForeignKey("push_subscriptions.id", ondelete="CASCADE"), index=True)
     scheduled_for: Mapped[datetime] = mapped_column(DateTime)
     status: Mapped[str] = mapped_column(String(20), default="pending")

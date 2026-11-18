@@ -76,7 +76,13 @@ final class WorkspaceTests: XCTestCase {
         tokenField.tap(); tokenField.typeText(token)
         app.buttons["Use development token"].tap()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        dismissSavePassword(app)
         return app
+    }
+    /// The simulator can offer to save the typed token as a password, covering the app. It is not part of the app.
+    @MainActor func dismissSavePassword(_ app: XCUIApplication) {
+        let notNow = app.buttons["Not Now"]
+        if notNow.waitForExistence(timeout: 3) { notNow.tap() }
     }
     @MainActor func openSettings(_ app: XCUIApplication) {
         if !app.buttons["Settings"].exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
@@ -93,9 +99,9 @@ final class WorkspaceTests: XCTestCase {
         try await endSession()
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(app.alerts.staticTexts["Your session has ended. Sign in again."].waitForExistence(timeout: 10), app.debugDescription)
-        app.alerts.buttons["OK"].tap()
-        XCTAssertTrue(app.textFields["Your server URL"].waitForExistence(timeout: 5))
+        // Sign-in errors appear on the sign-in card, beside the server they concern.
+        XCTAssertTrue(app.staticTexts["Your session has ended. Sign in again."].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.textFields["Your server URL"].exists)
     }
     @MainActor func testSignOutAndRemoveSessionWorkAfterSessionEndsWithPushOn() async throws {
         // Registers this device as push-enabled, so sign-out has server cleanup to attempt.
@@ -106,9 +112,35 @@ final class WorkspaceTests: XCTestCase {
             try await endSession()
             app.buttons[button].tap()
             XCTAssertTrue(app.textFields["Your server URL"].waitForExistence(timeout: 10), "\(button): " + app.debugDescription)
-            XCTAssertFalse(app.alerts.firstMatch.exists, "\(button) should not report an error")
+            XCTAssertFalse(app.alerts.firstMatch.exists || app.staticTexts["signInError"].exists, "\(button) should not report an error")
             app.terminate()
         }
+    }
+    @MainActor func testLocalWorkspaceSignInAndSignOut() async throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        if app.buttons["Add task"].waitForExistence(timeout: 4) {
+            openSettings(app)
+            app.buttons["Remove local session"].tap()
+        }
+        let server = app.textFields["Your server URL"]
+        XCTAssertTrue(server.waitForExistence(timeout: 8), app.debugDescription)
+        replace(server, with: base)
+        // A server the card already checked keeps its options. Any other server waits for Continue.
+        if app.buttons["Continue"].waitForExistence(timeout: 1) { app.buttons["Continue"].tap() }
+        // The test backend has no Apple credentials, so it offers only the local workspace, as the web does.
+        let local = app.buttons["Open local workspace"]
+        XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Apple sign-in is not configured."].exists)
+        local.tap()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        // A local sign-in is a full session, so settings can manage sessions, and signing out revokes it.
+        openSettings(app)
+        app.buttons["Sign out"].tap()
+        XCTAssertTrue(server.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["signInError"].exists, app.debugDescription)
+        XCTAssertTrue(local.waitForExistence(timeout: 10), "A saved server shows its sign-in methods right away: " + app.debugDescription)
     }
     @MainActor func testConflictKeepsDraftAndSecondSaveSucceeds() async throws {
         let app = try await signedInApp()
@@ -181,7 +213,9 @@ final class WorkspaceTests: XCTestCase {
             if (response as? HTTPURLResponse)?.statusCode == 401 { after.fulfill(); break }
         }
         await fulfillment(of: [after], timeout: 1)
-        XCTAssertTrue(app.buttons["Remove local session"].exists, "This device stays signed in")
+        // Settings scrolled down to the device list; the account section is at the top.
+        if !app.buttons["Remove local session"].exists { app.swipeDown() }
+        XCTAssertTrue(app.buttons["Remove local session"].waitForExistence(timeout: 5), "This device stays signed in")
     }
     @MainActor func testQuickEntryAndPersistence() async throws {
         continueAfterFailure = false
@@ -199,6 +233,7 @@ final class WorkspaceTests: XCTestCase {
         tokenField.tap(); tokenField.typeText(token)
         app.buttons["Use development token"].tap()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        dismissSavePassword(app)
         app.buttons["Add task"].tap()
         let field = app.textFields["Task title, e.g. Order pizza Friday afternoon"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -232,6 +267,10 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertTrue(reminder.waitForExistence(timeout: 5), app.debugDescription)
         reminder.tap()
         app.buttons["15 minutes before"].tap()
+        // A reminder offers the choice of a notification or an alarm.
+        let alert = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Alert")).firstMatch
+        if !alert.isHittable { app.swipeUp() }
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), app.debugDescription)
         app.buttons["Save"].tap()
         XCTAssertTrue(app.navigationBars["Edit task"].waitForNonExistence(timeout: 10), app.debugDescription)
         let afterEdit = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
@@ -239,7 +278,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(edited["description"] as? String, "Edited on iPhone")
         XCTAssertEqual(edited["reminder_minutes"] as? Int, 15)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Tasks iOS workspace"; screenshot.lifetime = .keepAlways; add(screenshot)
+        screenshot.name = "iOS workspace"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["Complete \(taskTitle)"].tap()
         XCTAssertTrue(app.buttons["Restore \(taskTitle)"].waitForExistence(timeout: 10))
         let afterCompletion = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
@@ -252,7 +291,22 @@ final class WorkspaceTests: XCTestCase {
         app.buttons["Enable notifications"].tap()
         XCTAssertTrue(app.alerts.staticTexts["Apple push needs to be configured on the server."].waitForExistence(timeout: 5))
         app.alerts.buttons["OK"].tap()
-        app.buttons["Remove local session"].tap()
+        // Notification preferences are saved on the server for every device.
+        let summary = app.switches["Morning summary"]
+        if !summary.isHittable { app.swipeUp() }
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), app.debugDescription)
+        summary.switches.firstMatch.tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Overdue follow-up")).firstMatch.exists, app.debugDescription)
+        var saved: [String: Any] = [:]
+        for _ in 0..<10 {
+            saved = try await request("/api/v1/notifications/settings") as! [String: Any]
+            if saved["summary_time"] as? String != nil { break }
+            try await Task.sleep(for: .milliseconds(300))
+        }
+        XCTAssertEqual(saved["summary_time"] as? String, "08:00")
+        let remove = app.buttons["Remove local session"]
+        if !remove.exists || !remove.isHittable { app.swipeDown() }
+        remove.tap()
         XCTAssertTrue(app.textFields["Your server URL"].waitForExistence(timeout: 5))
     }
 }

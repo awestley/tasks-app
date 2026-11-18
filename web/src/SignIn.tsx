@@ -1,17 +1,7 @@
 import { useState } from "react";
-import { Apple, Check, CircleAlert, RefreshCw } from "lucide-react";
+import { Apple, CircleAlert, RefreshCw } from "lucide-react";
 import { api } from "./api";
 import * as S from "./store";
-
-export function Logo() {
-  return (
-    <div className="brand" aria-hidden="true">
-      <span className="brand-mark">
-        <Check size={21} strokeWidth={3} />
-      </span>
-    </div>
-  );
-}
 
 export function SignIn({ hosted }: { hosted: boolean }) {
   const config = S.useStore((s) => s.config);
@@ -22,7 +12,6 @@ export function SignIn({ hosted }: { hosted: boolean }) {
   return (
     <main className="auth-screen">
       <section className="auth-card" aria-label="Sign in">
-        <Logo />
         <h1>Sign in</h1>
         <div className="auth-actions">
           {shell && (

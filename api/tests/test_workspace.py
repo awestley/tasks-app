@@ -8,13 +8,15 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from fastapi import Response
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from tasks import mcp_server
-from tasks.auth import issue
+from tasks import main, mcp_server
+from tasks.auth import clear_session_cookie, issue, set_session_cookie
 from tasks.config import Settings, settings
 from tasks.db import Credential, Project, Task, User, engine
-from tasks.main import MAX_BODY_BYTES, BodyLimit, next_date
+from tasks.main import MAX_BODY_BYTES, BodyLimit, app, next_date
 
 
 def create(client, **fields):
@@ -40,6 +42,92 @@ def test_auth_required_and_cookie_origin(client):
     # DNS rebinding makes a foreign name resolve here, so the origin can match the Host header and still be foreign.
     rebound = {"Host": "evil.test:8000", "Origin": "http://evil.test:8000"}
     assert client.post("/api/v1/tasks", json={"title": "Rebound"}, headers=rebound).status_code == 403
+
+
+def test_native_apple_challenge_reports_missing_configuration(client):
+    assert client.get("/auth/config").json()["apple_enabled"] is False
+    response = client.post("/auth/apple/challenge", json={"client_id": "com.test.ios"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Sign in with Apple is not configured"
+
+
+WEB_ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+def connecting_from(address):
+    """A client whose connection comes from this address, as the server sees it."""
+    return TestClient(app, client=(address, 50000))
+
+
+def test_local_sign_in_is_off_unless_enabled(workspace):
+    local = connecting_from("127.0.0.1")
+    assert local.get("/auth/config").json()["dev_login"] is False
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 404
+    assert local.post("/auth/dev/native").status_code == 404
+
+
+def test_native_local_sign_in_issues_a_full_session(workspace, monkeypatch):
+    monkeypatch.setattr(settings, "dev_login", True)
+    local = connecting_from("127.0.0.1")
+    assert local.get("/auth/config").json()["dev_login"] is True
+    response = local.post("/auth/dev/native")
+    assert response.status_code == 200, response.text
+    assert response.json()["token_type"] == "bearer" and "set-cookie" not in response.headers
+    bearer = {"Authorization": "Bearer " + response.json()["access_token"]}
+    me = local.get("/api/v1/me", headers=bearer).json()
+    assert me["name"] == "Local workspace"
+    # Unlike a personal access token, the session can manage credentials, so every settings screen can be tested.
+    sessions = local.get("/api/v1/sessions", headers=bearer).json()
+    assert [row["kind"] for row in sessions if row["current"]] == ["native"]
+    again = {"Authorization": "Bearer " + local.post("/auth/dev/native").json()["access_token"]}
+    assert local.get("/api/v1/me", headers=again).json()["id"] == me["id"]
+    assert local.post("/auth/logout", headers=bearer).status_code == 200
+    assert local.get("/api/v1/me", headers=bearer).status_code == 401
+    assert local.get("/api/v1/me", headers=again).status_code == 200
+
+
+def test_local_sign_in_refuses_web_pages_and_other_computers(workspace, monkeypatch):
+    monkeypatch.setattr(settings, "dev_login", True)
+    local = connecting_from("127.0.0.1")
+    # A web page always sends Origin, so it can never be handed a bearer token, even from the app's own origin.
+    for headers in (WEB_ORIGIN, {"Origin": "https://attacker.test"}, {"Origin": "null"}):
+        assert local.post("/auth/dev/native", headers=headers).status_code == 403
+    assert local.post("/auth/dev", headers={"Origin": "https://attacker.test"}).status_code == 403
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 200
+    assert connecting_from("::1").post("/auth/dev/native").status_code == 200
+    assert connecting_from("::ffff:127.0.0.1").post("/auth/dev/native").status_code == 200
+    for address in ("192.168.1.20", "10.0.0.5", "testclient"):
+        remote = connecting_from(address)
+        assert remote.post("/auth/dev/native").status_code == 403
+        assert remote.post("/auth/dev", headers=WEB_ORIGIN).status_code == 403
+    # Behind a proxy every connection is local, so the address the proxy reports decides.
+    monkeypatch.setattr(settings, "client_ip_header", "x-forwarded-for")
+    assert local.post("/auth/dev/native", headers={"X-Forwarded-For": "203.0.113.9"}).status_code == 403
+    assert local.post("/auth/dev/native", headers={"X-Forwarded-For": "203.0.113.9, 127.0.0.1"}).status_code == 200
+    monkeypatch.setattr(settings, "environment", "production")
+    assert local.post("/auth/dev/native").status_code == 404
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 404
+
+
+def test_production_session_cookie_is_host_only(workspace, monkeypatch):
+    client, _, session = workspace
+    with session() as db:
+        token, _ = issue(db, db.scalar(select(User).where(User.apple_sub == "owner")))
+    client.headers.pop("Authorization")
+    monkeypatch.setattr(settings, "environment", "production")
+    response = Response()
+    set_session_cookie(response, token)
+    created = response.headers["set-cookie"]
+    assert created.startswith(f"__Host-tasks_session={token};")
+    assert {"HttpOnly", "Path=/", "SameSite=lax", "Secure"} <= set(part.strip() for part in created.split(";"))
+    assert "domain" not in created.lower()
+    response = Response()
+    clear_session_cookie(response)
+    removed = response.headers["set-cookie"]
+    assert removed.startswith("__Host-tasks_session=") and "Max-Age=0" in removed and "Secure" in removed
+    # Production reads only the prefixed name, so a cookie planted under the plain name is ignored.
+    assert client.get("/api/v1/me", headers={"Cookie": "__Host-tasks_session=" + token}).status_code == 200
+    assert client.get("/api/v1/me", headers={"Cookie": "tasks_session=" + token}).status_code == 401
 
 
 def test_crud_persistence_and_conflicts(client):
@@ -219,14 +307,14 @@ def test_mcp_rejects_cookie_auth(client):
 
 
 def test_contract(client):
-    spec = client.get("/openapi.json").json()
+    spec = client.get("/api/v1/openapi.json").json()
     assert "/api/v1/tasks" in spec["paths"]
     assert "version" in spec["components"]["schemas"]["TaskPatch"]["required"]
 
 
 def test_openapi_snapshot_is_current(client):
     snapshot = json.loads((Path(__file__).resolve().parents[2] / "docs/openapi.json").read_text())
-    assert client.get("/openapi.json").json() == snapshot, "Run scripts/export_openapi.py to update the snapshot"
+    assert client.get("/api/v1/openapi.json").json() == snapshot, "Run scripts/export_openapi.py to update the snapshot"
 
 
 def test_tests_never_use_a_development_database():
@@ -426,7 +514,7 @@ def test_mcp_transport_uses_the_configured_public_url():
     assert mcp_server.mcp.settings.transport_security.allowed_origins == ["http://localhost:5173"]
 
 
-def test_production_does_not_publish_api_docs():
+def test_production_serves_the_api_schema_without_cdn_pages():
     environment = {
         **os.environ,
         "ENVIRONMENT": "production",
@@ -441,7 +529,32 @@ def test_production_does_not_publish_api_docs():
     }
     script = "from tasks.main import app; print(app.docs_url, app.redoc_url, app.openapi_url)"
     result = subprocess.run([sys.executable, "-c", script], env=environment, capture_output=True, text=True)
-    assert result.stdout.split() == ["None", "None", "None"], result.stderr
+    assert result.stdout.split() == ["None", "None", "/api/v1/openapi.json"], result.stderr
+
+
+def test_api_schema_is_public_and_not_cached(client):
+    client.headers.pop("Authorization", None)
+    client.cookies.clear()
+    response = client.get("/api/v1/openapi.json")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "script-src 'self';" in response.headers["Content-Security-Policy"]
+    for retired in ("/openapi.json", "/redoc"):
+        # Without a web build these answer 404; with one, the app page. Never the schema.
+        assert '"openapi"' not in client.get(retired).text
+
+
+def test_reference_page_is_served_from_its_own_directory(client, tmp_path, monkeypatch):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "index.html").write_text("app")
+    (tmp_path / "docs" / "index.html").write_text("reference")
+    monkeypatch.setattr(main, "static", tmp_path)
+    moved = client.get("/docs", follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "/docs/"
+    assert client.get("/docs/").text == "reference"
+    assert client.get("/today").text == "app"
+    assert client.get("/").text == "app"
+    assert client.get("/docs/").headers["Content-Security-Policy"].startswith("default-src 'self'; script-src 'self';")
 
 
 def test_rate_limit_applies_under_the_base_path(client, monkeypatch):

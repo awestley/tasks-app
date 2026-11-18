@@ -2,8 +2,9 @@ from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from .refs import APP, format_ref, parse_ref, safe_web_url
 from .scheduling import due_instant, zone_name
 
 # Far from the limits of datetime, so time zone and reminder arithmetic cannot overflow.
@@ -33,6 +34,49 @@ class ProjectPatch(Model):
 class ProjectOut(ProjectIn):
     id: str
 
+    @computed_field
+    @property
+    def ref(self) -> str:
+        return format_ref(APP, "project", self.id)
+
+
+class LinkIn(Model):
+    """Give a pc:// reference, a web address, or both. A pasted Notebook or Tasks address becomes a reference."""
+
+    ref: str | None = Field(default=None, max_length=500)
+    url: str | None = Field(default=None, max_length=2000)
+    title: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def target(self):
+        if self.ref is not None and not parse_ref(self.ref):
+            raise ValueError("ref must look like pc://app/type/id")
+        if self.url is not None and not safe_web_url(self.url):
+            raise ValueError("url must use HTTPS, except for localhost")
+        if not self.ref and not self.url:
+            raise ValueError("Give a ref or a url")
+        return self
+
+
+class LinkOut(Model):
+    id: str
+    ref: str | None
+    title: str
+    url: str | None
+    created_at: datetime
+
+
+class ReferenceOut(Model):
+    """A task or project that links to a given reference, in the shared resolve shape."""
+
+    ref: str
+    type: str
+    id: str
+    title: str
+    completed: bool | None = None
+    updated: datetime | None = None
+    url: str
+
 
 class ChecklistItem(Model):
     id: str = Field(default_factory=lambda: str(uuid4()), pattern=r"^[a-zA-Z0-9_-]{1,64}$")
@@ -53,6 +97,7 @@ class TaskIn(Model):
     labels: list[str] = Field(default_factory=list, max_length=20)
     checklist: list[ChecklistItem] = Field(default_factory=list, max_length=100)
     recurrence: Literal["daily", "weekly", "monthly"] | None = None
+    alert_style: Literal["notification", "alarm"] = "notification"
 
     @field_validator("due_date")
     @classmethod
@@ -119,6 +164,7 @@ class TaskPatch(Model):
     recurrence: Literal["daily", "weekly", "monthly"] | None = None
     completed: bool | None = None
     checklist: list[ChecklistItem] | None = Field(default=None, max_length=100)
+    alert_style: Literal["notification", "alarm"] | None = None
     # With completed=false right after completing (the app's Undo): also remove the recurring successor
     # that completion created, if it hasn't been touched since.
     undo: bool | None = None
@@ -145,11 +191,52 @@ class TaskOut(Model):
     labels: list[str]
     checklist: list[ChecklistItemOut]
     recurrence: str | None
+    alert_style: str = "notification"
+    snoozed_until: datetime | None = None
     completed: bool
     completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
     version: int
+
+    @computed_field
+    @property
+    def ref(self) -> str:
+        return format_ref(APP, "task", self.id)
+
+
+class TaskDetailOut(TaskOut):
+    links: list[LinkOut] = []
+
+
+class SnoozeIn(Model):
+    """Remind again after a number of minutes, or at a given time. At most 7 days ahead."""
+
+    minutes: int | None = Field(default=None, ge=1, le=10080)
+    until: datetime | None = None
+
+    @model_validator(mode="after")
+    def one_choice(self):
+        if (self.minutes is None) == (self.until is None):
+            raise ValueError("Give either minutes or until")
+        if self.until and self.until.tzinfo is None:
+            raise ValueError("Include a time zone offset in until")
+        return self
+
+
+class NotificationSettingsIn(Model):
+    summary_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    summary_zone: str = Field(default="UTC", max_length=100)
+    _zone = field_validator("summary_zone")(zone_name)
+    overdue_minutes: Literal[30, 60, 120, 240] | None = None
+    time_sensitive_priority: int = Field(default=1, ge=0, le=2)
+
+
+class NotificationSettingsOut(Model):
+    summary_time: str | None
+    summary_zone: str
+    overdue_minutes: int | None
+    time_sensitive_priority: int
 
 
 class TaskRevision(Model):

@@ -1,5 +1,6 @@
 // The menus for a task. The same entries appear on right-click, long-press and the row's ⋯ button.
 import {
+  AlarmClockOff,
   ArrowRightToLine,
   Bell,
   Calendar,
@@ -18,8 +19,9 @@ import {
   Trash2,
 } from "lucide-react";
 import type { MenuEntry } from "./ContextMenu";
-import type { Task } from "./api";
+import { api, type Task } from "./api";
 import { isoDate, nextWeekDate, weekendDate } from "./parse";
+import { refreshSoon } from "./store";
 import { taskLink } from "./routes";
 import {
   daysFromNow,
@@ -117,6 +119,33 @@ export function priorityMenu(task: Task, w: W): MenuEntry[] {
   }));
 }
 
+/** 09:00 tomorrow in this device's time zone, as ISO 8601 with its offset. */
+function tomorrowMorning() {
+  const at = new Date();
+  at.setDate(at.getDate() + 1);
+  at.setHours(9, 0, 0, 0);
+  const offset = -at.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  return `${isoDate(at)}T09:00:00${sign}${pad(offset / 60)}:${pad(offset % 60)}`;
+}
+
+/** Notifies every enabled device again later. Needs the server, so it is not queued offline. */
+function snooze(
+  task: Task,
+  w: W,
+  change: { minutes?: number; until?: string },
+) {
+  api(`/tasks/${encodeURIComponent(task.id)}/snooze`, "POST", change)
+    .then(() => {
+      w.setToast({ id: Date.now(), text: "Snoozed" });
+      refreshSoon(0);
+    })
+    .catch((e: Error) =>
+      w.setToast({ id: Date.now(), text: e.message, error: true }),
+    );
+}
+
 export function taskMenu(task: Task, w: W): MenuEntry[] {
   const {
     companion,
@@ -176,6 +205,32 @@ export function taskMenu(task: Task, w: W): MenuEntry[] {
       })),
     },
     "separator",
+    ...(!task.completed
+      ? [
+          {
+            label: "Snooze",
+            icon: <AlarmClockOff size={16} />,
+            items: [
+              {
+                label: "15 minutes",
+                action: () => snooze(task, w, { minutes: 15 }),
+              },
+              {
+                label: "1 hour",
+                action: () => snooze(task, w, { minutes: 60 }),
+              },
+              {
+                label: "3 hours",
+                action: () => snooze(task, w, { minutes: 180 }),
+              },
+              {
+                label: "Tomorrow 09:00",
+                action: () => snooze(task, w, { until: tomorrowMorning() }),
+              },
+            ],
+          } as MenuEntry,
+        ]
+      : []),
     ...(task.due_time
       ? [
           {

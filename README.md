@@ -9,9 +9,9 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 - Responsive React web app with Inbox, Today, Upcoming, projects, labels, search, priorities, completed history, and keyboard shortcuts.
 - Create, edit, complete, restore, and delete tasks, with checklists inside each task. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
 - Native SwiftUI macOS and iOS applications using the same backend. Apple sign-in, Keychain sessions, projects, task editing, search, API tokens, and account deletion.
-- English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Push delivery requires server configuration and device permission.
+- English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, Siri support, and alarm-style reminders on iPhone. Push delivery requires server configuration and device permission.
 - Versioned REST API and generated OpenAPI contract.
-- MCP over stdio and authenticated Streamable HTTP, with eight task and project tools.
+- MCP over stdio and authenticated Streamable HTTP, with nine task and project tools.
 - Sign in with Apple code exchange, signature/audience/issuer/expiry/nonce validation, one-time challenges, browser binding, and revocable sessions.
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
@@ -47,15 +47,44 @@ Offline: every view keeps a local replica and an outbox in `localStorage` (share
 
 ## Run locally
 
-Requirements: Python 3.12+, uv, Node 24+, npm. Apple credentials are not needed for local development.
+Requirements: Python 3.12+, uv, Node 24+, npm. The Apple builds also need Xcode and XcodeGen (`brew install xcodegen`). Apple credentials are not needed for local development.
+
+### Build everything and start the backend
+
+```sh
+./scripts/start.sh
+```
+
+This removes old builds, installs dependencies, builds the web app, builds the macOS and iOS Simulator apps, then starts the backend at http://localhost:8000. The backend serves the web app, so open http://localhost:8000 and choose **Open local workspace**. Press Control-C to stop. Running the script again stops an earlier backend on the same port first, if the same Mac account started it.
+
+| Option | Effect |
+| --- | --- |
+| `--skip-apple` | Build only the web app. The Apple builds take a few minutes. |
+| `--no-build` | Start the backend with the existing builds, without cleaning or building. |
+| `--no-serve` | Clean and build, then exit without starting the backend. |
+| `--port PORT` | Use another port. The default is 8000. |
+
+Build output:
+
+- Web: `web/dist`
+- macOS: `apple/DerivedData/Build/Products/Debug/Tasks.app` (unsigned, because its entitlements need a development certificate)
+- iOS Simulator: `apple/DerivedData-iOS/Build/Products/Debug-iphonesimulator/Tasks.app` (ad hoc signed so the Keychain works)
+
+In the Mac app or iOS Simulator, connect to `http://localhost:8000`.
+
+New workspaces start empty and are stored in `api/tasks.db`. The local workspace is a single shared local account, not a production authentication method. The API binds to loopback only, and local sign-in answers only requests from this computer. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled. [Authentication design](docs/authentication.md) explains every sign-in method and its safeguards.
+
+### Web development with live reload
 
 ```sh
 ./scripts/dev.sh
 ```
 
+This starts the backend on port 8000 and the Vite development server at http://localhost:5173, which reloads as you edit `web/src`. Open http://localhost:5173.
+
 Open http://localhost:5173 and choose **Open local workspace**. New workspaces start empty and are stored in `api/tasks.db`. It is a single shared local account, not a production authentication method. The API binds to loopback only. `DEV_LOGIN` defaults to false unless explicitly enabled, and production refuses to start with it enabled.
 
-To start each component separately:
+### Start each component by hand
 
 ```sh
 cp api/.env.example api/.env
@@ -67,6 +96,8 @@ cd api
 # Terminal 2, from the repository root:
 npm --prefix web run dev
 ```
+
+Local sign-in only works from the address in `PUBLIC_URL`, which `api/.env` sets to http://localhost:5173. To use the backend's own copy of the web app at port 8000 instead, start it with `PUBLIC_URL=http://localhost:8000`, as `scripts/start.sh` does.
 
 Development startup applies database migrations automatically. An original unversioned SQLite database is backed up into `api/.backups/` before its first migration. Keep that directory private, since backups contain workspace data. Production migrations run separately before deployment.
 
@@ -85,7 +116,7 @@ open apple/Tasks.xcodeproj
 
 Choose `Tasks-macOS` or `Tasks-iOS`. Set your Development Team and real bundle identifiers in `apple/project.yml`, regenerate, and build. Enter the backend's HTTPS origin on the app's connection screen. Simulator interaction tests use local ad hoc signing (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`) so Keychain works. Unsigned builds only verify compilation. Distribution requires your Apple signing identities and provisioning profiles.
 
-Debug builds include a development-token entry so you can use a token from the local web app with `http://localhost:8000` in the Mac app or iOS Simulator. This entry is excluded from Release builds. API tokens intentionally cannot create more tokens or delete the account, so those settings require Apple sign-in. A physical phone requires an HTTPS backend reachable from that device.
+Debug builds connected to a local development server, such as `http://localhost:8000` from the Mac app or iOS Simulator, offer **Open local workspace**, the same local account as the web app. Under **Local development** they also accept a personal access token, for pointing a Debug build at another server. Both are excluded from Release builds. API tokens intentionally cannot create more tokens or delete the account, so those settings require Apple sign-in. A physical phone requires an HTTPS backend reachable from that device.
 
 [Apple setup](docs/apple-auth.md) covers identifiers, app grouping, return URLs, keys, and distribution.
 
@@ -95,7 +126,7 @@ Run the iOS UI test with `bash scripts/test-ios.sh SIMULATOR_UDID` (find a devic
 
 API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
 
-The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
+Browse the API reference at `https://YOUR_DOMAIN/docs`, also linked from **Settings & integrations**. Try it out uses your browser session, or a token entered under **Authorize**. The schema itself is at `/api/v1/openapi.json`. The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
 
 Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header. This release uses personal tokens, not MCP OAuth discovery. Use the stdio adapter for clients that cannot configure a bearer header.
 
@@ -115,7 +146,32 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 }
 ```
 
-Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools: `list_tasks`, `list_projects`, `create_task`, `update_task`, `complete_task`, `delete_task`, `create_project`, `parse_task`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change.
+Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools: `list_tasks`, `get_task`, `list_projects`, `create_task`, `update_task`, `complete_task`, `snooze_task`, `delete_task`, `create_project`, `update_project`, `parse_task`, and for links `link_item`, `unlink_item`, `list_project_links`, `find_linked`. Prompts: `flesh_out_task`, `plan_project`, `capture_in_notebook`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change.
+
+### Working with other apps
+
+Tasks and projects can link to items in other apps by reference (`pc://notes/note/<id>` for a Notebook note) or to web pages. Connect a client such as Claude Code to both the Tasks and the Notebook MCP servers and use the prompts above: the client reads the task, reads and writes notes, and keeps links in both directions (`[[task:<id>|Title]]` in a note, a link on the task). `GET /api/v1/references?target=<ref>` lists the tasks and projects that link to an item, and `GET /api/v1/resolve?ref=<ref>` summarizes one of this app's items. The web addresses `#task/<id>` and `#project/<id>` open an item. Set `NOTEBOOK_WEB_URL` so note links open in Notebook.
+
+### Flesh out
+
+With `ANTHROPIC_API_KEY` set, the task editor offers Flesh out: the server runs Claude (`AGENT_MODEL`, default `claude-opus-5-5`) as an MCP client of its own `/mcp` endpoint, with a credential that lasts 15 minutes and is deleted when the run ends, and of each server in `AGENT_MCP_SERVERS`. Tools marked destructive and those in `AGENT_BLOCKED_TOOLS` are never offered, so by default the agent cannot delete, complete, create or rename tasks, projects or notebooks; it can edit the task, its links, and notes. To let it use Notebook, add `{"name": "notebook", "url": "https://<notebook host>/mcp", "token_env": "NOTEBOOK_TOKEN"}` to `AGENT_MCP_SERVERS` and set `NOTEBOOK_TOKEN` to a Notebook personal access token (New token in Notebook's Agents dialog). Every tool call is listed on the run. One run at a time per account; a restart marks running runs as failed. Model usage is billed to the configured API key.
+
+## Import from Todoist
+
+`scripts/import_todoist.py` copies open Todoist projects and tasks through the API. It runs on the system `python3` with no extra packages. Put your Todoist API token (Todoist **Settings > Integrations > Developer**) in `~/.todoist_token`, or set `TODOIST_TOKEN`. The script never prints it.
+
+```bash
+python3 scripts/import_todoist.py
+```
+
+The default is a dry run that lists what would be created and anything that needs checking. Add `--apply` to import. It signs in to the local workspace, so the server must run with local sign-in on; set `TASKS_API_URL` and `TASKS_TOKEN` to import into another server. Imported IDs are recorded in `~/.config/tasks/todoist-import.json`, so running it again adds only new tasks.
+
+- Subtasks become checklist items. Comments, attachment links and Todoist deadlines are added to the description.
+- Sections become labels; `--drop-sections` ignores them.
+- Todoist priority 1 (urgent) becomes Urgent here.
+- Repeats map to daily, weekly or monthly. Others, such as yearly or every 2 weeks, keep the original rule in the description and are listed in the output.
+- One time-based reminder per task is kept (the earliest). Location reminders, completed tasks and archived projects are skipped.
+- Dates without a time zone use this Mac's zone; `--time-zone` overrides it.
 
 ## Deploy
 
@@ -138,7 +194,7 @@ npm test
 
 The browser test uses the real backend and local development account, creates test resources, verifies persisted edits, completion/restoration, project management and token revocation, then removes its test resources. Set `CHROME_PATH` if using an already-installed Chromium binary.
 
-PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate Tasks's tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
+PostgreSQL tests use `TEST_DATABASE_URL`. **Use a disposable database only:** the test fixtures recreate the tables. Never point it at a real workspace. Migration verification uses `alembic upgrade head` and `alembic check`. After changing the API, update the schema snapshot with `api/.venv/bin/python scripts/export_openapi.py`; a test fails if it is out of date.
 
 To run the Apple tests against the included Postman simulation instead of the in-process fake, start it from the repository root and set `APPLE_SIMULATION_URL=http://localhost:4900/apple`:
 

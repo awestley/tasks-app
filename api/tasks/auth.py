@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import ipaddress
 import logging
 import secrets
 import time
@@ -25,10 +26,38 @@ from .db import Challenge, Credential, User, get_db, now
 from .schemas import Model
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-COOKIE = "tasks_session"
+SESSION_COOKIE = "tasks_session"
+# The __Host- prefix makes a browser refuse the cookie unless it is Secure, host-only and path-wide, so a sibling
+# subdomain cannot plant or overwrite it. The binding cookie is always Secure; the session cookie is only Secure
+# in production, because development runs over plain HTTP.
+BINDING_COOKIE = "__Host-apple_binding"
+LOCAL_USER = "local-demo"
 SHELL_COOKIE = "pc_session"
 SHELL_AUDIENCE = "personal-command"
 log = logging.getLogger(__name__)
+
+
+def session_cookie():
+    return "__Host-" + SESSION_COOKIE if settings.production else SESSION_COOKIE
+
+
+def client_address(request):
+    """Behind a proxy every connection comes from the proxy, so use the address it reports."""
+    if settings.client_ip_header:
+        # A proxy appends what it saw, so only the last entry cannot be supplied by the client.
+        reported = request.headers.get(settings.client_ip_header, "").split(",")[-1].strip()
+        if reported:
+            return reported
+    return request.client.host if request.client else "unknown"
+
+
+def from_this_computer(request):
+    try:
+        address = ipaddress.ip_address(client_address(request))
+    except ValueError:
+        return False
+    mapped = getattr(address, "ipv4_mapped", None)
+    return address.is_loopback or bool(mapped and mapped.is_loopback)
 
 
 def digest(value):
@@ -112,12 +141,18 @@ def authenticate(
     request: Request,
     db: Session = Depends(get_db),
     bearer_scheme=Security(HTTPBearer(auto_error=False)),
-    cookie_scheme=Security(APIKeyCookie(name=COOKIE, auto_error=False)),
+    cookie_scheme=Security(
+        APIKeyCookie(
+            name=SESSION_COOKIE,
+            auto_error=False,
+            description="Browser session. Named __Host-tasks_session in production.",
+        )
+    ),
 ):
     authorization = request.headers.get("authorization", "")
     bearer = authorization.startswith("Bearer ")
     shell_cookie = settings.shell_mode and not bearer and request.cookies.get(SHELL_COOKIE)
-    token = authorization[7:] if bearer else (shell_cookie or request.cookies.get(COOKIE))
+    token = authorization[7:] if bearer else (shell_cookie or request.cookies.get(session_cookie()))
     if not token:
         raise HTTPException(401, "Sign in required")
     if not bearer and request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -136,6 +171,11 @@ def authenticate(
     return db.get(User, credential.user_id)
 
 
+# Credentials that act for the user without being a signed-in device. They cannot manage credentials or the account.
+DELEGATED_KINDS = ("api", "agent")
+LIFETIMES = {"api": timedelta(days=90), "agent": timedelta(minutes=15)}
+
+
 def still_signed_in(db, credential):
     """Whether what opened a long-lived connection still counts: a shell token until it expires, and a stored
     credential until it expires or is revoked."""
@@ -146,7 +186,7 @@ def still_signed_in(db, credential):
 
 
 def session_only(request):
-    if request.state.credential.kind == "api":
+    if request.state.credential.kind in DELEGATED_KINDS:
         raise HTTPException(403, "Sign in to manage credentials or your account")
 
 
@@ -157,15 +197,22 @@ def issue(db, user, kind="web", name="Session"):
         digest=digest(token),
         name=name,
         kind=kind,
-        expires_at=now() + timedelta(days=90 if kind == "api" else 30),
+        expires_at=now() + LIFETIMES.get(kind, timedelta(days=30)),
     )
     db.add(credential)
     db.commit()
     return token, credential
 
 
-def set_cookie(response, token):
-    response.set_cookie(COOKIE, token, httponly=True, secure=settings.production, samesite="lax", max_age=30 * 86400)
+def set_session_cookie(response, token):
+    response.set_cookie(
+        session_cookie(), token, httponly=True, secure=settings.production, samesite="lax", max_age=30 * 86400
+    )
+
+
+def clear_session_cookie(response):
+    # Browsers only replace a cookie, including to delete it, when the attributes match how it was set.
+    response.delete_cookie(session_cookie(), httponly=True, secure=settings.production, samesite="lax")
 
 
 def apple_secret(client_id):
@@ -290,21 +337,44 @@ def own_sign_in():
         raise HTTPException(404, "Sign in through the shell")
 
 
-@router.post("/dev")
-def dev(response: Response, request: Request, db: Session = Depends(get_db)):
+def require_local_sign_in(request):
+    """Development sign-in skips identity checks, so it exists only outside production and answers only this computer."""
     own_sign_in()
     if settings.production or not settings.dev_login:
         raise HTTPException(404)
-    if not trusted_origin(request):
-        raise HTTPException(403, "Invalid request origin")
-    user = db.scalar(select(User).where(User.apple_sub == "local-demo"))
+    if not from_this_computer(request):
+        raise HTTPException(403, "Local sign-in only accepts requests from this computer")
+
+
+def local_user(db):
+    user = db.scalar(select(User).where(User.apple_sub == LOCAL_USER))
     if not user:
-        user = User(apple_sub="local-demo", name="Local workspace", email="")
+        user = User(apple_sub=LOCAL_USER, name="Local workspace", email="")
         db.add(user)
         db.commit()
-    token, _ = issue(db, user)
-    set_cookie(response, token)
+    return user
+
+
+@router.post("/dev")
+def dev(response: Response, request: Request, db: Session = Depends(get_db)):
+    """Signs the browser in to the local development workspace."""
+    require_local_sign_in(request)
+    if not trusted_origin(request):
+        raise HTTPException(403, "Invalid request origin")
+    token, _ = issue(db, local_user(db))
+    set_session_cookie(response, token)
     return {"ok": True}
+
+
+@router.post("/dev/native")
+def dev_native(request: Request, db: Session = Depends(get_db)):
+    """Signs a development build of the Mac or iPhone app in to the local development workspace."""
+    require_local_sign_in(request)
+    # Browsers send Origin with every POST, so its absence means an app rather than a web page forging the request.
+    if "origin" in request.headers:
+        raise HTTPException(403, "Invalid request origin")
+    token, credential = issue(db, local_user(db), "native")
+    return {"access_token": token, "token_type": "bearer", "expires_at": credential.expires_at}
 
 
 @router.get("/apple/start")
@@ -326,7 +396,7 @@ def apple_start(db: Session = Depends(get_db)):
         }
     )
     response = RedirectResponse(settings.apple_base_url + "/auth/authorize?" + query)
-    response.set_cookie("apple_binding", binding, secure=True, httponly=True, samesite="none", max_age=600)
+    response.set_cookie(BINDING_COOKIE, binding, secure=True, httponly=True, samesite="none", max_age=600)
     return response
 
 
@@ -335,16 +405,16 @@ async def apple_callback(request: Request, db: Session = Depends(get_db)):
     own_sign_in()
     form = await request.form()
     try:
-        challenge = consume(db, str(form.get("state", "")), "web", digest(request.cookies.get("apple_binding", "")))
+        challenge = consume(db, str(form.get("state", "")), "web", digest(request.cookies.get(BINDING_COOKIE, "")))
         claims, tokens = await run_in_threadpool(exchange, str(form.get("code", "")), challenge)
         user = apple_user(db, claims, tokens, challenge.client_id)
         token, _ = issue(db, user)
         response = RedirectResponse(settings.public_url, status_code=303)
-        set_cookie(response, token)
+        set_session_cookie(response, token)
     except HTTPException as error:
         reason = "denied" if error.status_code == 403 else "1"
         response = RedirectResponse(settings.public_url + "/?auth_error=" + reason, status_code=303)
-    response.delete_cookie("apple_binding", secure=True, httponly=True, samesite="none")
+    response.delete_cookie(BINDING_COOKIE, secure=True, httponly=True, samesite="none")
     return response
 
 
@@ -360,8 +430,10 @@ class NativeExchange(Model):
 @router.post("/apple/challenge")
 def native_challenge(data: NativeChallenge, db: Session = Depends(get_db)):
     own_sign_in()
-    if not settings.apple_ready or data.client_id not in settings.native_client_ids:
-        raise HTTPException(400, "Unknown Apple application")
+    if not settings.apple_ready:
+        raise HTTPException(503, "Sign in with Apple is not configured")
+    if data.client_id not in settings.native_client_ids:
+        raise HTTPException(400, "This app is not registered for Sign in with Apple on this server.")
     challenge = new_challenge(db, "native", data.client_id)
     return {"challenge_id": challenge.id, "nonce": challenge.nonce}
 
@@ -382,7 +454,7 @@ def logout(request: Request, response: Response, user=Depends(authenticate), db:
         raise HTTPException(400, "Sign out from the shell")
     db.delete(request.state.credential)
     db.commit()
-    response.delete_cookie(COOKIE)
+    clear_session_cookie(response)
     return {"ok": True}
 
 

@@ -3,7 +3,7 @@ import calendar
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
@@ -16,26 +16,44 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from . import events
-from .auth import authenticate, issue, revoke_apple, session_only, trusted_origin
+from .agent import interrupted_runs
+from .agent import router as agent_router
+from .auth import (
+    DELEGATED_KINDS,
+    authenticate,
+    clear_session_cookie,
+    client_address,
+    issue,
+    revoke_apple,
+    session_only,
+    trusted_origin,
+)
 from .auth import router as auth_router
 from .config import settings
 from .contract import api as contract_api
 from .contract import project_ref, task_ref
 from .contract import router as contract_router
-from .db import Credential, Project, SessionLocal, Task, get_db, now, uid
+from .db import Credential, NotificationSettings, Project, SessionLocal, Task, get_db, now, uid
+from .links import copy_links, links_of, remove_links
+from .links import router as links_router
 from .mcp_server import http_app, mcp
 from .migrations import upgrade_local_database
 from .push import router as push_router
 from .quick_add import router as quick_router
+from .reminders import queue_sync
 from .reminders import run as background_work
 from .scheduling import recurrence_clock
 from .schemas import (
+    NotificationSettingsIn,
+    NotificationSettingsOut,
     Profile,
     ProjectCreate,
     ProjectOut,
     ProjectPatch,
     SessionOut,
+    SnoozeIn,
     TaskCreate,
+    TaskDetailOut,
     TaskIn,
     TaskOut,
     TaskPatch,
@@ -50,6 +68,7 @@ from .schemas import (
 async def lifespan(app):
     if not settings.production:
         upgrade_local_database()
+    interrupted_runs()
     stop = asyncio.Event()
     worker = asyncio.create_task(background_work(stop))
     try:
@@ -60,26 +79,22 @@ async def lifespan(app):
         await worker
 
 
-def openapi_path(config):
-    """A personal server has no reason to publish its API, and docs/openapi.json holds the same description.
-    Inside the shell the app contract requires it, and the manifest links to it."""
-    return None if config.production and not config.shell_mode else "/openapi.json"
-
-
 app = FastAPI(
     title="Tasks API",
     version="0.1.0",
     lifespan=lifespan,
     description="Private task management. Authenticate with a revocable personal access token or a session.",
-    docs_url=None if settings.production else "/docs",
-    redoc_url=None if settings.production else "/redoc",
-    openapi_url=openapi_path(settings),
+    # The web build serves the reference page at /docs with a bundled Swagger UI, so FastAPI's
+    # pages, which load their scripts from a CDN, stay off. docs/openapi.json holds the same schema.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/api/v1/openapi.json",
 )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.public_url],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(auth_router)
@@ -127,16 +142,6 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
 
-def client_address(request):
-    """Behind a proxy every connection comes from the proxy, so use the address it reports."""
-    if settings.client_ip_header:
-        # A proxy appends what it saw, so only the last entry cannot be supplied by the client.
-        reported = request.headers.get(settings.client_ip_header, "").split(",")[-1].strip()
-        if reported:
-            return reported
-    return request.client.host if request.client else "unknown"
-
-
 def route_path(request):
     """The path inside the app, without the base path the shell serves it under."""
     path, prefix = request.url.path, settings.base_path
@@ -149,7 +154,7 @@ async def protect(request: Request, call_next):
         return RedirectResponse(settings.base_path + "/", 308)
     path = route_path(request)
     # Only what could be a sign-in attempt counts. /auth/dev does not exist in production.
-    if path.startswith("/auth/") and path not in {"/auth/config", "/auth/dev", "/auth/logout"}:
+    if path.startswith("/auth/") and path not in {"/auth/config", "/auth/dev", "/auth/dev/native", "/auth/logout"}:
         instant = time.monotonic()
         key = client_address(request)
         if len(rate_windows) > 10000:
@@ -187,10 +192,6 @@ async def protect(request: Request, call_next):
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
         f"frame-ancestors {frames}; form-action 'self' https://appleid.apple.com"
     )
-    if path in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self'; frame-ancestors 'none'"
-        )
     if settings.production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if path.startswith(("/api/", "/auth/")) and "cache-control" not in response.headers:
@@ -250,7 +251,7 @@ def delete_me(request: Request, user=Depends(authenticate), db: Session = Depend
     db.delete(user)
     db.commit()
     response = Response(status_code=204)
-    response.delete_cookie("tasks_session")
+    clear_session_cookie(response)
     return response
 
 
@@ -306,6 +307,7 @@ def delete_project(project_id: str, user=Depends(authenticate), db: Session = De
         .values(project_id=None, version=Task.version + 1, updated_at=now())
         .returning(Task.id, Task.version)
     ).all()
+    remove_links(db, "project", project.id)
     db.delete(project)
     db.commit()
     events.publish(user.id, project_ref(project_id), "deleted")
@@ -352,9 +354,11 @@ def tasks(
     return db.scalars(query.offset(offset).limit(limit)).all()
 
 
-@api.get("/tasks/{task_id}", response_model=TaskOut)
+@api.get("/tasks/{task_id}", response_model=TaskDetailOut)
 def get_task(task_id: str, user=Depends(authenticate), db: Session = Depends(get_db)):
-    return owned(db, Task, task_id, user)
+    """One task with its links."""
+    task = owned(db, Task, task_id, user)
+    return TaskDetailOut.model_validate(task).model_copy(update={"links": links_of(db, "task", task.id)})
 
 
 @api.post("/tasks", response_model=TaskOut, status_code=201)
@@ -365,8 +369,10 @@ def create_task(data: TaskCreate, response: Response, user=Depends(authenticate)
         owned(db, Project, data.project_id, user)
     fields = data.model_dump(exclude={"id"})
     fields["completed_at"] = (fields["completed_at"] or now()) if fields["completed"] else None
-    task = Task(user_id=user.id, **fields, **({"id": str(data.id)} if data.id else {}))
+    task = Task(id=str(data.id) if data.id else uid(), user_id=user.id, **fields)
     db.add(task)
+    if task.alert_style == "alarm":
+        queue_sync(db, user.id, task.id, alarm=True)
     db.commit()
     events.publish(user.id, task_ref(task.id), "updated", task.version)
     return task
@@ -405,6 +411,13 @@ def mutate(db, user, task_id, data):
     if complete:
         changes["checklist"] = [{**item.model_dump(), "completed": True} for item in validated.checklist]
     changes["completed_at"] = (task.completed_at or now()) if complete else None
+    schedule = ("due_date", "due_time", "time_zone", "reminder_minutes")
+    rescheduled = any(getattr(validated, name) != getattr(task, name) for name in schedule)
+    # A snooze belongs to the schedule it was chosen for.
+    if complete or rescheduled:
+        changes["snoozed_until"] = None
+    alarm = "alarm" in (task.alert_style, validated.alert_style)
+    needs_sync = complete != task.completed or rescheduled or alarm
     discard = None
     if undo and not complete and task.completed and task.successor_id:
         found = db.get(Task, task.successor_id)
@@ -447,7 +460,12 @@ def mutate(db, user, task_id, data):
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
     if successor:
         db.add(successor)
+        copy_links(db, user.id, task.id, successor.id)
+    if needs_sync:
+        queue_sync(db, user.id, task.id, alarm=alarm)
     if discard:
+        queue_sync(db, user.id, discard.id, alarm=discard.alert_style == "alarm")
+        remove_links(db, "task", discard.id)
         db.delete(discard)
     db.commit()
     db.refresh(task)
@@ -469,14 +487,65 @@ def complete_task(task_id: str, data: Version, user=Depends(authenticate), db: S
     return mutate(db, user, task_id, TaskPatch(version=data.version, completed=True))
 
 
+@api.post("/tasks/{task_id}/snooze", response_model=TaskOut)
+def snooze_task(task_id: str, data: SnoozeIn, user=Depends(authenticate), db: Session = Depends(get_db)):
+    """Notify every enabled device again at a later time. Works from a notification without the task's version."""
+    task = owned(db, Task, task_id, user)
+    if task.completed:
+        raise HTTPException(422, "Reopen the task before snoozing it")
+    instant = now().replace(microsecond=0)
+    if data.until:
+        until = data.until.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+    else:
+        until = instant + timedelta(minutes=data.minutes)
+    if not instant < until <= instant + timedelta(days=7):
+        raise HTTPException(422, "Snooze to a time within the next 7 days")
+    queue_sync(db, user.id, task.id, alarm=task.alert_style == "alarm")
+    db.execute(
+        update(Task)
+        .where(Task.id == task.id)
+        .values(snoozed_until=until, version=Task.version + 1, updated_at=instant)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    db.refresh(task)
+    events.publish(user.id, task_ref(task.id), "updated", task.version)
+    return task
+
+
 @api.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authenticate), db: Session = Depends(get_db)):
-    owned(db, Task, task_id, user)
+    task = owned(db, Task, task_id, user)
+    # Queued first: deleting the task removes the deliveries that show it was notified.
+    queue_sync(db, user.id, task.id, alarm=task.alert_style == "alarm")
     result = db.execute(delete(Task).where(Task.id == task_id, Task.user_id == user.id, Task.version == version))
     if result.rowcount != 1:
         raise HTTPException(409, "This task changed on another device. Refresh and try again.")
+    remove_links(db, "task", task_id)
     db.commit()
     events.publish(user.id, task_ref(task_id), "deleted")
+
+
+def notification_preferences(db, user):
+    return db.get(NotificationSettings, user.id) or NotificationSettings(
+        user_id=user.id, summary_zone="UTC", time_sensitive_priority=1
+    )
+
+
+@api.get("/notifications/settings", response_model=NotificationSettingsOut, tags=["Push"])
+def notification_settings(user=Depends(authenticate), db: Session = Depends(get_db)):
+    return notification_preferences(db, user)
+
+
+@api.put("/notifications/settings", response_model=NotificationSettingsOut, tags=["Push"])
+def save_notification_settings(data: NotificationSettingsIn, user=Depends(authenticate), db: Session = Depends(get_db)):
+    row = notification_preferences(db, user)
+    for name, value in data.model_dump().items():
+        setattr(row, name, value)
+    row.updated_at = now()
+    db.add(row)
+    db.commit()
+    return row
 
 
 @api.get("/tokens", response_model=list[TokenOut])
@@ -507,7 +576,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
     session_only(request)
     rows = db.scalars(
         select(Credential)
-        .where(Credential.user_id == user.id, Credential.kind != "api", Credential.expires_at > now())
+        .where(Credential.user_id == user.id, Credential.kind.notin_(DELEGATED_KINDS), Credential.expires_at > now())
         .order_by(Credential.created_at.desc())
     )
     return [
@@ -526,7 +595,7 @@ def sessions(request: Request, user=Depends(authenticate), db: Session = Depends
 def delete_session(session_id: str, request: Request, user=Depends(authenticate), db: Session = Depends(get_db)):
     session_only(request)
     session = owned(db, Credential, session_id, user)
-    if session.kind == "api":
+    if session.kind in DELEGATED_KINDS:
         raise HTTPException(404)
     if session.id == request.state.credential.id:
         raise HTTPException(422, "Use Sign out to end the session on this device.")
@@ -536,6 +605,8 @@ def delete_session(session_id: str, request: Request, user=Depends(authenticate)
 
 app.include_router(push_router)
 app.include_router(quick_router)
+app.include_router(links_router)
+app.include_router(agent_router)
 app.include_router(api)
 app.include_router(contract_api)
 app.include_router(contract_router)
@@ -544,7 +615,7 @@ static = Path(settings.static_directory).resolve()
 
 
 @app.get("/{path:path}", include_in_schema=False)
-def frontend(path: str):
+def frontend(path: str, request: Request):
     if path.startswith(("api/", "auth/")) or "\x00" in path:
         raise HTTPException(404)
     requested = (static / path).resolve()
@@ -557,6 +628,11 @@ def frontend(path: str):
     if path.startswith("assets/"):
         # An HTML fallback here would be blocked as a script, leaving stale pages blank after a deploy.
         raise HTTPException(404)
+    if path and requested.is_relative_to(static) and (requested / "index.html").is_file():
+        # A page of its own, such as the API reference at /docs/. Its asset URLs are relative, so it needs the slash.
+        if not path.endswith("/"):
+            return RedirectResponse(request.url.path + "/", 308)
+        return FileResponse(requested / "index.html", headers=fresh)
     if (static / "index.html").exists():
         return FileResponse(static / "index.html", headers=fresh)
     raise HTTPException(404, "Build the web app or start the Vite development server")

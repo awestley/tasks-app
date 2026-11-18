@@ -91,8 +91,8 @@ def test_browser_state_cookie_and_session(client):
     response = client.get("/auth/apple/start", follow_redirects=False)
     assert response.status_code == 307
     query = parse_qs(urlparse(response.headers["location"]).query)
-    binding = response.cookies.get("apple_binding")
-    client.cookies.set("apple_binding", binding, domain="testserver.local", path="/")
+    binding = response.cookies.get("__Host-apple_binding")
+    client.cookies.set("__Host-apple_binding", binding, domain="testserver.local", path="/")
     response = client.post(
         "/auth/apple/callback",
         data={"state": query["state"][0], "code": code(query["nonce"][0])},
@@ -114,7 +114,8 @@ def test_browser_rejects_wrong_binding_and_native_unknown_client(client):
         follow_redirects=False,
     )
     assert "auth_error=1" in response.headers["location"]
-    assert client.post("/auth/apple/challenge", json={"client_id": "com.attacker"}).status_code == 400
+    unknown = client.post("/auth/apple/challenge", json={"client_id": "com.attacker"})
+    assert unknown.status_code == 400 and "not registered" in unknown.json()["detail"]
 
 
 def native_sign_in(client, **claims):
@@ -158,7 +159,9 @@ def test_browser_sign_in_reports_a_refused_account(client, monkeypatch):
     monkeypatch.setattr(settings, "allowed_apple_accounts", "someone-else")
     response = client.get("/auth/apple/start", follow_redirects=False)
     query = parse_qs(urlparse(response.headers["location"]).query)
-    client.cookies.set("apple_binding", response.cookies.get("apple_binding"), domain="testserver.local", path="/")
+    client.cookies.set(
+        "__Host-apple_binding", response.cookies.get("__Host-apple_binding"), domain="testserver.local", path="/"
+    )
     response = client.post(
         "/auth/apple/callback",
         data={"state": query["state"][0], "code": code(query["nonce"][0], sub="stranger")},

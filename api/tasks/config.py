@@ -37,8 +37,28 @@ class Settings(BaseSettings):
     apns_key_id: str = ""
     apns_private_key: str = ""
     push_simulation_url: str = ""
+    # Where Notebook's web app runs, so links to notes open there and pasted note addresses are recognized.
+    notebook_web_url: str = ""
 
-    @field_validator("public_url", "shell_url")
+    # The in-app agent that fleshes out a task. Hidden unless an Anthropic API key is set.
+    anthropic_api_key: str = ""
+    agent_model: str = "claude-opus-5-5"
+    agent_max_iterations: int = 25
+    agent_timeout_seconds: int = 600
+    # This server's own address as the agent reaches its MCP endpoint, usually the loopback the API listens on.
+    agent_tasks_url: str = "http://127.0.0.1:8000"
+    # JSON list of other MCP servers the agent may use: [{"name": "notebook", "url": "https://…/mcp", "token_env": "NOTEBOOK_TOKEN"}].
+    # Each token is read from the named environment variable, so the list itself holds no secrets.
+    agent_mcp_servers: str = "[]"
+    # Tools the agent never gets, in addition to every tool marked destructive. The agent works on one task, so
+    # tools that close, create or rename other things are left out too.
+    agent_blocked_tools: str = (
+        "delete_task,complete_task,snooze_task,create_task,create_project,update_project,"
+        "delete_note,move_note,rename_note,create_notebook,rebuild_index,fix_link,link_notes,unlink_notes,"
+        "review_auto_link"
+    )
+
+    @field_validator("public_url", "notebook_web_url", "shell_url")
     @classmethod
     def origin_without_trailing_slash(cls, value):
         # Browsers send Origin without one, so a trailing slash would fail every cookie write.
@@ -83,6 +103,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires HTTPS PUBLIC_URL and PostgreSQL DATABASE_URL")
             if urlsplit(self.public_url).path:
                 raise RuntimeError("PUBLIC_URL must be an origin, without a path")
+            if self.notebook_web_url and not self.notebook_web_url.startswith("https://"):
+                raise RuntimeError("NOTEBOOK_WEB_URL must use HTTPS in production")
             if self.shell_mode:
                 if not self.shell_url.startswith("https://") or self.public_url != self.shell_url:
                     raise RuntimeError("Production in the shell requires an HTTPS SHELL_URL equal to PUBLIC_URL")

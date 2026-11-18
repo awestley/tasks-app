@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  AlarmClock,
   Bell,
   CalendarDays,
   Check,
@@ -16,10 +17,12 @@ import {
   X,
 } from "lucide-react";
 import type { Project, Task } from "./api";
+import { AgentPanel } from "./AgentPanel";
 import { ChecklistEditor } from "./ChecklistEditor";
 import type { MenuEntry } from "./ContextMenu";
 import { autoReminder } from "./reminders";
-import { getState, type TaskChanges } from "./store";
+import { LinksEditor } from "./LinksEditor";
+import { getState, refresh, type TaskChanges } from "./store";
 import {
   AutoText,
   DatePicker,
@@ -284,6 +287,8 @@ export function TaskDetail({
               }}
             />
           </div>
+          <LinksEditor owner={`/tasks/${task.id}`} />
+          <AgentPanel taskId={task.id} changed={() => refresh()} />
         </div>
         <div className="detail-side">
           <div className="detail-field">
@@ -364,6 +369,39 @@ export function TaskDetail({
               </select>
             </label>
           </div>
+          {task.reminder_minutes !== null && (
+            <div className="detail-field">
+              <span>Alert</span>
+              <label className="detail-select">
+                <AlarmClock size={15} />
+                <select
+                  aria-label="Alert style"
+                  title="An alarm rings on iPhone; other devices show a notification"
+                  value={task.alert_style}
+                  onChange={(e) =>
+                    patch({
+                      alert_style: e.target.value as Task["alert_style"],
+                    })
+                  }
+                >
+                  <option value="notification">Notification</option>
+                  <option value="alarm">Alarm on iPhone</option>
+                </select>
+              </label>
+            </div>
+          )}
+          {task.snoozed_until && !task.completed && (
+            <p className="detail-note">
+              Snoozed until{" "}
+              {new Date(
+                task.snoozed_until +
+                  (task.snoozed_until.endsWith("Z") ? "" : "Z"),
+              ).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
           <div className="detail-field is-labels">
             <span>Labels</span>
             <div className="detail-labels">

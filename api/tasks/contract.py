@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from . import events
 from .auth import authenticate, still_signed_in
 from .config import settings
-from .db import Project, Task, get_db
+from .db import Link, Project, Task, get_db
 from .search import SearchError, iso, parse_params, search_docs
 
 APP_ID = "tasks"
@@ -61,7 +61,7 @@ def manifest(user=Depends(authenticate)):
             "icon": f"{b}/icon.svg",
             "version": VERSION,
             "api": f"{b}/api/v1",
-            "openapi": f"{b}/openapi.json",
+            "openapi": f"{b}/api/v1/openapi.json",
             "entities": [
                 {"type": "task", "label": "Task", "embed": "tasks-task"},
                 {"type": "project", "label": "Project", "embed": "tasks-project"},
@@ -202,7 +202,8 @@ def search(
 
 @api.get("/references")
 def references(target: str = Query(max_length=500), user=Depends(authenticate), db: Session = Depends(get_db)):
-    """Tasks whose description links to or embeds the target ([[type:id]], ![[type:id]] or the full ref)."""
+    """Tasks and projects that point at the target: a stored link (POST /tasks/{id}/links), or a task
+    description that links to or embeds it ([[type:id]], ![[type:id]] or the full ref)."""
     parsed = parse_ref(target)
     if not parsed:
         return {"items": []}
@@ -221,6 +222,17 @@ def references(target: str = Query(max_length=500), user=Depends(authenticate), 
         for task in db.scalars(query.order_by(Task.updated_at.desc()).limit(200))
         if pattern.search(task.description or "") and task_ref(task.id) != target
     ]
+    linked = db.execute(select(Link.owner_type, Link.owner_id).where(Link.user_id == user.id, Link.ref == target)).all()
+    seen = {item["ref"] for item in items}
+    task_ids = [owner_id for owner_type, owner_id in linked if owner_type == "task"]
+    for task in db.scalars(select(Task).where(Task.user_id == user.id, Task.id.in_(task_ids))):
+        if task_ref(task.id) not in seen:
+            items.append(task_summary(task, names.get(task.project_id)))
+    project_ids = [owner_id for owner_type, owner_id in linked if owner_type == "project"]
+    if project_ids:
+        counts = open_counts(db, user)
+        for project in db.scalars(select(Project).where(Project.user_id == user.id, Project.id.in_(project_ids))):
+            items.append(project_summary(project, counts.get(project.id, 0)))
     return {"items": items}
 
 

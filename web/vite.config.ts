@@ -13,6 +13,8 @@ export default defineConfig({
         // The compact view the shell keeps beside the workspace (westley-app docs/companion.md).
         companion: "companion.html",
         embed: "src/embed.ts",
+        // The REST API reference, served at /docs.
+        docs: "docs/index.html",
       },
       output: {
         entryFileNames: (chunk) =>

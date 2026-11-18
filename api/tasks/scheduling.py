@@ -41,3 +41,49 @@ def recurrence_clock(day, clock, zone):
     wall = datetime.combine(day, time.fromisoformat(clock)).replace(tzinfo=ZoneInfo(zone), fold=0)
     shifted = wall.astimezone(timezone.utc).astimezone(wall.tzinfo)
     return shifted.strftime("%H:%M")
+
+
+def safe_due(task):
+    try:
+        return due_instant(task.due_date, task.due_time, task.time_zone)
+    except (ValueError, OverflowError, LookupError, TypeError):
+        return None
+
+
+def notification_instants(task, preferences=None):
+    """Each task notification still to come or recently due, as (kind, UTC instant) pairs."""
+    if task.completed:
+        return []
+    result = []
+    reminder = reminder_instant(task)
+    if reminder:
+        result.append(("reminder", reminder))
+    snoozed = getattr(task, "snoozed_until", None)
+    if snoozed:
+        result.append(("snooze", snoozed))
+    overdue_minutes = getattr(preferences, "overdue_minutes", None)
+    if overdue_minutes and reminder:
+        due = safe_due(task)
+        follow_up = due + timedelta(minutes=overdue_minutes) if due else None
+        # A snooze past the follow-up time already says when to remind again.
+        if follow_up and not (snoozed and snoozed >= follow_up):
+            result.append(("overdue", follow_up))
+    return result
+
+
+def summary_instant(preferences, day):
+    """The summary time on a local date, moved forward past a spring-forward gap."""
+    if not preferences or not preferences.summary_time:
+        return None
+    try:
+        clock = recurrence_clock(day, preferences.summary_time, preferences.summary_zone)
+        return due_instant(day, clock, preferences.summary_zone)
+    except (ValueError, OverflowError, LookupError, TypeError):
+        return None
+
+
+def local_today(instant, zone):
+    try:
+        return instant.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(zone)).date()
+    except (ValueError, OverflowError, LookupError):
+        return instant.date()

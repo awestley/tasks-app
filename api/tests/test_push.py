@@ -244,8 +244,7 @@ def test_retry_and_completed_task_cancels_pending_delivery(workspace, simulation
     tick(sessions, due + timedelta(minutes=15))
     assert client.post("/api/v1/tasks/" + task["id"] + "/complete", json={"version": 2}).status_code == 200
     tick(sessions, due + timedelta(minutes=20))
-    with sessions() as db:
-        assert sorted(d.status for d in db.scalars(select(ReminderDelivery))) == ["cancelled", "sent"]
+    assert statuses(sessions) == ["cancelled", "sent"]
 
 
 def test_expired_subscription_cleanup_and_permanent_errors(workspace, simulation):
@@ -288,9 +287,10 @@ def test_rescheduled_task_and_active_lease_suppress_delivery(workspace, simulati
         assert not db.scalars(select(ReminderDelivery)).all()
 
 
-def statuses(sessions):
+def statuses(sessions, kind="reminder"):
+    """Delivery statuses of one kind. Changing a notified task also queues sync deliveries."""
     with sessions() as db:
-        return sorted(d.status for d in db.scalars(select(ReminderDelivery)))
+        return sorted(d.status for d in db.scalars(select(ReminderDelivery).where(ReminderDelivery.kind == kind)))
 
 
 def test_reminder_instant_is_none_for_values_that_cannot_form_one():

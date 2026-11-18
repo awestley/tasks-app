@@ -11,6 +11,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 import { api, type Profile, type Session, type Token } from "./api";
+import { LinksEditor } from "./LinksEditor";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
 import { flush } from "./store";
@@ -95,7 +96,7 @@ export function ProjectEditor({
   save,
   remove,
 }: {
-  project: { name: string; color: string } | null;
+  project: { id?: string; name: string; color: string } | null;
   close: () => void;
   save: (name: string, color: string) => void;
   remove?: () => void;
@@ -175,6 +176,11 @@ export function ProjectEditor({
           </button>
         </div>
       </form>
+      {project?.id && (
+        <div className="project-links">
+          <LinksEditor owner={`/projects/${project.id}`} />
+        </div>
+      )}
     </Modal>
   );
 }
@@ -460,6 +466,10 @@ export function SettingsPanel({
         <strong>Connection details</strong>
         <p>
           REST API: <code>{new URL("api/v1", location.href).href}</code>
+          <br />
+          <a href="docs" target="_blank" rel="noopener">
+            API reference
+          </a>
           <br />
           Use the included MCP adapter with your server URL and a token. Tokens
           expire after 90 days and can be revoked here.

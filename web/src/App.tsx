@@ -40,7 +40,7 @@ import {
 } from "@awestley/pc-runtime/react";
 import { api, localDate, type Project, type Task } from "./api";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
-import { disableBrowserPush } from "./PushSettings";
+import { clearStaleNotifications, disableBrowserPush } from "./PushSettings";
 import { MainColumn, PhonePage } from "./layouts";
 import { BellPanel, Linked, ToastView, type Toast } from "./pieces";
 import { QuickAdd, type NewTask, type QuickDefaults } from "./QuickAdd";
@@ -250,6 +250,8 @@ function Workspace({
       }),
     [tasks, hosted, pc, notify],
   );
+  // Pushed notifications for tasks finished elsewhere go away, and the app badge follows the list.
+  useEffect(() => clearStaleNotifications(tasks), [tasks]);
 
   /* ---------- routes ---------- */
 

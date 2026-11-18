@@ -15,8 +15,8 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-               BuildableName = "Tasks.app"
+               BlueprintIdentifier = "D18CC6442EFBEA5E4ACB4086"
+               BuildableName = "Tasks-iOS.app"
                BlueprintName = "Tasks-iOS"
                ReferencedContainer = "container:Tasks.xcodeproj">
             </BuildableReference>
@@ -29,7 +29,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C4D184200B6723D20B5328F4"
+               BlueprintIdentifier = "56B04D2A7DAD10D53160796F"
                BuildableName = "Tasks-iOS-UITests.xctest"
                BlueprintName = "Tasks-iOS-UITests"
                ReferencedContainer = "container:Tasks.xcodeproj">
@@ -46,8 +46,8 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks.app"
+            BlueprintIdentifier = "D18CC6442EFBEA5E4ACB4086"
+            BuildableName = "Tasks-iOS.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>
@@ -58,7 +58,7 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C4D184200B6723D20B5328F4"
+               BlueprintIdentifier = "56B04D2A7DAD10D53160796F"
                BuildableName = "Tasks-iOS-UITests.xctest"
                BlueprintName = "Tasks-iOS-UITests"
                ReferencedContainer = "container:Tasks.xcodeproj">
@@ -82,8 +82,8 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks.app"
+            BlueprintIdentifier = "D18CC6442EFBEA5E4ACB4086"
+            BuildableName = "Tasks-iOS.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>
@@ -99,8 +99,8 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DC9EEF8976C5E1A6DFFA0BDC"
-            BuildableName = "Tasks.app"
+            BlueprintIdentifier = "D18CC6442EFBEA5E4ACB4086"
+            BuildableName = "Tasks-iOS.app"
             BlueprintName = "Tasks-iOS"
             ReferencedContainer = "container:Tasks.xcodeproj">
          </BuildableReference>

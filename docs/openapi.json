@@ -31,7 +31,28 @@
           "Authentication"
         ],
         "summary": "Dev",
+        "description": "Signs the browser in to the local development workspace.",
         "operationId": "dev_auth_dev_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/dev/native": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Dev Native",
+        "description": "Signs a development build of the Mac or iPhone app in to the local development workspace.",
+        "operationId": "dev_native_auth_dev_native_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -358,6 +379,60 @@
         }
       }
     },
+    "/api/v1/push/subscriptions/{subscription_id}/alarms": {
+      "put": {
+        "tags": [
+          "Push"
+        ],
+        "summary": "Armed Alarms",
+        "description": "The alarms an iPhone has scheduled with AlarmKit. Their reminders are not also sent to it as notifications.",
+        "operationId": "armed_alarms_api_v1_push_subscriptions__subscription_id__alarms_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subscription Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArmedAlarmsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks/parse": {
       "post": {
         "tags": [
@@ -405,6 +480,527 @@
             "APIKeyCookie": []
           }
         ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/links": {
+      "get": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Task Links",
+        "operationId": "task_links_api_v1_tasks__task_id__links_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkOut"
+                  },
+                  "title": "Response Task Links Api V1 Tasks  Task Id  Links Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Link Task",
+        "description": "Link a task to a pc:// reference or a web address. Linking the same reference again updates it.",
+        "operationId": "link_task_api_v1_tasks__task_id__links_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_id}/links/{link_id}": {
+      "delete": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Unlink Task",
+        "operationId": "unlink_task_api_v1_tasks__task_id__links__link_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/links": {
+      "get": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Project Links",
+        "operationId": "project_links_api_v1_projects__project_id__links_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkOut"
+                  },
+                  "title": "Response Project Links Api V1 Projects  Project Id  Links Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Link Project",
+        "operationId": "link_project_api_v1_projects__project_id__links_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/links/{link_id}": {
+      "delete": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Unlink Project",
+        "operationId": "unlink_project_api_v1_projects__project_id__links__link_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent": {
+      "get": {
+        "tags": [
+          "Agent",
+          "Agent"
+        ],
+        "summary": "Agent Config",
+        "description": "Whether the agent is available, and which other MCP servers it can use.",
+        "operationId": "agent_config_api_v1_agent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/agent-runs": {
+      "post": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Start Run",
+        "description": "Ask the agent to work on a task. One run at a time per account; poll the run for its result.",
+        "operationId": "start_run_api_v1_tasks__task_id__agent_runs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Task Runs",
+        "operationId": "task_runs_api_v1_tasks__task_id__agent_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunOut"
+                  },
+                  "title": "Response Task Runs Api V1 Tasks  Task Id  Agent Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent-runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_api_v1_agent_runs__run_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/me": {
@@ -912,6 +1508,7 @@
           "Workspace"
         ],
         "summary": "Get Task",
+        "description": "One task with its links.",
         "operationId": "get_task_api_v1_tasks__task_id__get",
         "security": [
           {
@@ -938,7 +1535,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskOut"
+                  "$ref": "#/components/schemas/TaskDetailOut"
                 }
               }
             }
@@ -1123,6 +1720,145 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/tasks/{task_id}/snooze": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Snooze Task",
+        "description": "Notify every enabled device again at a later time. Works from a notification without the task's version.",
+        "operationId": "snooze_task_api_v1_tasks__task_id__snooze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnoozeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/settings": {
+      "get": {
+        "tags": [
+          "Workspace",
+          "Push"
+        ],
+        "summary": "Notification Settings",
+        "operationId": "notification_settings_api_v1_notifications_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Workspace",
+          "Push"
+        ],
+        "summary": "Save Notification Settings",
+        "operationId": "save_notification_settings_api_v1_notifications_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/v1/tokens": {
@@ -1498,7 +2234,7 @@
           "Personal Command"
         ],
         "summary": "References",
-        "description": "Tasks whose description links to or embeds the target ([[type:id]], ![[type:id]] or the full ref).",
+        "description": "Tasks and projects that point at the target: a stored link (POST /tasks/{id}/links), or a task\ndescription that links to or embeds it ([[type:id]], ![[type:id]] or the full ref).",
         "operationId": "references_api_v1_references_get",
         "security": [
           {
@@ -1601,6 +2337,165 @@
   },
   "components": {
     "schemas": {
+      "AgentAction": {
+        "properties": {
+          "server": {
+            "type": "string",
+            "title": "Server"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "input": {
+            "type": "string",
+            "title": "Input"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "server",
+          "tool",
+          "input",
+          "ok",
+          "result"
+        ],
+        "title": "AgentAction"
+      },
+      "AgentRunIn": {
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Instruction",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentRunIn"
+      },
+      "AgentRunOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "instruction": {
+            "type": "string",
+            "title": "Instruction"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAction"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "instruction",
+          "status",
+          "summary",
+          "actions",
+          "error",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "AgentRunOut"
+      },
+      "ArmedAlarm": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "at"
+        ],
+        "title": "ArmedAlarm"
+      },
+      "ArmedAlarmsIn": {
+        "properties": {
+          "alarms": {
+            "items": {
+              "$ref": "#/components/schemas/ArmedAlarm"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Alarms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "alarms"
+        ],
+        "title": "ArmedAlarmsIn"
+      },
       "ChecklistItem": {
         "properties": {
           "id": {
@@ -1664,6 +2559,93 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LinkIn": {
+        "properties": {
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LinkIn",
+        "description": "Give a pc:// reference, a web address, or both. A pasted Notebook or Tasks address becomes a reference."
+      },
+      "LinkOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "ref",
+          "title",
+          "url",
+          "created_at"
+        ],
+        "title": "LinkOut"
+      },
       "NativeChallenge": {
         "properties": {
           "client_id": {
@@ -1700,6 +2682,98 @@
           "code"
         ],
         "title": "NativeExchange"
+      },
+      "NotificationSettingsIn": {
+        "properties": {
+          "summary_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Time"
+          },
+          "summary_zone": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Summary Zone",
+            "default": "UTC"
+          },
+          "overdue_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  30,
+                  60,
+                  120,
+                  240
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overdue Minutes"
+          },
+          "time_sensitive_priority": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Time Sensitive Priority",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationSettingsIn"
+      },
+      "NotificationSettingsOut": {
+        "properties": {
+          "summary_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Time"
+          },
+          "summary_zone": {
+            "type": "string",
+            "title": "Summary Zone"
+          },
+          "overdue_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overdue Minutes"
+          },
+          "time_sensitive_priority": {
+            "type": "integer",
+            "title": "Time Sensitive Priority"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary_time",
+          "summary_zone",
+          "overdue_minutes",
+          "time_sensitive_priority"
+        ],
+        "title": "NotificationSettingsOut"
       },
       "ParseInput": {
         "properties": {
@@ -1898,13 +2972,19 @@
           "id": {
             "type": "string",
             "title": "Id"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "readOnly": true
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
-          "id"
+          "id",
+          "ref"
         ],
         "title": "ProjectOut"
       },
@@ -1992,6 +3072,39 @@
           "current"
         ],
         "title": "SessionOut"
+      },
+      "SnoozeIn": {
+        "properties": {
+          "minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10080.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SnoozeIn",
+        "description": "Remind again after a number of minutes, or at a given time. At most 7 days ahead."
       },
       "SubscriptionIn": {
         "properties": {
@@ -2213,6 +3326,15 @@
             ],
             "title": "Recurrence"
           },
+          "alert_style": {
+            "type": "string",
+            "enum": [
+              "notification",
+              "alarm"
+            ],
+            "title": "Alert Style",
+            "default": "notification"
+          },
           "id": {
             "anyOf": [
               {
@@ -2249,6 +3371,183 @@
           "title"
         ],
         "title": "TaskCreate"
+      },
+      "TaskDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Time"
+          },
+          "time_zone": {
+            "type": "string",
+            "title": "Time Zone"
+          },
+          "reminder_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Minutes"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Labels"
+          },
+          "checklist": {
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItemOut"
+            },
+            "type": "array",
+            "title": "Checklist"
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence"
+          },
+          "alert_style": {
+            "type": "string",
+            "title": "Alert Style",
+            "default": "notification"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/LinkOut"
+            },
+            "type": "array",
+            "title": "Links",
+            "default": []
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "project_id",
+          "due_date",
+          "due_time",
+          "time_zone",
+          "reminder_minutes",
+          "priority",
+          "labels",
+          "checklist",
+          "recurrence",
+          "completed",
+          "completed_at",
+          "created_at",
+          "updated_at",
+          "version",
+          "ref"
+        ],
+        "title": "TaskDetailOut"
       },
       "TaskOut": {
         "properties": {
@@ -2342,6 +3641,23 @@
             ],
             "title": "Recurrence"
           },
+          "alert_style": {
+            "type": "string",
+            "title": "Alert Style",
+            "default": "notification"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
           "completed": {
             "type": "boolean",
             "title": "Completed"
@@ -2371,6 +3687,11 @@
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "readOnly": true
           }
         },
         "additionalProperties": false,
@@ -2392,7 +3713,8 @@
           "completed_at",
           "created_at",
           "updated_at",
-          "version"
+          "version",
+          "ref"
         ],
         "title": "TaskOut",
         "description": "Describes what is stored. Input rules and time zone data can change, and that must not make tasks unreadable."
@@ -2559,6 +3881,21 @@
             ],
             "title": "Checklist"
           },
+          "alert_style": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "notification",
+                  "alarm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Style"
+          },
           "undo": {
             "anyOf": [
               {
@@ -2702,6 +4039,7 @@
       },
       "APIKeyCookie": {
         "type": "apiKey",
+        "description": "Browser session. Named __Host-tasks_session in production.",
         "in": "cookie",
         "name": "tasks_session"
       }
