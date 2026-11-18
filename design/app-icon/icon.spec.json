@@ -1,0 +1,38 @@
+{
+  "name": "Tasks",
+  "layers": [
+    {
+      "name": "box",
+      "part": "front",
+      "rect": {
+        "x": 3,
+        "y": 3,
+        "w": 18,
+        "h": 18,
+        "r": 4.75
+      }
+    },
+    {
+      "name": "check",
+      "part": "mark",
+      "stroke": "M7 12.25l3.5 3.5 6.5-7",
+      "strokeWidth": 2.75
+    }
+  ],
+  "exports": [
+    {
+      "from": "png/AppIcon-light-tile.png",
+      "to": "../../web/public/icon-192.png",
+      "size": 192
+    },
+    {
+      "from": "png/AppIcon-light-tile.png",
+      "to": "../../web/public/icon-512.png",
+      "size": 512
+    },
+    {
+      "from": "favicon.svg",
+      "to": "../../web/public/favicon.svg"
+    }
+  ]
+}

@@ -81,7 +81,7 @@ async def lifespan(app):
 
 app = FastAPI(
     title="Tasks API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
     description="Private task management. Authenticate with a revocable personal access token or a session.",
     # The web build serves the reference page at /docs with a bundled Swagger UI, so FastAPI's

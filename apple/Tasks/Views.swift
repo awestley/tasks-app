@@ -9,21 +9,49 @@ import AppKit
 private struct StoreErrorAlert: ViewModifier {
     @EnvironmentObject var store: Store
     var active: Bool
+    /// The workspace shows connection failures in a banner instead, so it skips them here.
+    var bannerShowsUnreachable: Bool
+    private var bannerCovers: Bool { bannerShowsUnreachable && store.error != nil && store.error == store.unreachable }
     func body(content: Content) -> some View {
         content.alert("Something needs your attention", isPresented: Binding(
-            get: { active && store.error != nil },
+            get: { active && store.error != nil && !bannerCovers },
             set: { if active && !$0 { store.error = nil } }
         )) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
+            // Clear it, so the same message does not reappear later as an alert in a sheet.
+            .onChange(of: store.error, initial: true) { if active && bannerCovers { store.error = nil } }
+            .onChange(of: active) { if active && bannerCovers { store.error = nil } }
     }
 }
 private extension View {
-    func tasksErrorAlert(active: Bool = true) -> some View {
-        modifier(StoreErrorAlert(active: active))
+    func tasksErrorAlert(active: Bool = true, bannerShowsUnreachable: Bool = false) -> some View {
+        modifier(StoreErrorAlert(active: active, bannerShowsUnreachable: bannerShowsUnreachable))
     }
 }
-
+/// Shown above the task list while the server cannot be reached, so old tasks are not mistaken for current ones.
+struct UnreachableBanner: View {
+    @EnvironmentObject var store: Store
+    var body: some View {
+        if let message = store.unreachable {
+            VStack(alignment: .leading, spacing: 6) {
+                Label { Text(message).foregroundStyle(Color.primary) } icon: { Image(systemName: "wifi.exclamationmark").foregroundStyle(Glassive.red) }
+                    .font(.callout)
+                HStack(spacing: 16) {
+                    // Borderless, so in a list row each button handles only its own tap.
+                    Button(store.busy ? "Retrying..." : "Retry") { Task { await store.perform { try await store.refresh() } } }
+                        .buttonStyle(.borderless).disabled(store.busy)
+                    Button("Change server") { store.changeServer() }.buttonStyle(.borderless)
+                }.font(.callout)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Glassive.red.opacity(0.1))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("unreachableBanner")
+        }
+    }
+}
 struct RootView: View {
     @EnvironmentObject var store: Store
     var body: some View {
@@ -165,11 +193,18 @@ struct LoginView: View {
             let result: AuthConfig = try await store.api.request("/auth/config")
             // The person may have typed another server while this one answered.
             guard Store.origin(server) == requested else { return }
+            // Only on Continue: at launch the app is already restoring the saved session.
+            if fromPerson, store.profile == nil, Keychain.read(server: requested) != nil {
+                // This device is still signed in to this server, such as after Change server or a server restart.
+                store.error = nil
+                await store.restore()
+                if store.profile != nil { return }
+            }
             config = result
             checkedServer = requested
             if result.apple_enabled { await loadChallenge() }
         } catch {
-            if Store.origin(server) == requested { store.error = error.localizedDescription }
+            if Store.origin(server) == requested { store.error = store.message(for: error) }
         }
     }
     /// A challenge is single-use and expires after ten minutes, so each Apple attempt gets a fresh one.
@@ -181,7 +216,7 @@ struct LoginView: View {
         do {
             let result: AppleChallenge = try await store.api.request("/auth/apple/challenge", method: "POST", body: API.body(["client_id": Bundle.main.bundleIdentifier ?? ""]))
             if checkedServer == requested { challenge = result }
-        } catch { store.error = error.localizedDescription }
+        } catch { store.error = store.message(for: error) }
     }
     func finishApple(_ result: Result<ASAuthorization, Error>, challenge used: AppleChallenge) async {
         if case .failure(let error) = result {
@@ -226,6 +261,14 @@ struct WorkspaceView: View {
     @State private var projectEditor: ProjectEditorSelection?
     @State private var pendingDelete: TodoTask?
     @State private var pendingProjectDelete: Project?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    // Multi-select. Only tasks in the current list stay selected.
+    @State private var selecting = false
+    @State private var selectedIDs = Set<String>()
+    @State private var anchor: String?
+    @State private var pendingBulkDelete = false
     var today: String { DateOnly.string(Date()) }
     func addTask(in list: String) {
         selection = list
@@ -254,9 +297,151 @@ struct WorkspaceView: View {
             }
         }.sorted { ($0.due_date ?? "9999", $0.priority, $0.title) < ($1.due_date ?? "9999", $1.priority, $1.title) }
     }
+    var chosen: [TodoTask] { filtered.filter { selectedIDs.contains($0.id) } }
+    var allCompleted: Bool { chosen.allSatisfy(\.completed) }
+    var shiftHeld: Bool {
+        #if os(macOS)
+        NSEvent.modifierFlags.contains(.shift)
+        #else
+        false
+        #endif
+    }
+    func startSelection(with task: TodoTask? = nil) {
+        selecting = true
+        if let task { selectedIDs.insert(task.id); anchor = task.id }
+    }
+    func endSelection() {
+        selecting = false
+        selectedIDs = []
+        anchor = nil
+    }
+    /// Toggles a task, or with `range` selects every task between it and the last one toggled.
+    func tapWhileSelecting(_ task: TodoTask, range: Bool) {
+        let list = filtered
+        if range, let anchor, let from = list.firstIndex(where: { $0.id == anchor }), let to = list.firstIndex(where: { $0.id == task.id }) {
+            selectedIDs.formUnion(list[min(from, to)...max(from, to)].map(\.id))
+            return
+        }
+        if selectedIDs.contains(task.id) { selectedIDs.remove(task.id) } else { selectedIDs.insert(task.id) }
+        anchor = task.id
+    }
+    /// On a Mac, Command-click toggles a task and Shift-click selects a range, as on the web.
+    func modifiedClick(_ task: TodoTask) -> Bool {
+        #if os(macOS)
+        let flags = NSEvent.modifierFlags
+        guard flags.contains(.command) || flags.contains(.shift) else { return false }
+        selecting = true
+        tapWhileSelecting(task, range: flags.contains(.shift))
+        return true
+        #else
+        return false
+        #endif
+    }
+    /// A value every selected task shares, or nil when they differ.
+    func shared<Value: Hashable>(_ value: (TodoTask) -> Value) -> Value? {
+        let values = Set(chosen.map(value))
+        return values.count == 1 ? values.first : nil
+    }
+    func count(_ n: Int) -> String { n == 1 ? "1 task" : "\(n) tasks" }
+    func completeSelected() {
+        let done = allCompleted
+        let targets = chosen.filter { $0.completed == done }
+        Task { await store.updateMany(targets, ["completed": !done]) }
+    }
+    func scheduleSelected(_ due: String) {
+        let targets = chosen
+        Task { await store.updateMany(targets, due.isEmpty ? ["due_date": NSNull(), "due_time": NSNull(), "reminder_minutes": NSNull(), "recurrence": NSNull()] : ["due_date": due]) }
+    }
+    func update(selected fields: [String: Any]) {
+        let targets = chosen
+        Task { await store.updateMany(targets, fields) }
+    }
+    var dateChoice: Binding<String?> {
+        Binding(get: { shared { $0.due_date ?? "" } }, set: { if let value = $0 { scheduleSelected(value) } })
+    }
+    var priorityChoice: Binding<Int?> {
+        Binding(get: { shared(\.priority) }, set: { if let value = $0 { update(selected: ["priority": value]) } })
+    }
+    var projectChoice: Binding<String?> {
+        Binding(get: { shared { $0.project_id ?? "" } }, set: { if let value = $0 { update(selected: ["project_id": value.isEmpty ? NSNull() : value]) } })
+    }
+    @ViewBuilder var dateOptions: some View {
+        ForEach(TaskMenu.dateChoices, id: \.0) { date, name, symbol, color in Label(name, systemImage: symbol).tint(color).tag(Optional(date)) }
+        Label("No date", systemImage: "circle.slash").tint(Color.secondary).tag(Optional(""))
+    }
+    @ViewBuilder var priorityOptions: some View {
+        ForEach([(1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Normal")], id: \.0) { value, name in
+            Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Glassive.priority(value)).tag(Optional(value))
+        }
+    }
+    @ViewBuilder var projectOptions: some View {
+        Label("Inbox", systemImage: "tray").tag(Optional(""))
+        ForEach(store.projects) { project in Text("# " + project.name).tag(Optional(project.id)) }
+    }
+    /// Right-click and long-press actions for several selected tasks.
+    @ViewBuilder var selectionMenu: some View {
+        Button(action: completeSelected) {
+            Label(allCompleted ? "Restore" : "Complete", systemImage: allCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+        }
+        Divider()
+        Section("Date") {
+            Picker("Date", selection: dateChoice) { dateOptions }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
+        }
+        Section("Priority") {
+            Picker("Priority", selection: priorityChoice) { priorityOptions }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
+        }
+        Divider()
+        Picker(selection: projectChoice) { projectOptions } label: { Label("Move to", systemImage: "folder") }.pickerStyle(.menu)
+        if chosen.count < filtered.count {
+            Button { selectedIDs = Set(filtered.map(\.id)) } label: { Label("Select all", systemImage: "checkmark.square") }
+        }
+        Button(action: endSelection) { Label("Clear selection", systemImage: "xmark") }
+        Divider()
+        Button(role: .destructive) { pendingBulkDelete = true } label: { Label("Delete \(count(chosen.count))", systemImage: "trash") }
+    }
+    /// Shown above the list while selecting.
+    var selectionBar: some View {
+        HStack(spacing: 6) {
+            Text("\(chosen.count) selected").font(.subheadline.weight(.medium)).foregroundStyle(Color.primary)
+                .monospacedDigit().fixedSize()
+            Spacer(minLength: 4)
+            Group {
+                Button(action: completeSelected) {
+                    Label(allCompleted ? "Restore" : "Complete", systemImage: allCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                }
+                Menu { Picker("Date", selection: dateChoice) { dateOptions }.pickerStyle(.inline) } label: { Label("Date", systemImage: "calendar") }
+                Menu { Picker("Priority", selection: priorityChoice) { priorityOptions }.pickerStyle(.inline) } label: { Label("Priority", systemImage: "flag") }
+                Menu { Picker("Move to", selection: projectChoice) { projectOptions }.pickerStyle(.inline) } label: { Label("Move to", systemImage: "folder") }
+                Button(role: .destructive) { pendingBulkDelete = true } label: { Label("Delete", systemImage: "trash") }
+            }.disabled(chosen.isEmpty || store.busy)
+            #if os(iOS)
+            .labelStyle(.iconOnly)
+            #endif
+            Button { selectedIDs = Set(filtered.map(\.id)) } label: { Label("Select all", systemImage: "checkmark.square") }
+                .keyboardShortcut("a", modifiers: .command)
+                #if os(iOS)
+                .labelStyle(.iconOnly)
+                #endif
+            Button("Done", action: endSelection).keyboardShortcut(.cancelAction).fontWeight(.semibold)
+        }
+        #if os(macOS)
+        .buttonStyle(.bordered)
+        #endif
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(Glassive.backgroundSecondary)
+        .overlay(alignment: .bottom) { Rectangle().fill(Glassive.border).frame(height: 1) }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Selected tasks")
+    }
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
+                #if os(iOS)
+                // On iPhone the sidebar is the first screen, so the banner has to be here as well.
+                if sizeClass == .compact, store.unreachable != nil {
+                    UnreachableBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
+                #endif
                 Section {
                     ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")], id: \.0) { tag, name, symbol in
                         Label(name, systemImage: symbol).tag(tag)
@@ -288,63 +473,67 @@ struct WorkspaceView: View {
                 }
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
+                UnreachableBanner()
                 if selection == "today", search.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Color.secondary)
                     }.padding(24)
                 }
+                if selecting { selectionBar }
                 if filtered.isEmpty {
                     ContentUnavailableView(search.isEmpty ? "No tasks" : "Nothing found", systemImage: "checkmark.circle", description: Text(search.isEmpty ? "Use the add button to create a task." : "Try another word."))
                 } else {
                     List {
                         ForEach(filtered) { task in
-                            HStack(alignment: .top, spacing: 12) {
-                                Button { Task { await store.toggle(task) } } label: {
-                                    Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3).foregroundStyle(task.completed ? Glassive.accent : Glassive.priority(task.priority))
-                                }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(task.completed ? "Restore \(task.title)" : "Complete \(task.title)")
-                                Button { editor = TaskEditorSelection(task: task) } label: {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Color.secondary : Color.primary)
-                                        if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1) }
-                                        HStack(spacing: 8) {
-                                            if let due = task.due_date {
-                                                Label(DateOnly.date(due).formatted(date: .abbreviated, time: .omitted), systemImage: task.recurrence == nil ? "calendar" : "repeat")
-                                                    .foregroundStyle(due < today && !task.completed ? Glassive.red : due == today ? Glassive.textAccent : Color.secondary)
-                                            }
-                                            if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Color.secondary) }
-                                            if task.reminder_minutes != nil {
-                                                Image(systemName: task.isAlarm ? "alarm" : "bell").accessibilityLabel(task.isAlarm ? "Alarm set" : "Reminder set")
-                                            }
-                                            if let snoozed = task.snoozedInstant, snoozed > Date() {
-                                                Label(snoozed.formatted(date: .omitted, time: .shortened), systemImage: "zzz")
-                                                    .foregroundStyle(Color.secondary).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
-                                            }
-                                            if !task.checklist.isEmpty {
-                                                Label("\(task.checklist.filter { $0.completed }.count)/\(task.checklist.count)", systemImage: "checklist")
-                                                    .foregroundStyle(Color.secondary)
-                                                    .accessibilityLabel("\(task.checklist.filter { $0.completed }.count) of \(task.checklist.count) checklist items completed")
-                                            }
-                                            if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Color.secondary) }
-                                        }.font(.caption)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.buttonStyle(.plain)
+                            let isSelected = selectedIDs.contains(task.id)
+                            Group {
+                                if selecting {
+                                    Button { tapWhileSelecting(task, range: shiftHeld) } label: {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                                                .font(.title3).foregroundStyle(isSelected ? Glassive.accent : Glassive.checkRing)
+                                            TaskSummary(task: task, today: today)
+                                        }.contentShape(Rectangle())
+                                    }.buttonStyle(.plain)
+                                    .accessibilityLabel("Select \(task.title)")
+                                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                                } else {
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Button { Task { await store.toggle(task) } } label: {
+                                            Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+                                                .font(.title3).foregroundStyle(task.completed ? Glassive.accent : Glassive.priority(task.priority))
+                                        }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(task.completed ? "Restore \(task.title)" : "Complete \(task.title)")
+                                        Button {
+                                            if !modifiedClick(task) { editor = TaskEditorSelection(task: task) }
+                                        } label: { TaskSummary(task: task, today: today) }.buttonStyle(.plain)
+                                    }
+                                }
                             }.padding(.vertical, 6)
-                            .listRowBackground(Glassive.backgroundPrimary)
+                            .listRowBackground(isSelected ? Glassive.accent.opacity(0.12) : Glassive.backgroundPrimary)
                             .listRowSeparatorTint(Glassive.border)
                             .contextMenu {
-                                TaskMenu(task: task, edit: { editor = TaskEditorSelection(task: task) },
-                                         goToProject: { search = ""; selection = task.project_id ?? "inbox" },
-                                         delete: { pendingDelete = task })
+                                // A selected task shows actions for the whole selection.
+                                if isSelected && chosen.count > 1 {
+                                    selectionMenu
+                                } else {
+                                    TaskMenu(task: task, edit: { editor = TaskEditorSelection(task: task) },
+                                             goToProject: { search = ""; selection = task.project_id ?? "inbox" },
+                                             delete: { pendingDelete = task },
+                                             select: { startSelection(with: task) })
+                                }
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button { Task { await store.toggle(task) } } label: {
-                                    Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward" : "checkmark")
-                                }.tint(task.completed ? Glassive.accent : Glassive.green)
+                                if !selecting {
+                                    Button { Task { await store.toggle(task) } } label: {
+                                        Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward" : "checkmark")
+                                    }.tint(task.completed ? Glassive.accent : Glassive.green)
+                                }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Glassive.red)
-                                Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Glassive.accent)
+                                if !selecting {
+                                    Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Glassive.red)
+                                    Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Glassive.accent)
+                                }
                             }
                         }
                     }.listStyle(.plain).scrollContentBackground(.hidden).refreshable { await store.perform { try await store.refresh() } }
@@ -354,9 +543,27 @@ struct WorkspaceView: View {
                 .navigationTitle(search.isEmpty ? title : "Search results")
                 .searchable(text: $search, prompt: "Search tasks")
                 .toolbar {
+                    #if os(iOS)
+                    // Phones have no modifier keys, so selecting starts here or from a task's menu.
+                    if !selecting && !filtered.isEmpty { Button("Select") { startSelection() } }
+                    #endif
                     Button { Task { await store.perform { try await store.refresh() } } } label: { Image(systemName: "arrow.clockwise") }.disabled(store.busy).help("Refresh")
                     Button { editor = TaskEditorSelection(task: nil) } label: { Label("Add task", systemImage: "plus") }.keyboardShortcut("n", modifiers: .command)
                 }
+        }
+        .onChange(of: selection) { endSelection() }
+        // Drop tasks that left the list: completed, deleted, moved or filtered out.
+        .onChange(of: filtered.map(\.id)) { _, ids in
+            let kept = selectedIDs.intersection(ids)
+            guard kept != selectedIDs else { return }
+            selectedIDs = kept
+            if kept.isEmpty { endSelection() }
+        }
+        .confirmationDialog("Permanently delete \(count(chosen.count))?", isPresented: $pendingBulkDelete) {
+            Button("Delete \(count(chosen.count))", role: .destructive) {
+                let targets = chosen
+                Task { await store.deleteMany(targets) }
+            }
         }
         // Initial covers a tap that launched the app, which arrives before this view exists.
         .onChange(of: notifications.settingsRequested, initial: true) { _, requested in
@@ -372,7 +579,7 @@ struct WorkspaceView: View {
         .sheet(item: $editor) { destination in TaskEditorView(task: destination.task, initialProject: store.projects.contains(where: { $0.id == selection }) ? selection : nil, initialDate: selection == "today" ? Date() : nil) }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(item: $projectEditor) { ProjectEditorView(project: $0.project) }
-        .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings)
+        .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings, bannerShowsUnreachable: true)
         .confirmationDialog("Permanently delete this task?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { task in
             Button("Delete task", role: .destructive) { Task { await store.perform { try await store.delete(task) } } }
         }
@@ -385,6 +592,37 @@ struct WorkspaceView: View {
         }
     }
 }
+/// Title, description and details of a task row.
+struct TaskSummary: View {
+    let task: TodoTask
+    let today: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Color.secondary : Color.primary)
+            if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1) }
+            HStack(spacing: 8) {
+                if let due = task.due_date {
+                    Label(DateOnly.date(due).formatted(date: .abbreviated, time: .omitted), systemImage: task.recurrence == nil ? "calendar" : "repeat")
+                        .foregroundStyle(due < today && !task.completed ? Glassive.red : due == today ? Glassive.textAccent : Color.secondary)
+                }
+                if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Color.secondary) }
+                if task.reminder_minutes != nil {
+                    Image(systemName: task.isAlarm ? "alarm" : "bell").accessibilityLabel(task.isAlarm ? "Alarm set" : "Reminder set")
+                }
+                if let snoozed = task.snoozedInstant, snoozed > Date() {
+                    Label(snoozed.formatted(date: .omitted, time: .shortened), systemImage: "zzz")
+                        .foregroundStyle(Color.secondary).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
+                }
+                if !task.checklist.isEmpty {
+                    Label("\(task.checklist.filter { $0.completed }.count)/\(task.checklist.count)", systemImage: "checklist")
+                        .foregroundStyle(Color.secondary)
+                        .accessibilityLabel("\(task.checklist.filter { $0.completed }.count) of \(task.checklist.count) checklist items completed")
+                }
+                if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Color.secondary) }
+            }.font(.caption)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 /// Right-click and long-press actions for a task, matching the web menu.
 struct TaskMenu: View {
     @EnvironmentObject var store: Store
@@ -392,10 +630,12 @@ struct TaskMenu: View {
     let edit: () -> Void
     let goToProject: () -> Void
     let delete: () -> Void
+    let select: () -> Void
     static func day(_ offset: Int) -> String {
         DateOnly.string(Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date())
     }
-    var dates: [(String, String, String, Color)] {
+    var dates: [(String, String, String, Color)] { Self.dateChoices }
+    static var dateChoices: [(String, String, String, Color)] {
         let weekday = Calendar.current.component(.weekday, from: Date()) // Sunday is 1
         let options = [(Self.day(0), "Today", "calendar", Color.secondary), (Self.day(1), "Tomorrow", "sunrise", Color.secondary),
                        (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Color.secondary),
@@ -409,6 +649,7 @@ struct TaskMenu: View {
         Button { Task { await store.toggle(task) } } label: {
             Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward.circle" : "checkmark.circle")
         }
+        Button(action: select) { Label("Select", systemImage: "checkmark.square") }
         Divider()
         Section("Date") {
             Picker("Date", selection: Binding(get: { task.due_date ?? "" }, set: { value in
@@ -746,7 +987,12 @@ struct SettingsView: View {
             Form {
                 Section("Account") {
                     Text(store.profile?.email ?? "")
-                    Text(store.server).font(.caption).foregroundStyle(Color.secondary)
+                    HStack {
+                        Text(store.server).font(.caption).foregroundStyle(Color.secondary)
+                        Spacer()
+                        // Borderless, so tapping the address does not count as tapping the button.
+                        Button("Change server") { dismiss(); store.changeServer() }.buttonStyle(.borderless)
+                    }
                     Button("Sign out") { Task { await store.perform { try await store.signOut(); dismiss() } } }
                     // Best effort on the server. Unregistering below makes APNs retire this device's token anyway.
                     Button("Remove local session") { Task { await store.perform { try? await notifications.disable(); try store.forgetSession(); dismiss() } } }

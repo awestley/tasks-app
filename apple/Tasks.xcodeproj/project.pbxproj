@@ -23,10 +23,12 @@
 		79DA5FE0D1089CBCACEA03DB /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A995FF9F96809FB8CDC60 /* Notifications.swift */; };
 		79EB6A0A3164833FFCCFE258 /* Tasks-NotificationService-macOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 34132EF9F713BA6E3CC716CF /* Tasks-NotificationService-macOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B10E31ED751C6B5EC2130BC /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5AA0AEC2AC6155883BD90BF /* NotificationService.swift */; };
+		886BBBE6F7750D874592A6B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 81F74702E77712F84514440C /* AppIcon.icon */; };
 		8B6D7E13FB18430B8E37C3DD /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A033482BFB9F834DBC142E3 /* Models.swift */; };
 		8E9F49D58B20A508D2D675CE /* Alarms.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6FAA8372B3313CEA4243E0 /* Alarms.swift */; };
 		945D89AEF2417284C20EF290 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5649D5E7531A3656441975 /* API.swift */; };
 		96AB5F5C6960778A1BD6E050 /* TaskEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026AB11AA908686F0B19DB00 /* TaskEntity.swift */; };
+		A4C2DC1D6D34B7F402D508C3 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 81F74702E77712F84514440C /* AppIcon.icon */; };
 		A6E88AFE8D69689B5D70D3A2 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A995FF9F96809FB8CDC60 /* Notifications.swift */; };
 		AA71993C2D0E62AA06A3BBAD /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8931CE56D48D2D5BF8132AC8 /* Store.swift */; };
 		B006A1BAD57A479330A2D249 /* TaskEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026AB11AA908686F0B19DB00 /* TaskEntity.swift */; };
@@ -102,6 +104,7 @@
 		6A5649D5E7531A3656441975 /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		79980773DF35665A3DB1B5C4 /* Glassive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glassive.swift; sourceTree = "<group>"; };
 		7E071C3E36EAAAE726B270E6 /* Info-iOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-iOS.plist"; sourceTree = "<group>"; };
+		81F74702E77712F84514440C /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		8771DD3D91EAEBD9B4C0D6F1 /* TasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksApp.swift; sourceTree = "<group>"; };
 		87CB6E142C1A3ED4906E0B00 /* Tasks-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tasks-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8931CE56D48D2D5BF8132AC8 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
@@ -152,6 +155,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		B28F5D0DBA0DB5148BBDB243 /* app-icon */ = {
+			isa = PBXGroup;
+			children = (
+				81F74702E77712F84514440C /* AppIcon.icon */,
+			);
+			name = "app-icon";
+			path = "../design/app-icon";
+			sourceTree = "<group>";
+		};
 		BCF7738914173565FBEF5541 /* NotificationService */ = {
 			isa = PBXGroup;
 			children = (
@@ -163,6 +175,7 @@
 		F4BDE287F4409AB1D5B0720A = {
 			isa = PBXGroup;
 			children = (
+				B28F5D0DBA0DB5148BBDB243 /* app-icon */,
 				BCF7738914173565FBEF5541 /* NotificationService */,
 				230222AACFAFD8CA311B15BE /* Tasks */,
 				657507B36D803C54D9B4D5B8 /* TasksUITests */,
@@ -272,7 +285,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					1449CE9FB9AD15DCA6CB17AC = {
 						ProvisioningStyle = Automatic;
@@ -320,6 +333,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A4C2DC1D6D34B7F402D508C3 /* AppIcon.icon in Resources */,
 				54D963A0B9C67870C9CD5EF2 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -328,6 +342,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				886BBBE6F7750D874592A6B9 /* AppIcon.icon in Resources */,
 				44532CCCD8232F0DC8568CBA /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -552,7 +567,7 @@
 				INFOPLIST_KEY_CFBundleName = Tasks;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -651,7 +666,7 @@
 				INFOPLIST_KEY_CFBundleName = Tasks;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

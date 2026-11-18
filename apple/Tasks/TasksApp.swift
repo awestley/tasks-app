@@ -12,9 +12,16 @@ import SwiftUI
         WindowGroup {
             RootView().environmentObject(store).tint(Glassive.accent)
                 .task { Notifications.shared.attach(store); await store.restore() }
+                #if os(iOS)
                 .onChange(of: phase) { _, next in
                     if next == .active, store.profile != nil { Task { await store.restore() } }
                 }
+                #else
+                // On macOS, refresh each time the app comes to the front, which also checks the server is still there.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    if store.profile != nil { Task { await store.restore() } }
+                }
+                #endif
         }
         #if os(macOS)
         .defaultSize(width: 1050, height: 720)
