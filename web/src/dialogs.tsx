@@ -6,12 +6,15 @@ import {
   KeyRound,
   Keyboard,
   LogOut,
+  MonitorSmartphone,
   X,
   CircleAlert,
 } from "lucide-react";
-import { api, type Profile, type Token } from "./api";
+import { api, type Profile, type Session, type Token } from "./api";
+import { LinksEditor } from "./LinksEditor";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
+import { flush } from "./store";
 import { reminderChoices } from "./ui";
 
 export function Modal({
@@ -93,7 +96,7 @@ export function ProjectEditor({
   save,
   remove,
 }: {
-  project: { name: string; color: string } | null;
+  project: { id?: string; name: string; color: string } | null;
   close: () => void;
   save: (name: string, color: string) => void;
   remove?: () => void;
@@ -173,6 +176,11 @@ export function ProjectEditor({
           </button>
         </div>
       </form>
+      {project?.id && (
+        <div className="project-links">
+          <LinksEditor owner={`/projects/${project.id}`} />
+        </div>
+      )}
     </Modal>
   );
 }
@@ -191,6 +199,9 @@ export const SHORTCUTS: [string, string][] = [
   ["V", "Move to a project"],
   ["D", "Duplicate"],
   ["⇧ G", "Go to the task's project"],
+  ["S", "Select the task"],
+  ["⌘ or Ctrl click, ⇧ click", "Select tasks"],
+  ["⌘ A", "Select every task in the list"],
   ["G then T, I, U, C", "Go to Today, Inbox, Upcoming, Completed"],
   ["M", "Show or hide the sidebar"],
   ["⌘ Z", "Undo"],
@@ -235,6 +246,7 @@ export function ShortcutsDialog({ close }: { close: () => void }) {
 export function SettingsPanel({
   user,
   shell,
+  unsent,
   close,
   logout,
   deleteAccount,
@@ -242,22 +254,29 @@ export function SettingsPanel({
 }: {
   user: Profile;
   shell: boolean;
+  /** Changes not yet on the server, which signing out discards. */
+  unsent: number;
   close: () => void;
   logout: () => void;
   deleteAccount: () => void;
   openShortcuts: () => void;
 }) {
   const [tokens, setTokens] = useState<Token[]>([]),
+    [sessions, setSessions] = useState<Session[]>([]),
     [name, setName] = useState(""),
     [created, setCreated] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [confirm, setConfirm] = useState(""),
+    [leaving, setLeaving] = useState(false),
     [auto, setAuto] = useState(autoReminder());
+  const warnUnsent = leaving && unsent > 0;
   const load = () => api<Token[]>("/tokens").then(setTokens);
+  const loadSessions = () => api<Session[]>("/sessions").then(setSessions);
   useEffect(() => {
     load().catch((e) => setError(e.message));
-  }, []);
+    if (!shell) loadSessions().catch((e) => setError(e.message));
+  }, [shell]);
   const perform = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -287,11 +306,25 @@ export function SettingsPanel({
           <p>{user.email}</p>
         </div>
         {!shell && (
-          <button className="secondary" onClick={logout}>
-            <LogOut size={14} /> Sign out
+          <button
+            className={warnUnsent ? "danger-button mod-cta" : "secondary"}
+            onClick={() => {
+              if (unsent > 0 && !leaving) {
+                setLeaving(true);
+                flush();
+              } else logout();
+            }}
+          >
+            <LogOut size={14} /> {warnUnsent ? "Sign out anyway" : "Sign out"}
           </button>
         )}
       </div>
+      {warnUnsent && (
+        <p role="alert" className="error-text">
+          {unsent} change{unsent === 1 ? "" : "s"} not synced. Signing out
+          discards {unsent === 1 ? "it" : "them"}.
+        </p>
+      )}
       <section className="settings-block">
         <div className="settings-title">
           <Bell size={18} />
@@ -318,6 +351,47 @@ export function SettingsPanel({
         </select>
       </section>
       <PushSettings />
+      {!shell && (
+        <section className="token-group">
+          <div className="settings-title">
+            <MonitorSmartphone size={18} />
+            <div>
+              <h3>Signed-in devices</h3>
+              <p>End a session on a device you no longer use.</p>
+            </div>
+          </div>
+          {sessions.map((session) => (
+            <div className="token-row" key={session.id}>
+              <div>
+                <strong>
+                  {session.current
+                    ? "This device"
+                    : session.kind === "web"
+                      ? "Browser"
+                      : "Apple app"}
+                </strong>
+                <small>
+                  Signed in {new Date(session.created_at).toLocaleDateString()}
+                </small>
+              </div>
+              {!session.current && (
+                <button
+                  className="danger-button"
+                  disabled={busy}
+                  onClick={() =>
+                    perform(async () => {
+                      await api(`/sessions/${session.id}`, "DELETE");
+                      await loadSessions();
+                    })
+                  }
+                >
+                  End session
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
       <section className="token-group">
         <div className="settings-title">
           <KeyRound size={18} />
@@ -395,6 +469,10 @@ export function SettingsPanel({
         <strong>Connection details</strong>
         <p>
           REST API: <code>{new URL("api/v1", location.href).href}</code>
+          <br />
+          <a href="docs" target="_blank" rel="noopener">
+            API reference
+          </a>
           <br />
           Use the included MCP adapter with your server URL and a token. Tokens
           expire after 90 days and can be revoked here.

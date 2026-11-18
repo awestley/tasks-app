@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  AlarmClock,
   Bell,
   CalendarDays,
   Check,
@@ -16,10 +17,12 @@ import {
   X,
 } from "lucide-react";
 import type { Project, Task } from "./api";
+import { AgentPanel } from "./AgentPanel";
 import { ChecklistEditor } from "./ChecklistEditor";
 import type { MenuEntry } from "./ContextMenu";
 import { autoReminder } from "./reminders";
-import { getState, type TaskChanges } from "./store";
+import { LinksEditor } from "./LinksEditor";
+import { getState, refresh, type TaskChanges } from "./store";
 import {
   AutoText,
   DatePicker,
@@ -75,12 +78,17 @@ export function TaskDetail({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const latest = useRef(task);
   latest.current = task;
+  // What the checklist editor started from: it doesn't follow other devices while it has focus.
+  const checklistBase = useRef(task.checklist);
 
   // Follow changes from elsewhere, except in the field being typed in.
   useEffect(() => {
     if (editing.current !== "title") setTitle(task.title);
     if (editing.current !== "description") setDescription(task.description);
-    if (editing.current !== "checklist") setChecklist(task.checklist);
+    if (editing.current !== "checklist") {
+      setChecklist(task.checklist);
+      checklistBase.current = task.checklist;
+    }
   }, [task.title, task.description, task.checklist]);
   useEffect(() => {
     setConfirm(false);
@@ -99,8 +107,10 @@ export function TaskDetail({
   };
   const saveChecklist = (items: Task["checklist"]) => {
     if (items.some((i) => !i.title.trim())) return; // wait until the new item has a name
-    if (JSON.stringify(items) !== JSON.stringify(latest.current.checklist))
-      save({ checklist: items });
+    if (JSON.stringify(items) !== JSON.stringify(latest.current.checklist)) {
+      save({ checklist: items, checklistBase: checklistBase.current });
+      checklistBase.current = items;
+    }
   };
   // Leaving the task (another row, Escape, closing) saves whatever is still waiting on the pause.
   const draft = useRef({ title, description, checklist });
@@ -120,8 +130,10 @@ export function TaskDetail({
       if (
         !d.checklist.some((i) => !i.title.trim()) &&
         JSON.stringify(d.checklist) !== JSON.stringify(t.checklist)
-      )
+      ) {
         changes.checklist = d.checklist;
+        changes.checklistBase = checklistBase.current;
+      }
       if (Object.keys(changes).length) patchRef.current(changes);
     },
     [],
@@ -275,6 +287,8 @@ export function TaskDetail({
               }}
             />
           </div>
+          <LinksEditor owner={`/tasks/${task.id}`} />
+          <AgentPanel taskId={task.id} changed={() => refresh()} />
         </div>
         <div className="detail-side">
           <div className="detail-field">
@@ -355,6 +369,39 @@ export function TaskDetail({
               </select>
             </label>
           </div>
+          {task.reminder_minutes !== null && (
+            <div className="detail-field">
+              <span>Alert</span>
+              <label className="detail-select">
+                <AlarmClock size={15} />
+                <select
+                  aria-label="Alert style"
+                  title="An alarm rings on iPhone; other devices show a notification"
+                  value={task.alert_style}
+                  onChange={(e) =>
+                    patch({
+                      alert_style: e.target.value as Task["alert_style"],
+                    })
+                  }
+                >
+                  <option value="notification">Notification</option>
+                  <option value="alarm">Alarm on iPhone</option>
+                </select>
+              </label>
+            </div>
+          )}
+          {task.snoozed_until && !task.completed && (
+            <p className="detail-note">
+              Snoozed until{" "}
+              {new Date(
+                task.snoozed_until +
+                  (task.snoozed_until.endsWith("Z") ? "" : "Z"),
+              ).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
           <div className="detail-field is-labels">
             <span>Labels</span>
             <div className="detail-labels">

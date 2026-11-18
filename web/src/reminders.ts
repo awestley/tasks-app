@@ -1,7 +1,7 @@
 // Reminders on this device. While any view of the app is open (the companion often is, all day),
 // reminders fire from here even when the server has no push configured. With push set up, the same
 // reminder may also arrive from the server; both use the tag `reminder-<task>-<instant>`
-// (api/taskwell/push.py reminder_tag), so the system shows it once.
+// (api/tasks/push.py reminder_tag), so the system shows it once.
 import { useSyncExternalStore } from "react";
 import type { Task } from "./api";
 import { api } from "./api";
@@ -153,11 +153,23 @@ export async function subscribePush() {
     ...data.keys,
   });
   try {
-    localStorage.setItem("taskwell-push-id", device.id);
+    localStorage.setItem("tasks-push-id", device.id);
   } catch {
     /* private mode */
   }
   return true;
+}
+
+/** Whether this browser has a push subscription that the server knows about. */
+export async function pushSubscribed() {
+  if (!("PushManager" in window)) return false;
+  try {
+    if (!localStorage.getItem("tasks-push-id")) return false;
+    const reg = await navigator.serviceWorker.getRegistration("./");
+    return !!(await reg?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
 }
 
 /** Ask for permission (from a button press) and set up push when the server supports it. */
@@ -233,6 +245,10 @@ function claim(tag: string) {
  * Keep timers for the reminders coming up. `announce` also shows it inside the app (the shell's
  * notice, or the app's toast). Returns a function that stops the schedule.
  */
+/** Saved after its reminder time, so it was already late when scheduled. The server skips these too. */
+const savedAfter = (task: Task, at: number) =>
+  Date.parse(task.updated_at + (task.updated_at.endsWith("Z") ? "" : "Z")) > at;
+
 export function scheduleReminders(
   tasks: Task[],
   announce: (task: Task) => void,
@@ -242,7 +258,7 @@ export function scheduleReminders(
     .map((task) => ({ task, at: reminderAt(task) }))
     .filter(
       (r): r is { task: Task; at: number } =>
-        r.at !== null && r.at > now - MISSED_GRACE,
+        r.at !== null && r.at > now - MISSED_GRACE && !savedAfter(r.task, r.at),
     )
     .sort((a, b) => a.at - b.at);
   const fire = () => {

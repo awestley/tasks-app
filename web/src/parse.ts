@@ -1,5 +1,5 @@
 // Quick add parsing, in the browser, so details highlight as you type and capture works offline.
-// Mirrors api/taskwell/quick_add.py; both run the cases in api/tests/quick_add_cases.json.
+// Mirrors api/tasks/quick_add.py; both run the cases in api/tests/quick_add_cases.json.
 // Unrecognized text stays in the title. A token the user dismissed (its "kind:text" key in
 // `ignore`) also stays in the title.
 
@@ -185,7 +185,7 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   }
   if (!due) {
     match = take(
-      /\b(day after tomorrow|tomorrow|tmrw|tmr|today|tod|tonight|yesterday)\b/i,
+      /\b(day after tomorrow|tomorrow|tmrw|tmr|today|tod|tonight|yesterday)\b(?!['’]\w)/i,
       "date",
     );
     if (match) {
@@ -215,7 +215,7 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   }
   if (!due) {
     match = take(
-      /\b(next week|next month|next weekend|this weekend|weekend)\b/i,
+      /\b(next week|next month|next weekend|this weekend|weekend)\b(?!['’]\w)/i,
       "date",
     );
     if (match) {
@@ -272,7 +272,10 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   }
   if (!due) {
     match = take(
-      new RegExp(`\\b(?:on\\s+)?(next\\s+)?(${WEEKDAY})\\b`, "i"),
+      new RegExp(
+        `\\b(?:on\\s+)?(?:this\\s+)?(next\\s+)?(${WEEKDAY})\\b(?!['’]\\w)`,
+        "i",
+      ),
       "date",
     );
     if (match) {
@@ -313,7 +316,7 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   }
   if (!result.due_time) {
     match = take(
-      /\b(?:at\s+|in the\s+|this\s+)?(morning|afternoon|evening|noon|midnight)\b/i,
+      /\b(?:at\s+|in the\s+|this\s+)?(morning|afternoon|evening|noon|midnight)\b(?!['’]\w)/i,
       "time",
     );
     if (match)
@@ -332,11 +335,11 @@ export function parseQuick(text: string, options: Options = {}): Parsed {
   if (result.due_time) {
     match =
       take(
-        /(?<!\S)!(\d{1,4})\s*(m|mins?|minutes?|h|hrs?|hours?)\s*(?:b|before)(?![\p{L}\p{N}_])/iu,
+        /(?<!\S)!(\d{1,5})\s*(m|mins?|minutes?|h|hrs?|hours?)\s*(?:b|before)(?![\p{L}\p{N}_])/iu,
         "reminder",
       ) ||
       take(
-        /\bremind(?: me)?\s+(\d{1,4})\s+(minutes?|hours?)\s+before\b/i,
+        /\bremind(?: me)?\s+(\d{1,5})\s+(minutes?|hours?)\s+before\b/i,
         "reminder",
       );
     if (match) {

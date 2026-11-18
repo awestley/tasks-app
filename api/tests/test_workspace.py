@@ -1,10 +1,22 @@
+import asyncio
+import json
+import os
+import subprocess
+import sys
+import tempfile
 from datetime import date
+from pathlib import Path
 
 import pytest
+from fastapi import Response
+from fastapi.testclient import TestClient
 from sqlalchemy import select
-from taskwell.config import Settings
-from taskwell.db import Credential, Project, Task, User
-from taskwell.main import next_date
+
+from tasks import main, mcp_server
+from tasks.auth import clear_session_cookie, issue, set_session_cookie
+from tasks.config import Settings, settings
+from tasks.db import Credential, Project, Task, User, engine
+from tasks.main import MAX_BODY_BYTES, BodyLimit, app, next_date
 
 
 def create(client, **fields):
@@ -16,7 +28,7 @@ def create(client, **fields):
 def test_auth_required_and_cookie_origin(client):
     bearer = client.headers.pop("Authorization")
     assert client.get("/api/v1/tasks").status_code == 401
-    client.cookies.set("taskwell_session", bearer.removeprefix("Bearer "))
+    client.cookies.set("tasks_session", bearer.removeprefix("Bearer "))
     assert client.get("/api/v1/me").status_code == 200
     for headers in ({}, {"Origin": "https://attacker.test"}):
         assert client.post("/api/v1/tasks", json={"title": "CSRF"}, headers=headers).status_code == 403
@@ -24,11 +36,98 @@ def test_auth_required_and_cookie_origin(client):
         client.post("/api/v1/tasks", json={"title": "Allowed"}, headers={"Origin": "http://localhost:5173"}).status_code
         == 201
     )
-    # Development also trusts the API's own origin, where it serves the built web app.
-    assert (
-        client.post("/api/v1/tasks", json={"title": "Same origin"}, headers={"Origin": "http://testserver"}).status_code
-        == 201
-    )
+    # Development also trusts the API's own origin on this machine, where it serves the built web app.
+    local = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+    assert client.post("/api/v1/tasks", json={"title": "Same origin"}, headers=local).status_code == 201
+    # DNS rebinding makes a foreign name resolve here, so the origin can match the Host header and still be foreign.
+    rebound = {"Host": "evil.test:8000", "Origin": "http://evil.test:8000"}
+    assert client.post("/api/v1/tasks", json={"title": "Rebound"}, headers=rebound).status_code == 403
+
+
+def test_native_apple_challenge_reports_missing_configuration(client):
+    assert client.get("/auth/config").json()["apple_enabled"] is False
+    response = client.post("/auth/apple/challenge", json={"client_id": "com.test.ios"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Sign in with Apple is not configured"
+
+
+WEB_ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+def connecting_from(address):
+    """A client whose connection comes from this address, as the server sees it."""
+    return TestClient(app, client=(address, 50000))
+
+
+def test_local_sign_in_is_off_unless_enabled(workspace):
+    local = connecting_from("127.0.0.1")
+    assert local.get("/auth/config").json()["dev_login"] is False
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 404
+    assert local.post("/auth/dev/native").status_code == 404
+
+
+def test_native_local_sign_in_issues_a_full_session(workspace, monkeypatch):
+    monkeypatch.setattr(settings, "dev_login", True)
+    local = connecting_from("127.0.0.1")
+    assert local.get("/auth/config").json()["dev_login"] is True
+    response = local.post("/auth/dev/native")
+    assert response.status_code == 200, response.text
+    assert response.json()["token_type"] == "bearer" and "set-cookie" not in response.headers
+    bearer = {"Authorization": "Bearer " + response.json()["access_token"]}
+    me = local.get("/api/v1/me", headers=bearer).json()
+    assert me["name"] == "Local workspace"
+    # Unlike a personal access token, the session can manage credentials, so every settings screen can be tested.
+    sessions = local.get("/api/v1/sessions", headers=bearer).json()
+    assert [row["kind"] for row in sessions if row["current"]] == ["native"]
+    again = {"Authorization": "Bearer " + local.post("/auth/dev/native").json()["access_token"]}
+    assert local.get("/api/v1/me", headers=again).json()["id"] == me["id"]
+    assert local.post("/auth/logout", headers=bearer).status_code == 200
+    assert local.get("/api/v1/me", headers=bearer).status_code == 401
+    assert local.get("/api/v1/me", headers=again).status_code == 200
+
+
+def test_local_sign_in_refuses_web_pages_and_other_computers(workspace, monkeypatch):
+    monkeypatch.setattr(settings, "dev_login", True)
+    local = connecting_from("127.0.0.1")
+    # A web page always sends Origin, so it can never be handed a bearer token, even from the app's own origin.
+    for headers in (WEB_ORIGIN, {"Origin": "https://attacker.test"}, {"Origin": "null"}):
+        assert local.post("/auth/dev/native", headers=headers).status_code == 403
+    assert local.post("/auth/dev", headers={"Origin": "https://attacker.test"}).status_code == 403
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 200
+    assert connecting_from("::1").post("/auth/dev/native").status_code == 200
+    assert connecting_from("::ffff:127.0.0.1").post("/auth/dev/native").status_code == 200
+    for address in ("192.168.1.20", "10.0.0.5", "testclient"):
+        remote = connecting_from(address)
+        assert remote.post("/auth/dev/native").status_code == 403
+        assert remote.post("/auth/dev", headers=WEB_ORIGIN).status_code == 403
+    # Behind a proxy every connection is local, so the address the proxy reports decides.
+    monkeypatch.setattr(settings, "client_ip_header", "x-forwarded-for")
+    assert local.post("/auth/dev/native", headers={"X-Forwarded-For": "203.0.113.9"}).status_code == 403
+    assert local.post("/auth/dev/native", headers={"X-Forwarded-For": "203.0.113.9, 127.0.0.1"}).status_code == 200
+    monkeypatch.setattr(settings, "environment", "production")
+    assert local.post("/auth/dev/native").status_code == 404
+    assert local.post("/auth/dev", headers=WEB_ORIGIN).status_code == 404
+
+
+def test_production_session_cookie_is_host_only(workspace, monkeypatch):
+    client, _, session = workspace
+    with session() as db:
+        token, _ = issue(db, db.scalar(select(User).where(User.apple_sub == "owner")))
+    client.headers.pop("Authorization")
+    monkeypatch.setattr(settings, "environment", "production")
+    response = Response()
+    set_session_cookie(response, token)
+    created = response.headers["set-cookie"]
+    assert created.startswith(f"__Host-tasks_session={token};")
+    assert {"HttpOnly", "Path=/", "SameSite=lax", "Secure"} <= set(part.strip() for part in created.split(";"))
+    assert "domain" not in created.lower()
+    response = Response()
+    clear_session_cookie(response)
+    removed = response.headers["set-cookie"]
+    assert removed.startswith("__Host-tasks_session=") and "Max-Age=0" in removed and "Secure" in removed
+    # Production reads only the prefixed name, so a cookie planted under the plain name is ignored.
+    assert client.get("/api/v1/me", headers={"Cookie": "__Host-tasks_session=" + token}).status_code == 200
+    assert client.get("/api/v1/me", headers={"Cookie": "tasks_session=" + token}).status_code == 401
 
 
 def test_crud_persistence_and_conflicts(client):
@@ -169,15 +268,310 @@ def test_production_rejects_unsafe_config():
         Settings(environment="production", dev_login=True).validate_production()
     with pytest.raises(RuntimeError):
         Settings(environment="production", secret_key="x" * 40, dev_login=False).validate_production()
+    complete = dict(
+        environment="production",
+        secret_key="x" * 40,
+        dev_login=False,
+        public_url="https://tasks.example.com",
+        database_url="postgresql://localhost/tasks",
+        apple_team_id="T",
+        apple_key_id="K",
+        apple_private_key="P",
+        apple_web_client_id="W",
+    )
+    with pytest.raises(RuntimeError, match="ALLOWED_APPLE_ACCOUNTS"):
+        Settings(**complete, allowed_apple_accounts=" , ").validate_production()
+    with pytest.raises(RuntimeError, match="without a path"):
+        Settings(
+            **{**complete, "public_url": "https://tasks.example.com/app"}, allowed_apple_accounts="o"
+        ).validate_production()
+    with pytest.raises(RuntimeError, match="ALLOWED_APPLE_ACCOUNTS"):
+        Settings(**complete, allowed_apple_accounts="REPLACE_WITH_YOUR_APPLE_EMAIL").validate_production()
+    Settings(**complete, allowed_apple_accounts="001234.owner").validate_production()
+    # The shell decides who can sign in, so running inside it needs neither Apple nor the allowlist.
+    Settings(
+        environment="production",
+        secret_key="x" * 40,
+        dev_login=False,
+        public_url="https://shell.example.com",
+        shell_url="https://shell.example.com/",
+        base_path="/apps/tasks",
+        database_url="postgresql://localhost/tasks",
+    ).validate_production()
 
 
 def test_mcp_rejects_cookie_auth(client):
     token = client.headers.pop("Authorization").removeprefix("Bearer ")
-    client.cookies.set("taskwell_session", token)
+    client.cookies.set("tasks_session", token)
     assert client.post("/mcp/", json={}).status_code == 401
 
 
 def test_contract(client):
-    spec = client.get("/openapi.json").json()
+    spec = client.get("/api/v1/openapi.json").json()
     assert "/api/v1/tasks" in spec["paths"]
     assert "version" in spec["components"]["schemas"]["TaskPatch"]["required"]
+
+
+def test_openapi_snapshot_is_current(client):
+    snapshot = json.loads((Path(__file__).resolve().parents[2] / "docs/openapi.json").read_text())
+    assert client.get("/api/v1/openapi.json").json() == snapshot, "Run scripts/export_openapi.py to update the snapshot"
+
+
+def test_tests_never_use_a_development_database():
+    assert engine.url.database.startswith(tempfile.gettempdir())
+
+
+def test_body_limit_applies_without_content_length(client):
+    client.headers.pop("Authorization")
+    assert client.post("/api/v1/tasks", content=b"a" * (MAX_BODY_BYTES + 1)).status_code == 413
+
+    def chunks():
+        for _ in range(3):
+            yield b"a" * MAX_BODY_BYTES
+
+    response = client.post("/api/v1/tasks", content=chunks())
+    assert response.status_code == 413
+    assert "content-length" not in response.request.headers
+
+
+def test_the_largest_valid_task_fits_the_body_limit(client):
+    wide = "\U0001d4b3"  # Four bytes in UTF-8.
+    task = {
+        "title": wide * 500,
+        "description": wide * 10000,
+        "checklist": [{"title": wide * 500} for _ in range(100)],
+    }
+    body = json.dumps(task, ensure_ascii=False).encode()
+    assert len(body) > 240_000
+    response = client.post("/api/v1/tasks", content=body, headers={"Content-Type": "application/json"})
+    assert response.status_code == 201, response.text[:200]
+
+
+def run_body_limit(pieces):
+    """Drive the middleware with separate network reads, which the test client always joins into one."""
+    received, sent, reads = [], [], iter(pieces)
+
+    async def inner(scope, receive, send):
+        received.append(await receive())
+
+    async def receive():
+        return next(reads)
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "headers": [], "method": "POST", "path": "/"}
+    asyncio.run(BodyLimit(inner)(scope, receive, send))
+    return received, sent
+
+
+def test_body_limit_counts_every_read_and_replays_accepted_bodies():
+    size = MAX_BODY_BYTES // 2 + 10_000
+    piece = {"type": "http.request", "body": b"a" * size, "more_body": True}
+    last = {"type": "http.request", "body": b"b", "more_body": False}
+    received, sent = run_body_limit([piece, piece, last])
+    assert not received and sent[0]["status"] == 413
+    received, sent = run_body_limit([piece, last])
+    assert received == [{"type": "http.request", "body": b"a" * size + b"b", "more_body": False}] and not sent
+
+
+def test_rate_limit_uses_the_address_the_proxy_reports(client, monkeypatch):
+    client.headers.pop("Authorization")
+    monkeypatch.setattr(settings, "client_ip_header", "x-forwarded-for")
+    hit = lambda address: client.get("/auth/nothing", headers={"X-Forwarded-For": address}).status_code  # noqa: E731
+    assert {hit(f"203.0.113.{i}") for i in range(35)} == {404}
+    assert [hit("198.51.100.1") for _ in range(31)][-2:] == [404, 429]
+    # A client cannot escape its bucket by sending its own value in front of the proxy's.
+    assert hit("1.2.3.4, 198.51.100.1") == 429
+    assert hit("198.51.100.2") == 404
+
+
+def test_rate_limit_falls_back_to_the_connection_address(client):
+    client.headers.pop("Authorization")
+    codes = [client.get("/auth/nothing", headers={"X-Forwarded-For": f"203.0.113.{i}"}).status_code for i in range(31)]
+    assert codes[-2:] == [404, 429]
+
+
+def test_static_files_are_cached_by_kind(client, monkeypatch, tmp_path):
+    client.headers.pop("Authorization")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets/index-abc.js").write_text("js")
+    (tmp_path / "sw.js").write_text("worker")
+    (tmp_path / "index.html").write_text("<html>")
+    monkeypatch.setattr("tasks.main.static", tmp_path)
+    assert client.get("/assets/index-abc.js").headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert client.get("/sw.js").headers["cache-control"] == "no-cache"
+    for path in ("/", "/today"):
+        page = client.get(path)
+        assert page.text == "<html>" and page.headers["cache-control"] == "no-cache"
+    assert client.get("/assets/index-old.js").status_code == 404
+
+
+@pytest.mark.parametrize("task_id", ["../projects/abc", "..", "../../me", "a" * 36 + "/complete", "x/" + "a" * 34])
+def test_mcp_tools_refuse_crafted_task_ids(task_id):
+    for call in (
+        mcp_server.delete_task(None, task_id, 1),
+        mcp_server.complete_task(None, task_id, 1),
+        mcp_server.update_task(None, task_id, 1, {"title": "x"}),
+    ):
+        with pytest.raises(ValueError, match="task_id"):
+            asyncio.run(call)
+
+
+def test_invalid_references_return_client_errors(client):
+    assert client.post("/api/v1/tasks", json={"title": "Blank", "project_id": ""}).status_code == 404
+    task = create(client)
+    assert client.patch("/api/v1/tasks/" + task["id"], json={"version": 1, "project_id": ""}).status_code == 404
+    assert client.get("/%00").status_code == 404
+
+
+@pytest.mark.skipif(not os.getenv("TEST_DATABASE_URL"), reason="Only PostgreSQL rejects NUL characters in text")
+def test_postgres_rejections_are_client_errors(client):
+    assert client.post("/api/v1/tasks", json={"title": "a\x00b"}).status_code == 422
+    assert client.post("/api/v1/projects", json={"name": "a\x00b"}).status_code == 422
+    assert client.get("/api/v1/tasks", params={"q": "a\x00b"}).status_code == 422
+    assert client.patch("/api/v1/tasks/a%00b", json={"version": 1, "title": "x"}).status_code == 422
+
+
+def test_label_filter_ignores_case(client):
+    create(client, labels=["Work"])
+    for label in ("work", "Work", " WORK "):
+        assert len(client.get("/api/v1/tasks", params={"label": label}).json()) == 1
+    assert client.get("/api/v1/tasks", params={"label": "home"}).json() == []
+
+
+def test_project_patch_changes_only_what_it_receives(client):
+    project = client.post("/api/v1/projects", json={"name": "Before", "color": "#aabbcc"}).json()
+    path = "/api/v1/projects/" + project["id"]
+    assert client.patch(path, json={"name": "After"}).json()["color"] == "#aabbcc"
+    changed = client.patch(path, json={"color": "#112233"}).json()
+    assert (changed["name"], changed["color"]) == ("After", "#112233")
+    assert client.patch(path, json={}).json()["name"] == "After"
+    for bad in ({"name": None}, {"color": None}, {"name": ""}, {"color": "red"}):
+        assert client.patch(path, json=bad).status_code == 422
+
+
+def test_revision_changes_with_every_task_change(workspace):
+    client, other, _ = workspace
+    revision = lambda headers=None: client.get("/api/v1/tasks/revision", headers=headers).json()["revision"]  # noqa: E731
+    previous = [revision()]
+
+    def changed():
+        current = revision()
+        assert current != previous[0], "The revision should change"
+        previous[0] = current
+        assert revision() == current, "The revision should be stable without changes"
+
+    project = client.post("/api/v1/projects", json={"name": "Work"}).json()
+    task = create(client, project_id=project["id"])
+    changed()
+    path = "/api/v1/tasks/" + task["id"]
+    assert client.patch(path, json={"version": 1, "title": "Edited"}).status_code == 200
+    changed()
+    assert client.delete("/api/v1/projects/" + project["id"]).status_code == 204
+    changed()
+    assert client.post(path + "/complete", json={"version": 3}).status_code == 200
+    changed()
+    assert client.delete(path + "?version=4").status_code == 204
+    changed()
+    before = revision(other)
+    create(client)
+    assert revision(other) == before, "Another user's tasks should not change this user's revision"
+
+
+def test_other_sessions_can_be_listed_and_revoked(workspace):
+    client, other, session = workspace
+    with session() as db:
+        owner = db.scalar(select(User).where(User.apple_sub == "owner"))
+        phone_token, phone = issue(db, owner, "native")
+        browser_token, browser = issue(db, owner, "web")
+    client.post("/api/v1/tokens", json={"name": "Not a session"})
+    listed = client.get("/api/v1/sessions").json()
+    assert {row["kind"] for row in listed} == {"native", "web"} and len(listed) == 3
+    assert [row["current"] for row in listed].count(True) == 1
+    assert "digest" not in listed[0]
+    assert client.delete("/api/v1/sessions/" + phone.id, headers=other).status_code == 404
+    assert client.delete("/api/v1/sessions/" + phone.id).status_code == 204
+    assert client.get("/api/v1/me", headers={"Authorization": "Bearer " + phone_token}).status_code == 401
+    assert client.get("/api/v1/me", headers={"Authorization": "Bearer " + browser_token}).status_code == 200
+    current = next(row for row in client.get("/api/v1/sessions").json() if row["current"])
+    assert client.delete("/api/v1/sessions/" + current["id"]).status_code == 422
+    token = client.post("/api/v1/tokens", json={"name": "Scoped"}).json()
+    scoped = {"Authorization": "Bearer " + token["token"]}
+    assert client.get("/api/v1/sessions", headers=scoped).status_code == 403
+    assert client.delete("/api/v1/sessions/" + browser.id, headers=scoped).status_code == 403
+    assert client.delete("/api/v1/sessions/" + token["id"]).status_code == 404
+
+
+def test_public_url_and_client_ids_are_normalized():
+    assert Settings(public_url="https://tasks.example.com/").public_url == "https://tasks.example.com"
+    assert Settings(apple_native_client_ids=" a, b ,,").native_client_ids == ["a", "b"]
+    assert Settings(apple_native_client_ids="").native_client_ids == []
+
+
+def test_mcp_transport_uses_the_configured_public_url():
+    assert "localhost:5173" in mcp_server.mcp.settings.transport_security.allowed_hosts
+    assert mcp_server.mcp.settings.transport_security.allowed_origins == ["http://localhost:5173"]
+
+
+def test_production_serves_the_api_schema_without_cdn_pages():
+    environment = {
+        **os.environ,
+        "ENVIRONMENT": "production",
+        "SECRET_KEY": "x" * 40,
+        "PUBLIC_URL": "https://tasks.example.com",
+        "DATABASE_URL": "postgresql://localhost/tasks",
+        "APPLE_TEAM_ID": "T",
+        "APPLE_KEY_ID": "K",
+        "APPLE_PRIVATE_KEY": "P",
+        "APPLE_WEB_CLIENT_ID": "W",
+        "ALLOWED_APPLE_ACCOUNTS": "owner",
+    }
+    script = "from tasks.main import app; print(app.docs_url, app.redoc_url, app.openapi_url)"
+    result = subprocess.run([sys.executable, "-c", script], env=environment, capture_output=True, text=True)
+    assert result.stdout.split() == ["None", "None", "/api/v1/openapi.json"], result.stderr
+
+
+def test_api_schema_is_public_and_not_cached(client):
+    client.headers.pop("Authorization", None)
+    client.cookies.clear()
+    response = client.get("/api/v1/openapi.json")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "script-src 'self';" in response.headers["Content-Security-Policy"]
+    for retired in ("/openapi.json", "/redoc"):
+        # Without a web build these answer 404; with one, the app page. Never the schema.
+        assert '"openapi"' not in client.get(retired).text
+
+
+def test_reference_page_is_served_from_its_own_directory(client, tmp_path, monkeypatch):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "index.html").write_text("app")
+    (tmp_path / "docs" / "index.html").write_text("reference")
+    monkeypatch.setattr(main, "static", tmp_path)
+    moved = client.get("/docs", follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "/docs/"
+    assert client.get("/docs/").text == "reference"
+    assert client.get("/today").text == "app"
+    assert client.get("/").text == "app"
+    assert client.get("/docs/").headers["Content-Security-Policy"].startswith("default-src 'self'; script-src 'self';")
+
+
+def test_rate_limit_applies_under_the_base_path(client, monkeypatch):
+    client.headers.pop("Authorization")
+    monkeypatch.setattr(settings, "base_path", "/apps/tasks")
+    codes = [client.get("/apps/tasks/auth/nothing").status_code for _ in range(31)]
+    assert codes[-1] == 429
+
+
+def test_body_limit_passes_live_event_streams_through():
+    """GET requests with no body reach the app at once, so the event stream is not held back."""
+    received, sent = run_body_limit([{"type": "http.request", "body": b"", "more_body": False}])
+    assert received == [{"type": "http.request", "body": b"", "more_body": False}] and not sent
+
+
+def test_rate_limit_counts_only_sign_in_attempts(client):
+    client.headers.pop("Authorization")
+    for path in ("/auth/logout", "/auth/dev"):
+        assert {client.post(path).status_code for _ in range(35)} <= {401, 403, 404}
+    assert client.get("/auth/config").status_code == 200

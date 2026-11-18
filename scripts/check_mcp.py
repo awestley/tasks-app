@@ -7,13 +7,12 @@ import sys
 from pathlib import Path
 
 import httpx
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
-from mcp import ClientSession, StdioServerParameters
-
 ROOT = Path(__file__).resolve().parents[1]
-BASE = os.environ.get("TASKWELL_API_URL", "http://127.0.0.1:8000")
+BASE = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000")
 
 
 async def exercise(session):
@@ -28,7 +27,17 @@ async def exercise(session):
         "list_projects",
         "create_project",
         "parse_task",
+        "get_task",
+        "update_project",
+        "list_project_links",
+        "link_item",
+        "unlink_item",
+        "find_linked",
     } <= {t.name for t in tools.tools}
+    prompts = await session.list_prompts()
+    assert {"flesh_out_task", "plan_project", "capture_in_notebook"} <= {p.name for p in prompts.prompts}
+    prompt = await session.get_prompt("flesh_out_task", {"task_id": "00000000-0000-0000-0000-000000000000"})
+    assert "get_task" in prompt.messages[0].content.text
     preview = await session.call_tool(
         "parse_task", {"text": "Order pizza Friday afternoon", "time_zone": "America/New_York"}
     )
@@ -70,6 +79,19 @@ async def exercise(session):
     assert not completed.isError, completed
     if completed.structuredContent:
         assert all(item["completed"] for item in completed.structuredContent["checklist"])
+    note = "pc://notes/note/mcp-verification"
+    linked = await session.call_tool("link_item", {"task_id": task["id"], "ref": note, "title": "Verification note"})
+    assert not linked.isError, linked
+    link = linked.structuredContent or json.loads(linked.content[0].text)
+    found = await session.call_tool("find_linked", {"ref": note})
+    assert not found.isError, found
+    # The app contract's references shape: {"items": [summary, ...]}, each with the item's ref.
+    found_items = (found.structuredContent or json.loads(found.content[0].text))["items"]
+    assert task["ref"] in {item["ref"] for item in found_items}
+    detail = await session.call_tool("get_task", {"task_id": task["id"]})
+    assert not detail.isError, detail
+    unlinked = await session.call_tool("unlink_item", {"task_id": task["id"], "link_id": link["id"]})
+    assert not unlinked.isError, unlinked
     deleted = await session.call_tool("delete_task", {"task_id": task["id"], "version": 3})
     assert not deleted.isError, deleted
 
@@ -90,9 +112,9 @@ async def main():
         try:
             params = StdioServerParameters(
                 command=sys.executable,
-                args=["-m", "taskwell.mcp_server"],
+                args=["-m", "tasks.mcp_server"],
                 cwd=str(ROOT / "api"),
-                env={**os.environ, "TASKWELL_TOKEN": token["token"], "TASKWELL_API_URL": BASE},
+                env={**os.environ, "TASKS_TOKEN": token["token"], "TASKS_API_URL": BASE},
             )
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
@@ -105,7 +127,7 @@ async def main():
                 async with ClientSession(read, write) as session:
                     await exercise(session)
             print(
-                "PASS: stdio and HTTP MCP discovery, parse, create, update, conflict, checklist, reminders, complete, delete"
+                "PASS: stdio and HTTP MCP discovery, prompts, parse, create, update, conflict, checklist, reminders, links, complete, delete"
             )
         finally:
             await client.delete(

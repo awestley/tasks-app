@@ -1,7 +1,17 @@
-// Tasks service worker: reminders (push and the app's own), the Complete action on a reminder, and
+// Tasks service worker: reminders (push and the app's own), Complete and Snooze on a reminder, and
 // the app's files for offline use. Task data is never cached here; the app keeps its own replica.
 const CACHE = 'tasks-app-v1';
+// Hashed files kept for offline use. Each deploy adds new ones, and the oldest make way.
+const ASSET_LIMIT = 60;
 const scope = () => new URL(self.registration?.scope || self.location.origin + '/');
+
+async function keepAsset(request, response) {
+  const cache = await caches.open(CACHE);
+  await cache.put(request, response);
+  const prefix = scope().pathname + 'assets/';
+  const assets = (await cache.keys()).filter(r => new URL(r.url).pathname.startsWith(prefix));
+  await Promise.all(assets.slice(0, -ASSET_LIMIT).map(r => cache.delete(r)));
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE)
@@ -29,16 +39,17 @@ self.addEventListener('fetch', event => {
     return;
   }
   if (/^(api|auth|mcp|docs|openapi)/.test(path) || path === 'manifest.json') return;
-  if (path.startsWith('assets/') || path === 'embed.js') {
+  if (path.startsWith('assets/')) {
     // Hashed build files never change: cache first.
     event.respondWith(caches.match(request).then(hit => hit || fetch(request).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(request, copy)); }
+      if (res.ok) event.waitUntil(keepAsset(request, res.clone()));
       return res;
     })));
     return;
   }
   if (request.mode === 'navigate' || /\.(html|js|svg|png|webmanifest)$/.test(path) || path === '') {
-    // Network first, so a deploy shows at once; the cache is the offline copy.
+    // Network first, so a deploy shows at once; the cache is the offline copy. This includes embed.js,
+    // whose name stays the same across deploys because other apps load it.
     const key = request.mode === 'navigate' ? new URL(path.startsWith('companion') ? 'companion.html' : './', base).href : request;
     event.respondWith(fetch(request).then(res => {
       if (res.ok && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(key, copy)); }
@@ -47,15 +58,37 @@ self.addEventListener('fetch', event => {
   }
 });
 
+function setBadge(count) {
+  if (typeof count !== 'number' || !self.navigator?.setAppBadge) return Promise.resolve();
+  return (count > 0 ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge()).catch(() => {});
+}
+
 self.addEventListener('push', event => {
   let data = {};
   try { data = event.data.json(); } catch { /* Always show a visible notification. */ }
-  event.waitUntil(self.registration.showNotification(data.title || 'Task reminder', {
-    body: data.body || 'A task is due.', tag: data.tag || 'taskwell-reminder',
+  const body = data.subtitle ? `${data.subtitle} · ${data.body || ''}` : data.body || 'A task is due.';
+  const options = {
+    body, tag: data.tag || 'tasks-reminder',
     icon: new URL('icon-192.png', scope()).href, data: { task_id: data.task_id },
-    actions: [{ action: 'complete', title: 'Complete' }],
-  }));
+    // Replacing an earlier notification for the same task should still alert. The summary arrives quietly.
+    renotify: Boolean(data.tag), silent: data.kind === 'summary',
+  };
+  // Older servers send no actions flag; every reminder from them is about a task.
+  if (data.task_id && data.actions !== false) {
+    options.actions = [{ action: 'complete', title: 'Complete' }, { action: 'snooze', title: 'Snooze 15 min' }];
+  }
+  event.waitUntil(Promise.all([self.registration.showNotification(data.title || 'Task reminder', options), setBadge(data.badge)]));
 });
+
+async function snoozeTask(id) {
+  const api = new URL('api/v1/tasks/' + encodeURIComponent(id) + '/snooze', scope()).href;
+  const done = await fetch(api, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: 15 }),
+  });
+  if (!done.ok) throw new Error('snooze failed');
+}
 
 async function completeTask(id) {
   const api = new URL('api/v1/tasks/' + encodeURIComponent(id), scope()).href;
@@ -89,12 +122,26 @@ function openTask(task) {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const task = event.notification.data?.task_id;
-  if (event.action === 'complete' && task) {
-    // Complete without opening anything; open the task if that fails (signed out, offline).
-    event.waitUntil(completeTask(task)
+  if ((event.action === 'complete' || event.action === 'snooze') && task) {
+    // Act without opening anything; open the task if that fails (signed out, offline).
+    const action = event.action === 'complete' ? completeTask(task) : snoozeTask(task);
+    event.waitUntil(action
       .then(() => clients.matchAll({ includeUncontrolled: true }).then(all => all.forEach(c => c.postMessage({ type: 'tasks-changed' }))))
       .catch(() => openTask(task)));
     return;
   }
   event.waitUntil(openTask(task));
+});
+
+// The page sends the IDs of open tasks, so notifications for tasks finished elsewhere can be removed.
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'open-tasks') return;
+  const open = new Set(event.data.ids || []);
+  event.waitUntil(self.registration.getNotifications().then(list => {
+    list.forEach(notification => {
+      const task = notification.data?.task_id;
+      if (task && !open.has(task)) notification.close();
+    });
+    return setBadge(event.data.badge);
+  }));
 });

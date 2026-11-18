@@ -18,7 +18,7 @@ http.createServer(async(req,res)=>{
     try{
       const fixture=JSON.parse(Buffer.from(body.code,'base64url').toString());
       const timestamp=Math.floor(Date.now()/1000);
-      const claims={iss:fixture.issuer||'https://appleid.apple.com',aud:fixture.aud||body.client_id,iat:timestamp,exp:timestamp+(fixture.exp_offset??300),sub:fixture.sub||'test-apple-user',nonce:fixture.nonce,email:'apple@example.test'};
+      const claims={iss:fixture.issuer||'https://appleid.apple.com',aud:fixture.aud||body.client_id,iat:timestamp,exp:timestamp+(fixture.exp_offset??300),sub:fixture.sub||'test-apple-user',nonce:fixture.nonce,email:fixture.email||'apple@example.test',email_verified:fixture.email_verified??'true'};
       const payload=encode({alg:'RS256',kid:'simulation-key'})+'.'+encode(claims);
       let signature=crypto.sign('RSA-SHA256',Buffer.from(payload),pair.privateKey).toString('base64url');
       if(fixture.bad_signature)signature='invalid';

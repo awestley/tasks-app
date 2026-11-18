@@ -13,11 +13,22 @@ export type Task = {
   labels: string[];
   checklist: ChecklistItem[];
   recurrence: string | null;
+  /** "alarm" rings the reminder as an alarm on iPhone; other devices show a notification. */
+  alert_style: "notification" | "alarm";
+  /** Set by Snooze on a notification; read-only here. */
+  snoozed_until: string | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
   version: number;
+};
+export type Link = {
+  id: string;
+  ref: string | null;
+  title: string;
+  url: string | null;
+  created_at: string;
 };
 export type Profile = { id: string; name: string; email: string };
 export type Token = {
@@ -25,6 +36,13 @@ export type Token = {
   name: string;
   created_at: string;
   expires_at: string;
+};
+export type Session = {
+  id: string;
+  kind: string;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
 };
 export class APIError extends Error {
   constructor(
@@ -38,6 +56,11 @@ export class APIError extends Error {
 export const isOffline = (e: unknown) =>
   e instanceof TypeError ||
   [0, 502, 503, 504].includes((e as APIError)?.status);
+/** The server had a problem or asked to wait, which says nothing about the request itself. */
+export const isTemporary = (e: unknown) => {
+  const status = (e as APIError)?.status;
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+};
 let refreshing: Promise<boolean> | null = null;
 /** Inside Personal Command the shell's access token is short-lived; renew it once on a 401. */
 function renewShellSession() {
@@ -79,7 +102,9 @@ export async function api<T>(
       response.status,
       typeof body.detail === "string"
         ? body.detail
-        : "Please check your input and try again.",
+        : response.status >= 500
+          ? "The server had a problem. Please try again."
+          : "Please check your input and try again.",
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
@@ -95,19 +120,6 @@ export async function allTasks(): Promise<Task[]> {
 export function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-export function dateLabel(value: string | null) {
-  if (!value) return "";
-  const today = localDate();
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (value === today) return "Today";
-  if (value === localDate(tomorrow)) return "Tomorrow";
-  return new Date(value + "T12:00:00").toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 export type ParsedTask = {
   title: string;
   due_date: string | null;

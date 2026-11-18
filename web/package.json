@@ -1,7 +1,7 @@
 {
-  "name": "taskwell-web",
+  "name": "tasks-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -9,14 +9,15 @@
     "test": "playwright test",
     "format": "prettier --write src tests *.ts",
     "sync-vendor": "node scripts/sync-vendor.mjs",
-    "test:unit": "TZ=America/New_York node --experimental-strip-types --no-warnings --test tests/unit/parse.test.ts"
+    "test:unit": "TZ=America/New_York node --experimental-strip-types --no-warnings --test tests/unit/*.test.ts"
   },
   "dependencies": {
     "@awestley/glassive": "file:vendor/glassive",
     "@awestley/pc-runtime": "file:vendor/pc-runtime",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "swagger-ui-dist": "5.34.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

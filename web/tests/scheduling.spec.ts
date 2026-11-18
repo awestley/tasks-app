@@ -176,7 +176,12 @@ test("service worker shows reminders, opens the task and completes from the noti
       tag: "reminder-test-1",
       icon: "https://tasks.example.com/icon-192.png",
       data: { task_id: "test/task" },
-      actions: [{ action: "complete", title: "Complete" }],
+      renotify: true,
+      silent: false,
+      actions: [
+        { action: "complete", title: "Complete" },
+        { action: "snooze", title: "Snooze 15 min" },
+      ],
     },
   });
 
