@@ -3125,3 +3125,89 @@ html.is-companion:has(.companion.is-floating) body {
 .notification-preferences input[type="time"] {
   min-width: 180px;
 }
+
+/* Picking several tasks: the list toolbar swaps to actions for them. */
+.selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  margin-top: 12px;
+  margin-left: -8px;
+  margin-right: -8px;
+  margin-bottom: -8px;
+  padding: 8px;
+  border-radius: var(--menu-radius);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+.selection-toolbar > span {
+  font-weight: 500;
+  font-size: 14px;
+}
+.selection-toolbar > span > svg {
+  color: var(--interactive-accent);
+}
+.selection-toolbar > div {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.list-toolbar .icon-only {
+  width: var(--control-height-m);
+  padding: 0;
+  justify-content: center;
+}
+.list-toolbar .danger-on,
+.list-toolbar .danger-on:hover {
+  background: var(--color-red);
+  color: var(--text-on-accent);
+}
+.task-row.is-picked,
+.task-row.is-picked:hover {
+  background: color-mix(in oklch, var(--interactive-accent) 12%, transparent);
+}
+.pick-task {
+  height: 18px;
+  width: 18px;
+  min-width: 18px;
+  padding: 0;
+  margin-top: 1px;
+  border: 1.5px solid var(--color-base-60);
+  border-radius: 5px;
+  color: transparent;
+}
+.pick-task:hover {
+  border-color: var(--interactive-accent);
+}
+.pick-task[aria-checked="true"] {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.is-phone .pick-task {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin-top: 0;
+}
+.is-phone .selection-toolbar,
+.companion .selection-toolbar {
+  top: 0;
+  margin: 0 0 8px;
+}
+@media (max-width: 760px) {
+  .selection-toolbar button > span {
+    display: none;
+  }
+  .selection-toolbar button {
+    width: var(--control-height-m);
+    padding: 0;
+    justify-content: center;
+  }
+  .selection-toolbar .danger-on > span {
+    display: inline;
+  }
+  .selection-toolbar .danger-on {
+    width: auto;
+    padding: 0 12px;
+  }
+}

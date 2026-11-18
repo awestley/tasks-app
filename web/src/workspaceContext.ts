@@ -48,6 +48,24 @@ export type W = {
   setOpenId: Set<string | null>;
   selected: string | null;
   setSelected: Set<string | null>;
+  /** Tasks chosen for a change together, separate from the keyboard's `selected` row. */
+  picked: globalThis.Set<string>;
+  /** The picked tasks still in the list, in list order. */
+  chosen: Task[];
+  picking: boolean;
+  pickTask: (task: Task) => void;
+  pickAll: () => void;
+  clearPicks: () => void;
+  /** Cmd/Ctrl-click and Shift-click pick tasks. Returns true when the click changed the picks. */
+  clickRow: (task: Task, e: React.MouseEvent) => boolean;
+  bulk: {
+    complete: () => void;
+    schedule: (due: string | null) => void;
+    pickDate: (anchor: DOMRect | { x: number; y: number }) => void;
+    priority: (priority: number) => void;
+    move: (projectId: string | null, name: string) => void;
+    remove: () => void;
+  };
   inlineAdd: string | null;
   setInlineAdd: Set<string | null>;
   drawer: boolean;
@@ -61,6 +79,8 @@ export type W = {
   setPicker: Set<{
     task: Task;
     anchor: DOMRect | { x: number; y: number };
+    /** Set when the date applies to every selected task. */
+    many?: Task[];
   } | null>;
   finishing: globalThis.Set<string>;
   hovered: Ref<string | null>;
