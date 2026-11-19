@@ -61,7 +61,7 @@ This removes old builds, installs dependencies, builds the web app, builds the m
 | --- | --- |
 | `--skip-apple` | Build only the web app. The Apple builds take a few minutes. |
 | `--no-build` | Start the backend with the existing builds, without cleaning or building. |
-| `--no-serve` | Clean and build, then exit without starting the backend. |
+| `--no-serve` | Clean and build, then exit without starting the backend. A backend that is already running keeps running. |
 | `--port PORT` | Use another port. The default is 8000. |
 
 Build output:
