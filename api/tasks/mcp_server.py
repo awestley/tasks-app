@@ -3,6 +3,7 @@
 import os
 import re
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 from mcp.server.fastmcp import Context, FastMCP
@@ -26,7 +27,8 @@ mcp = FastMCP(
         "Manage the user's tasks and projects. Find tasks with search (ranked, matches titles, descriptions, "
         "checklists and labels) or list_tasks (filters by project, label, due date or completion). Read before "
         "editing, and supply the returned version. Dates are local calendar dates. Only make changes the user "
-        "has requested. To change several tasks the same way, use update_tasks. "
+        "has requested. To add a task from a sentence such as 'Call the dentist tomorrow 3pm p2', use add_task. "
+        "To change several tasks the same way, use update_tasks. "
         "Tasks is the hub for the user's work: a task or project can link to items in other apps by "
         "reference (pc://<app>/<type>/<id>, for example pc://notes/note/<id> from the Notebook server) "
         "or to web pages, with link_item or by writing [[note:<id>|Title]] in a task's description. "
@@ -263,6 +265,38 @@ async def find_linked(ctx: Context, ref: str) -> dict:
     return await call(ctx, "/references", params={"target": ref})
 
 
+def chosen_id(item_id: str | None) -> dict:
+    """A client-chosen id makes a create safe to repeat: the API returns the item made the first time."""
+    if item_id is None:
+        return {}
+    try:
+        return {"id": str(UUID(item_id))}
+    except ValueError:
+        raise ValueError("id must be a UUID") from None
+
+
+# What quick add reads out of a line of text.
+PARSED_FIELDS = ("title", "due_date", "due_time", "time_zone", "reminder_minutes", "recurrence", "labels", "project_id")
+
+
+@mcp.tool(annotations=write)
+async def add_task(ctx: Context, text: str, time_zone: str, space: str = "personal", id: str | None = None) -> dict:
+    """Add a task from one line of English, as quick add in the apps and Siri's Add Task do. Dates and times (tomorrow 3pm, next Friday, in 2 hours), recurrence (every week), priority (p1 to p4), labels (@errands), an existing project (#Home) and a reminder (!30m before) are recognized and taken out of the title; other words stay in the title. time_zone is IANA, e.g. America/New_York. A task without a project goes to space ('work' or 'personal'); a project decides the space. Returns the task and the recognized parts. Use parse_task first when the text is ambiguous, and create_task to set fields directly. To make a retry safe, give id, a UUID you choose: repeating the call with the same id returns the task created the first time."""
+    line = text.strip()
+    if not line:
+        raise ValueError("Give the task text")
+    parsed = await call(ctx, "/tasks/parse", "POST", {"text": line, "time_zone": time_zone})
+    body = {**chosen_id(id), "title": line, "time_zone": time_zone, "space": space}
+    recognized = parsed.get("recognized") or []
+    # Like the apps: use the parse only when it found something and left a title.
+    if recognized and parsed.get("title", "").strip():
+        body.update({key: parsed.get(key) for key in PARSED_FIELDS})
+        body["priority"] = parsed.get("priority") or 4
+    else:
+        recognized = []
+    return {"task": await call(ctx, "/tasks", "POST", body), "recognized": recognized}
+
+
 @mcp.tool(annotations=write)
 async def create_task(
     ctx: Context,
@@ -279,13 +313,15 @@ async def create_task(
     recurrence: str | None = None,
     checklist: list[ChecklistItem] | None = None,
     alert_style: str = "notification",
+    id: str | None = None,
 ) -> dict:
-    """Create a task. space is 'work' or 'personal' (a task in a project takes the project's space). Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device."""
+    """Create a task. space is 'work' or 'personal' (a task in a project takes the project's space). Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device. To make a retry safe, give id, a UUID you choose: repeating the call with the same id returns the task created the first time."""
     return await call(
         ctx,
         "/tasks",
         "POST",
         {
+            **chosen_id(id),
             "title": title,
             "description": description,
             "project_id": project_id,
@@ -356,9 +392,11 @@ async def delete_tasks(ctx: Context, tasks: list[TaskVersion]) -> dict:
 
 
 @mcp.tool(annotations=write)
-async def create_project(ctx: Context, name: str, color: str = "#2563eb", space: str = "personal") -> dict:
-    """Create a project in the 'work' or 'personal' space. Color must be a six-digit hexadecimal color including #."""
-    return await call(ctx, "/projects", "POST", {"name": name, "color": color, "space": space})
+async def create_project(
+    ctx: Context, name: str, color: str = "#2563eb", space: str = "personal", id: str | None = None
+) -> dict:
+    """Create a project in the 'work' or 'personal' space. Color must be a six-digit hexadecimal color including #. To make a retry safe, give id, a UUID you choose: repeating the call with the same id returns the project created the first time."""
+    return await call(ctx, "/projects", "POST", {**chosen_id(id), "name": name, "color": color, "space": space})
 
 
 @mcp.tool(annotations=destructive)

@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 import httpx
@@ -26,6 +27,7 @@ async def exercise(session):
     assert {
         "list_tasks",
         "create_task",
+        "add_task",
         "update_task",
         "complete_task",
         "delete_task",
@@ -112,6 +114,15 @@ async def exercise(session):
     deleted = await session.call_tool("delete_tasks", {"tasks": [{"task_id": task["id"], "version": 4}]})
     assert not deleted.isError, deleted
     assert payload(deleted)["changed"] == 1, deleted
+    line = {"text": "MCP quick add tomorrow 3pm p2", "time_zone": "America/New_York", "id": str(uuid.uuid4())}
+    added = await session.call_tool("add_task", line)
+    assert not added.isError, added
+    quick = payload(added)["task"]
+    assert quick["title"] == "MCP quick add" and quick["due_time"] == "15:00" and quick["priority"] == 2, quick
+    retried = await session.call_tool("add_task", line)
+    assert payload(retried)["task"]["id"] == quick["id"] == line["id"], retried
+    removed = await session.call_tool("delete_task", {"task_id": quick["id"], "version": quick["version"]})
+    assert not removed.isError, removed
 
 
 async def main():
@@ -145,7 +156,7 @@ async def main():
                 async with ClientSession(read, write) as session:
                     await exercise(session)
             print(
-                "PASS: stdio and HTTP MCP discovery, prompts, parse, create, update, conflict, checklist, reminders, links, search, bulk update, complete, delete"
+                "PASS: stdio and HTTP MCP discovery, prompts, parse, create, update, conflict, checklist, reminders, links, search, bulk update, complete, delete, quick add with a retry"
             )
         finally:
             await client.delete(

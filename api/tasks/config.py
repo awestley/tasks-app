@@ -53,7 +53,8 @@ class Settings(BaseSettings):
     # Tools the agent never gets, in addition to every tool marked destructive. The agent works on one task, so
     # tools that close, create or rename other things are left out too.
     agent_blocked_tools: str = (
-        "delete_task,delete_tasks,update_tasks,complete_task,snooze_task,create_task,create_project,update_project,"
+        "delete_task,delete_tasks,update_tasks,complete_task,snooze_task,create_task,add_task,create_project,"
+        "update_project,"
         "delete_project,"
         "delete_note,move_note,rename_note,create_notebook,rebuild_index,fix_link,link_notes,unlink_notes,"
         "review_auto_link"
