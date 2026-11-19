@@ -21,7 +21,7 @@ export type W = {
   phone: boolean;
   wide: boolean;
   narrow: boolean;
-  detailBeside: boolean;
+  detailModal: boolean;
   sidebarDocked: boolean;
   coarse: boolean;
   pc: ReturnType<typeof usePc>;

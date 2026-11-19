@@ -59,7 +59,7 @@ export function LinksEditor({ owner }: { owner: string }) {
     <section className="checklist-editor links-editor" aria-label="Links">
       <div className="checklist-heading">
         <h3>Links</h3>
-        <span>{links?.length ?? ""}</span>
+        {!!links?.length && <span>{links.length}</span>}
       </div>
       {links?.map((link) => (
         <div className="checklist-item link-item" key={link.id}>

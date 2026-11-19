@@ -7,6 +7,8 @@ import {
   Bell,
   CalendarDays,
   Check,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Globe,
   Inbox,
@@ -39,6 +41,9 @@ export function TaskDetail({
   projects,
   allLabels,
   overlay,
+  modal = false,
+  step,
+  position,
   toggle,
   patch,
   remove,
@@ -54,6 +59,11 @@ export function TaskDetail({
   allLabels: string[];
   /** Shown over the list (narrow screens, the companion) rather than beside it. */
   overlay: boolean;
+  /** Shown as a large view over the list, with the details in a column on the right. */
+  modal?: boolean;
+  /** Opens the previous (-1) or next (1) task in the list. */
+  step?: (by: 1 | -1) => void;
+  position?: { first: boolean; last: boolean };
   toggle: () => void;
   patch: (changes: TaskChanges) => void;
   remove: () => void;
@@ -155,19 +165,43 @@ export function TaskDetail({
     label: string,
   ) => openMenu(e, entries, label);
 
-  return (
+  const footer = (
+  <footer className="detail-foot">
+    <small>
+      Added{" "}
+      {new Date(
+        task.created_at + (task.created_at.endsWith("Z") ? "" : "Z"),
+      ).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+      {task.completed && task.completed_at
+        ? ` · Completed ${new Date(task.completed_at + (task.completed_at.endsWith("Z") ? "" : "Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+        : ""}
+    </small>
+    <button
+      className={`danger-button ${confirm ? "mod-cta" : ""}`}
+      onClick={() => (confirm ? remove() : setConfirm(true))}
+    >
+      <Trash2 size={14} />
+      {confirm ? "Confirm delete" : "Delete"}
+    </button>
+  </footer>
+  );
+
+  const view = (
     <aside
-      className={`detail${overlay ? " is-overlay" : ""}${task.completed ? " is-complete" : ""}`}
+      className={`detail${modal ? " is-modal" : overlay ? " is-overlay" : ""}${task.completed ? " is-complete" : ""}`}
       aria-label="Task details"
+      {...(modal && { role: "dialog", "aria-modal": true })}
     >
       <header className="detail-head">
-        <button
-          className="icon-button"
-          aria-label={overlay ? "Back to list" : "Close task"}
-          onClick={close}
-        >
-          {overlay ? <ArrowLeft size={18} /> : <X size={18} />}
-        </button>
+        {!modal && (
+          <button
+            className="icon-button"
+            aria-label={overlay ? "Back to list" : "Close task"}
+            onClick={close}
+          >
+            {overlay ? <ArrowLeft size={18} /> : <X size={18} />}
+          </button>
+        )}
         <button
           className="detail-crumb"
           onClick={(e) => menuButton(e, projectMenu(), "Move to")}
@@ -193,6 +227,28 @@ export function TaskDetail({
             <ExternalLink size={16} />
           </button>
         )}
+        {modal && step && (
+          <>
+            <button
+              className="icon-button"
+              aria-label="Previous task"
+              title="Previous task (K)"
+              disabled={position?.first}
+              onClick={() => step(-1)}
+            >
+              <ChevronUp size={18} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Next task"
+              title="Next task (J)"
+              disabled={position?.last}
+              onClick={() => step(1)}
+            >
+              <ChevronDown size={18} />
+            </button>
+          </>
+        )}
         <button
           className="icon-button"
           aria-label="More task actions"
@@ -200,6 +256,16 @@ export function TaskDetail({
         >
           <MoreHorizontal size={18} />
         </button>
+        {modal && (
+          <button
+            className="icon-button"
+            aria-label="Close task"
+            title="Close (Esc)"
+            onClick={close}
+          >
+            <X size={18} />
+          </button>
+        )}
       </header>
       <div className="detail-body">
         <div className="detail-main">
@@ -464,26 +530,10 @@ export function TaskDetail({
               <Globe size={13} /> Time zone: {task.time_zone}
             </button>
           )}
+          {modal && footer}
         </div>
       </div>
-      <footer className="detail-foot">
-        <small>
-          Added{" "}
-          {new Date(
-            task.created_at + (task.created_at.endsWith("Z") ? "" : "Z"),
-          ).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-          {task.completed && task.completed_at
-            ? ` · Completed ${new Date(task.completed_at + (task.completed_at.endsWith("Z") ? "" : "Z")).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-            : ""}
-        </small>
-        <button
-          className={`danger-button ${confirm ? "mod-cta" : ""}`}
-          onClick={() => (confirm ? remove() : setConfirm(true))}
-        >
-          <Trash2 size={14} />
-          {confirm ? "Confirm delete" : "Delete"}
-        </button>
-      </footer>
+      {!modal && footer}
       {picker && (
         <DatePicker
           anchor={picker}
@@ -508,5 +558,16 @@ export function TaskDetail({
         />
       )}
     </aside>
+  );
+  if (!modal) return view;
+  return (
+    <div
+      className="detail-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      {view}
+    </div>
   );
 }

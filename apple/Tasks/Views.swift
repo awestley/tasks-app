@@ -6,7 +6,7 @@ import UIKit
 import AppKit
 #endif
 
-private struct StoreErrorAlert: ViewModifier {
+struct StoreErrorAlert: ViewModifier {
     @EnvironmentObject var store: Store
     var active: Bool
     /// The workspace shows connection failures in a banner instead, so it skips them here.
@@ -24,7 +24,7 @@ private struct StoreErrorAlert: ViewModifier {
             .onChange(of: active) { if active && bannerCovers { store.error = nil } }
     }
 }
-private extension View {
+extension View {
     func tasksErrorAlert(active: Bool = true, bannerShowsUnreachable: Bool = false) -> some View {
         modifier(StoreErrorAlert(active: active, bannerShowsUnreachable: bannerShowsUnreachable))
     }
@@ -35,7 +35,7 @@ struct UnreachableBanner: View {
     var body: some View {
         if let message = store.unreachable {
             VStack(alignment: .leading, spacing: 6) {
-                Label { Text(message).foregroundStyle(Color.primary) } icon: { Image(systemName: "wifi.exclamationmark").foregroundStyle(Glassive.red) }
+                Label { Text(message).foregroundStyle(Clean.text) } icon: { Image(systemName: "wifi.exclamationmark").foregroundStyle(Clean.danger) }
                     .font(.callout)
                 HStack(spacing: 16) {
                     // Borderless, so in a list row each button handles only its own tap.
@@ -46,7 +46,7 @@ struct UnreachableBanner: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Glassive.red.opacity(0.1))
+            .background(Clean.danger.opacity(0.1))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("unreachableBanner")
         }
@@ -84,7 +84,7 @@ struct LoginView: View {
             .padding(.horizontal, 16).padding(.vertical, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             #endif
-            .background(Glassive.backgroundSecondary)
+            .background(Clean.canvas)
         .task {
             server = store.server
             // Offer the saved server's sign-in methods right away. A new server waits for Continue.
@@ -95,7 +95,7 @@ struct LoginView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Sign in").font(.title2.weight(.semibold))
             VStack(alignment: .leading, spacing: 6) {
-                Text("Server").font(.subheadline.weight(.medium)).foregroundStyle(Color.primary).accessibilityHidden(true)
+                Text("Server").font(.subheadline.weight(.medium)).foregroundStyle(Clean.text).accessibilityHidden(true)
                 TextField("Your server URL", text: $server, prompt: Text(verbatim: "https://tasks.example.com"))
                     .labelsHidden()
                     // Hiding the label also removes it from VoiceOver, which would then read only the example URL.
@@ -118,14 +118,14 @@ struct LoginView: View {
                 Button { Task { await check(fromPerson: true) } } label: {
                     Text(checking ? "Checking..." : "Continue").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large)
+                .buttonStyle(CleanPrimaryButtonStyle())
                 .disabled(checking || Store.origin(server).isEmpty)
             }
             if let error = store.error {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.circle").accessibilityHidden(true)
                     Text(error).accessibilityIdentifier("signInError").fixedSize(horizontal: false, vertical: true)
-                }.font(.callout).foregroundStyle(Glassive.red)
+                }.font(.callout).foregroundStyle(Clean.danger)
             }
             #if DEBUG
             DisclosureGroup("Local development", isExpanded: $showDevelopment) {
@@ -145,8 +145,8 @@ struct LoginView: View {
             #endif
         }
         .padding(32)
-        .background(Glassive.backgroundPrimary, in: RoundedRectangle(cornerRadius: Glassive.cardRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Glassive.cardRadius, style: .continuous).stroke(Glassive.border))
+        .background(Clean.surface, in: RoundedRectangle(cornerRadius: Clean.radiusXL, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Clean.radiusXL, style: .continuous).stroke(Clean.border))
         .shadow(color: .black.opacity(0.14), radius: 24, y: 12)
     }
     /// Matches the web sign-in: Apple when configured, the local workspace on a development server, otherwise a note.
@@ -160,13 +160,13 @@ struct LoginView: View {
                     Task { await finishApple(result, challenge: challenge) }
                 }
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 44).clipShape(Capsule())
+                .frame(height: 44).clipShape(RoundedRectangle(cornerRadius: Clean.radiusMD, style: .continuous))
                 .disabled(store.busy)
             } else if loadingChallenge {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)
             } else {
                 Button { Task { await loadChallenge() } } label: { Text("Try again").frame(maxWidth: .infinity) }
-                    .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
+                    .buttonStyle(CleanSecondaryButtonStyle())
             }
         }
         #if DEBUG
@@ -174,11 +174,11 @@ struct LoginView: View {
             Button { Task { await openLocalWorkspace() } } label: {
                 Text(store.busy ? "Opening..." : "Open local workspace").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large).disabled(store.busy)
+            .buttonStyle(CleanPrimaryButtonStyle()).disabled(store.busy)
         }
         #endif
         if !methods.apple_enabled {
-            Text("Apple sign-in is not configured.").font(.callout).foregroundStyle(Color.secondary)
+            Text("Apple sign-in is not configured.").font(.callout).foregroundStyle(Clean.textSecondary)
         }
     }
     /// Asks the server in the field which sign-in methods it offers.
@@ -367,11 +367,11 @@ struct WorkspaceView: View {
     }
     @ViewBuilder var dateOptions: some View {
         ForEach(TaskMenu.dateChoices, id: \.0) { date, name, symbol, color in Label(name, systemImage: symbol).tint(color).tag(Optional(date)) }
-        Label("No date", systemImage: "circle.slash").tint(Color.secondary).tag(Optional(""))
+        Label("No date", systemImage: "circle.slash").tint(Clean.textMuted).tag(Optional(""))
     }
     @ViewBuilder var priorityOptions: some View {
         ForEach([(1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Normal")], id: \.0) { value, name in
-            Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Glassive.priority(value)).tag(Optional(value))
+            Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Clean.priority(value)).tag(Optional(value))
         }
     }
     @ViewBuilder var projectOptions: some View {
@@ -402,7 +402,7 @@ struct WorkspaceView: View {
     /// Shown above the list while selecting.
     var selectionBar: some View {
         HStack(spacing: 6) {
-            Text("\(chosen.count) selected").font(.subheadline.weight(.medium)).foregroundStyle(Color.primary)
+            Text("\(chosen.count) selected").font(.subheadline.weight(.medium)).foregroundStyle(Clean.text)
                 .monospacedDigit().fixedSize()
             Spacer(minLength: 4)
             Group {
@@ -428,8 +428,8 @@ struct WorkspaceView: View {
         .buttonStyle(.bordered)
         #endif
         .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(Glassive.backgroundSecondary)
-        .overlay(alignment: .bottom) { Rectangle().fill(Glassive.border).frame(height: 1) }
+        .background(Clean.subtle)
+        .overlay(alignment: .bottom) { Rectangle().fill(Clean.border).frame(height: 1) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Selected tasks")
     }
@@ -476,7 +476,7 @@ struct WorkspaceView: View {
                 UnreachableBanner()
                 if selection == "today", search.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Color.secondary)
+                        Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Clean.textMuted)
                     }.padding(24)
                 }
                 if selecting { selectionBar }
@@ -491,7 +491,7 @@ struct WorkspaceView: View {
                                     Button { tapWhileSelecting(task, range: shiftHeld) } label: {
                                         HStack(alignment: .top, spacing: 12) {
                                             Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                                                .font(.title3).foregroundStyle(isSelected ? Glassive.accent : Glassive.checkRing)
+                                                .font(.title3).foregroundStyle(isSelected ? Clean.accent : Clean.borderControl)
                                             TaskSummary(task: task, today: today)
                                         }.contentShape(Rectangle())
                                     }.buttonStyle(.plain)
@@ -501,7 +501,7 @@ struct WorkspaceView: View {
                                     HStack(alignment: .top, spacing: 12) {
                                         Button { Task { await store.toggle(task) } } label: {
                                             Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                                                .font(.title3).foregroundStyle(task.completed ? Glassive.accent : Glassive.priority(task.priority))
+                                                .font(.title3).foregroundStyle(task.completed ? Clean.inverse : Clean.priority(task.priority))
                                         }.buttonStyle(.plain).disabled(store.busy).accessibilityLabel(task.completed ? "Restore \(task.title)" : "Complete \(task.title)")
                                         Button {
                                             if !modifiedClick(task) { editor = TaskEditorSelection(task: task) }
@@ -509,8 +509,8 @@ struct WorkspaceView: View {
                                     }
                                 }
                             }.padding(.vertical, 6)
-                            .listRowBackground(isSelected ? Glassive.accent.opacity(0.12) : Glassive.backgroundPrimary)
-                            .listRowSeparatorTint(Glassive.border)
+                            .listRowBackground(isSelected ? Clean.accentSoft : Clean.surface)
+                            .listRowSeparatorTint(Clean.border)
                             .contextMenu {
                                 // A selected task shows actions for the whole selection.
                                 if isSelected && chosen.count > 1 {
@@ -526,20 +526,20 @@ struct WorkspaceView: View {
                                 if !selecting {
                                     Button { Task { await store.toggle(task) } } label: {
                                         Label(task.completed ? "Restore" : "Complete", systemImage: task.completed ? "arrow.uturn.backward" : "checkmark")
-                                    }.tint(task.completed ? Glassive.accent : Glassive.green)
+                                    }.tint(task.completed ? Clean.accent : Clean.success)
                                 }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if !selecting {
-                                    Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Glassive.red)
-                                    Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Glassive.accent)
+                                    Button { pendingDelete = task } label: { Label("Delete", systemImage: "trash") }.tint(Clean.danger)
+                                    Button { editor = TaskEditorSelection(task: task) } label: { Label("Edit", systemImage: "pencil") }.tint(Clean.accent)
                                 }
                             }
                         }
                     }.listStyle(.plain).scrollContentBackground(.hidden).refreshable { await store.perform { try await store.refresh() } }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Glassive.backgroundPrimary)
+                .background(Clean.surface)
                 .navigationTitle(search.isEmpty ? title : "Search results")
                 .searchable(text: $search, prompt: "Search tasks")
                 .toolbar {
@@ -576,7 +576,17 @@ struct WorkspaceView: View {
             if let target = store.tasks.first(where: { $0.id == id }) { editor = TaskEditorSelection(task: target) }
             notifications.selectedTaskID = nil
         }
-        .sheet(item: $editor) { destination in TaskEditorView(task: destination.task, initialProject: store.projects.contains(where: { $0.id == selection }) ? selection : nil, initialDate: selection == "today" ? Date() : nil) }
+        .sheet(item: $editor) { destination in
+            if let task = destination.task {
+                TaskDetailView(taskID: task.id, list: filtered.map(\.id), goToProject: { project in search = ""; selection = project ?? "inbox" })
+                    #if os(iOS)
+                    // A large sheet on iPad leaves room for the details column.
+                    .presentationSizing(.page)
+                    #endif
+            } else {
+                TaskEditorView(task: nil, initialProject: store.projects.contains(where: { $0.id == selection }) ? selection : nil, initialDate: selection == "today" ? Date() : nil)
+            }
+        }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(item: $projectEditor) { ProjectEditorView(project: $0.project) }
         .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings, bannerShowsUnreachable: true)
@@ -598,27 +608,27 @@ struct TaskSummary: View {
     let today: String
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Color.secondary : Color.primary)
-            if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Color.secondary).lineLimit(1) }
+            Text(task.title).font(.body).strikethrough(task.completed).foregroundStyle(task.completed ? Clean.textMuted : Clean.text)
+            if !task.description.isEmpty { Text(task.description).font(.caption).foregroundStyle(Clean.textSecondary).lineLimit(1) }
             HStack(spacing: 8) {
                 if let due = task.due_date {
                     Label(DateOnly.date(due).formatted(date: .abbreviated, time: .omitted), systemImage: task.recurrence == nil ? "calendar" : "repeat")
-                        .foregroundStyle(due < today && !task.completed ? Glassive.red : due == today ? Glassive.textAccent : Color.secondary)
+                        .foregroundStyle(due < today && !task.completed ? Clean.danger : due == today ? Clean.text : Clean.textMuted)
                 }
-                if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Color.secondary) }
+                if let time = task.due_time { Text("\(time) \(task.time_zone)").foregroundStyle(Clean.textMuted) }
                 if task.reminder_minutes != nil {
                     Image(systemName: task.isAlarm ? "alarm" : "bell").accessibilityLabel(task.isAlarm ? "Alarm set" : "Reminder set")
                 }
                 if let snoozed = task.snoozedInstant, snoozed > Date() {
                     Label(snoozed.formatted(date: .omitted, time: .shortened), systemImage: "zzz")
-                        .foregroundStyle(Color.secondary).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
+                        .foregroundStyle(Clean.textMuted).accessibilityLabel("Snoozed until \(snoozed.formatted(date: .omitted, time: .shortened))")
                 }
                 if !task.checklist.isEmpty {
                     Label("\(task.checklist.filter { $0.completed }.count)/\(task.checklist.count)", systemImage: "checklist")
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(Clean.textMuted)
                         .accessibilityLabel("\(task.checklist.filter { $0.completed }.count) of \(task.checklist.count) checklist items completed")
                 }
-                if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Color.secondary) }
+                if !task.labels.isEmpty { Label(task.labels.joined(separator: " "), systemImage: "tag").foregroundStyle(Clean.textMuted) }
             }.font(.caption)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -637,9 +647,9 @@ struct TaskMenu: View {
     var dates: [(String, String, String, Color)] { Self.dateChoices }
     static var dateChoices: [(String, String, String, Color)] {
         let weekday = Calendar.current.component(.weekday, from: Date()) // Sunday is 1
-        let options = [(Self.day(0), "Today", "calendar", Color.secondary), (Self.day(1), "Tomorrow", "sunrise", Color.secondary),
-                       (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Color.secondary),
-                       (Self.day((9 - weekday) % 7 == 0 ? 7 : (9 - weekday) % 7), "Next week", "arrow.right.to.line", Color.secondary)]
+        let options = [(Self.day(0), "Today", "calendar", Clean.textMuted), (Self.day(1), "Tomorrow", "sunrise", Clean.textMuted),
+                       (Self.day(weekday == 1 ? 0 : 7 - weekday), "This weekend", "sofa", Clean.textMuted),
+                       (Self.day((9 - weekday) % 7 == 0 ? 7 : (9 - weekday) % 7), "Next week", "arrow.right.to.line", Clean.textMuted)]
         // The weekend can be today or tomorrow; keep one choice per date.
         return options.filter { option in options.first { $0.0 == option.0 }?.1 == option.1 }
     }
@@ -657,13 +667,13 @@ struct TaskMenu: View {
             })) {
                 // Palette pickers color each symbol with its tint.
                 ForEach(dates, id: \.0) { date, name, symbol, color in Label(name, systemImage: symbol).tint(color).tag(date) }
-                Label("No date", systemImage: "circle.slash").tint(Color.secondary).tag("")
+                Label("No date", systemImage: "circle.slash").tint(Clean.textMuted).tag("")
             }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
         }
         Section("Priority") {
             Picker("Priority", selection: Binding(get: { task.priority }, set: { value in Task { await store.update(task, ["priority": value]) } })) {
                 ForEach([(1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Normal")], id: \.0) { value, name in
-                    Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Glassive.priority(value)).tag(value)
+                    Label(name, systemImage: value == 4 ? "flag" : "flag.fill").tint(Clean.priority(value)).tag(value)
                 }
             }.pickerStyle(.palette).menuActionDismissBehavior(.enabled)
         }
@@ -761,20 +771,6 @@ struct TaskEditorView: View {
         draft.version = latest.version
         return APIError(message: "This task changed on another device. " + retry)
     }
-    func load(_ task: TodoTask) {
-        draft = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification", version: task.version)
-        labels = task.labels.joined(separator: ", ")
-        loadTime(task.due_time)
-        hasDate = task.due_date != nil
-        date = task.due_date.map(DateOnly.date) ?? Date()
-    }
-    /// Shows the agent's changes in the editor, so the next save uses the new version.
-    func agentChanged() {
-        Task {
-            try? await store.refresh()
-            if let latest = store.tasks.first(where: { $0.id == task?.id }) { load(latest) }
-        }
-    }
     func loadTime(_ value: String?) {
         hasTime = value != nil
         let parts = (value ?? "09:00").split(separator: ":").compactMap { Int($0) }
@@ -784,9 +780,9 @@ struct TaskEditorView: View {
         NavigationStack {
             Form {
                 TextField("Task title, e.g. Order pizza Friday afternoon", text: $draft.title)
-                Toggle("Detect dates, times and details", isOn: $smart).tint(Glassive.green)
+                Toggle("Detect dates, times and details", isOn: $smart).tint(Clean.success)
                 if parsing { ProgressView("Reading details...") }
-                if !parseError.isEmpty { Text(parseError + " Turn off detail detection to enter fields manually.").foregroundStyle(Glassive.red) }
+                if !parseError.isEmpty { Text(parseError + " Turn off detail detection to enter fields manually.").foregroundStyle(Clean.danger) }
                 if let value = detected {
                     Section("Detected details") {
                         Text(value.title).font(.headline)
@@ -813,25 +809,21 @@ struct TaskEditorView: View {
                         }.disabled(task?.completed == true)
                     }
                     if task?.completed == true {
-                        Text("Reopen this task to change its checklist.").font(.caption).foregroundStyle(Color.secondary)
+                        Text("Reopen this task to change its checklist.").font(.caption).foregroundStyle(Clean.textSecondary)
                     } else {
                         Button { draft.checklist.append(ChecklistItem()) } label: { Label("Add item", systemImage: "plus") }
                             .disabled(draft.checklist.count >= 100)
                     }
-                }
-                if let task {
-                    LinksSection(owner: "/api/v1/tasks/\(task.id)")
-                    AgentSection(taskID: task.id, changed: agentChanged)
                 }
                 Section {
                 Picker("Project", selection: $draft.project_id) {
                     Text("Inbox").tag(nil as String?)
                     ForEach(store.projects) { Text($0.name).tag(Optional($0.id)) }
                 }
-                Toggle("Due date", isOn: $hasDate).tint(Glassive.green)
+                Toggle("Due date", isOn: $hasDate).tint(Clean.success)
                 if hasDate {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
-                    Toggle("Due time", isOn: $hasTime).tint(Glassive.green)
+                    Toggle("Due time", isOn: $hasTime).tint(Clean.success)
                     if hasTime {
                         DatePicker("Time", selection: $clock, displayedComponents: .hourAndMinute)
                         Picker("Time zone", selection: $draft.time_zone) {
@@ -856,7 +848,7 @@ struct TaskEditorView: View {
                             }
                             #if os(iOS)
                             if alarmDenied && draft.alert_style == "alarm" {
-                                Text("Alarms are off for this app in Settings. This device will show a notification instead.").font(.caption).foregroundStyle(Color.secondary)
+                                Text("Alarms are off for this app in Settings. This device will show a notification instead.").font(.caption).foregroundStyle(Clean.textSecondary)
                             }
                             #endif
                         }
@@ -890,7 +882,13 @@ struct TaskEditorView: View {
         }.frame(idealWidth: 520, idealHeight: 560)
             .tasksErrorAlert()
             .onAppear {
-                if let task { load(task) } else { smart = true; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
+                if let task {
+                    draft = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification", version: task.version)
+                    labels = task.labels.joined(separator: ", ")
+                    loadTime(task.due_time)
+                    hasDate = task.due_date != nil
+                    date = task.due_date.map(DateOnly.date) ?? Date()
+                } else { smart = true; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
             }
             .task(id: draft.title + draft.time_zone + String(smart)) {
                 parsed = nil; parsedInput = ""; parseError = ""
@@ -988,7 +986,7 @@ struct SettingsView: View {
                 Section("Account") {
                     Text(store.profile?.email ?? "")
                     HStack {
-                        Text(store.server).font(.caption).foregroundStyle(Color.secondary)
+                        Text(store.server).font(.caption).foregroundStyle(Clean.textMuted)
                         Spacer()
                         // Borderless, so tapping the address does not count as tapping the button.
                         Button("Change server") { dismiss(); store.changeServer() }.buttonStyle(.borderless)
@@ -1007,7 +1005,7 @@ struct SettingsView: View {
                     Section {
                         Toggle("Morning summary", isOn: Binding(get: { loaded.summary_time != nil }, set: { on in
                             savePreferences { $0.summary_time = on ? "08:00" : nil }
-                        })).tint(Glassive.green)
+                        })).tint(Clean.success)
                         if let time = loaded.summary_time {
                             DatePicker("Summary time", selection: Binding(get: { Self.clock(time) }, set: { value in
                                 savePreferences { $0.summary_time = value.formatted(.verbatim("\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)", timeZone: .current, calendar: .current)) }
@@ -1095,34 +1093,49 @@ struct AgentSection: View {
     let taskID: String
     /// Called when the agent finished changing the task.
     let changed: () -> Void
+    /// Outside a form: a heading over the controls instead of a form section.
+    var plain = false
     @State private var availability: AgentAvailability?
     @State private var run: AgentRun?
     @State private var instruction = ""
     var body: some View {
         if let availability, availability.available {
-            Section {
-                TextField("Optional instruction", text: $instruction).disabled(run?.active == true)
-                Button { start() } label: {
-                    Label(run?.active == true ? "Working..." : "Flesh out", systemImage: "sparkles")
-                }.disabled(run?.active == true)
-                if let run, !run.active {
-                    if let error = run.error { Text(error).foregroundStyle(.red) }
-                    if !run.summary.isEmpty { Text(run.summary) }
-                    if !run.actions.isEmpty {
-                        DisclosureGroup("\(run.actions.count) steps") {
-                            ForEach(Array(run.actions.enumerated()), id: \.offset) { _, action in
-                                Text("\(action.server): \(action.tool)").foregroundStyle(action.ok ? Color.secondary : Color.red)
-                            }
-                        }
+            if plain {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Flesh out").font(.subheadline.weight(.semibold)).foregroundStyle(Clean.text)
+                    controls
+                    if !availability.servers.isEmpty {
+                        Text("Uses \(availability.servers.joined(separator: ", "))").font(.caption).foregroundStyle(Clean.textMuted)
                     }
                 }
-            } header: {
-                Text("Flesh out")
-            } footer: {
-                if !availability.servers.isEmpty { Text("Uses \(availability.servers.joined(separator: ", "))") }
+            } else {
+                Section {
+                    controls
+                } header: {
+                    Text("Flesh out")
+                } footer: {
+                    if !availability.servers.isEmpty { Text("Uses \(availability.servers.joined(separator: ", "))") }
+                }
             }
         } else {
             EmptyView().task(id: taskID) { await load() }
+        }
+    }
+    @ViewBuilder var controls: some View {
+        TextField("Optional instruction", text: $instruction).disabled(run?.active == true)
+        Button { start() } label: {
+            Label(run?.active == true ? "Working..." : "Flesh out", systemImage: "sparkles")
+        }.disabled(run?.active == true)
+        if let run, !run.active {
+            if let error = run.error { Text(error).foregroundStyle(Clean.danger) }
+            if !run.summary.isEmpty { Text(run.summary) }
+            if !run.actions.isEmpty {
+                DisclosureGroup("\(run.actions.count) steps") {
+                    ForEach(Array(run.actions.enumerated()), id: \.offset) { _, action in
+                        Text("\(action.server): \(action.tool)").foregroundStyle(action.ok ? Clean.textMuted : Clean.danger)
+                    }
+                }
+            }
         }
     }
     func load() async {

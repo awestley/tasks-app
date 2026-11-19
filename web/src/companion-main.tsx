@@ -6,6 +6,8 @@ import "@awestley/glassive/tokens.css";
 import "@awestley/glassive/accent.css";
 import "@awestley/glassive/glassive.css";
 import "./glassive-app.css";
+import "./clean.css";
+import "./clean-bridge.css";
 import "./style.css";
 import "./phone.css";
 import { applyTheme } from "@awestley/glassive";

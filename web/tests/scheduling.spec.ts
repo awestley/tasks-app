@@ -54,12 +54,14 @@ test("quick add parses as you type, corrections, reminders and notification sett
   await page.keyboard.press("Escape");
   await page.getByLabel("Reminder", { exact: true }).selectOption("15");
   await page.reload();
-  await page.getByLabel("Search tasks").fill(unique);
-  await page.locator(".task-row .task-body").click();
+  // The address keeps the open task, so the task view is open again after the reload.
+  await expect(
+    page.getByRole("dialog", { name: "Task details" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Reminder", { exact: true })).toHaveValue("15");
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("button", { name: "Confirm delete" }).click();
-  await page.getByLabel("Clear search").click();
+  await expect(page.getByRole("dialog", { name: "Task details" })).toBeHidden();
 
   // Clicking a highlighted word keeps it as plain text, and the date picker corrects the time.
   await page.keyboard.press("q");

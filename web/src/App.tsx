@@ -211,9 +211,9 @@ function Workspace({
   const today = localDate();
   const wide = !companion && width >= 900;
   const sidebarDocked = wide && sidebarPref;
-  const mainWidth = width - (sidebarDocked ? 260 : 0);
-  const detailBeside = !companion && mainWidth >= 900;
   const narrow = !companion && width < 700;
+  // Wider than a phone, a task opens in a large view over the list, with its details on the right.
+  const detailModal = !companion && !narrow;
   // A phone, or a phone-sized browser window: the native layout. A narrow column on a desktop
   // keeps the drawer layout.
   const coarse = useMedia("(pointer: coarse)");
@@ -340,7 +340,7 @@ function Workspace({
     }
   }, [view, selectedProject]);
   usePaneTitle(
-    openTask && !detailBeside ? openTask.title : companion ? null : title,
+    openTask && !detailModal ? openTask.title : companion ? null : title,
   );
 
   const { shown, overdue, groups, flat } = useTaskGroups({
@@ -440,7 +440,7 @@ function Workspace({
         }),
       900,
     );
-    if (openId === task.id && !detailBeside) setOpenId(null);
+    if (openId === task.id && !detailModal) setOpenId(null);
     notify(
       task.recurrence
         ? `Completed. Next: ${recurrenceLabel[task.recurrence].toLowerCase()}`
@@ -851,7 +851,7 @@ function Workspace({
     phone,
     wide,
     narrow,
-    detailBeside,
+    detailModal,
     sidebarDocked,
     coarse,
     pc,
@@ -1102,7 +1102,20 @@ function Workspace({
       task={openTask}
       projects={projects}
       allLabels={labels}
-      overlay={!detailBeside}
+      overlay={!detailModal}
+      modal={detailModal}
+      step={(by) => {
+        const i = flat.findIndex((t) => t.id === openTask.id);
+        const next = i < 0 ? null : flat[i + by];
+        if (next) {
+          setOpenId(next.id);
+          setSelected(next.id);
+        }
+      }}
+      position={(() => {
+        const i = flat.findIndex((t) => t.id === openTask.id);
+        return { first: i <= 0, last: i < 0 || i === flat.length - 1 };
+      })()}
       toggle={() => toggle(openTask)}
       patch={(changes) => S.patchTask(openTask.id, changes)}
       remove={() => removeTask(openTask)}
@@ -1118,7 +1131,7 @@ function Workspace({
       projectMenu={() => moveMenu(openTask, w)}
       priorityMenu={() => priorityMenu(openTask, w)}
       openInColumn={
-        hosted && (companion || detailBeside)
+        hosted && (companion || detailModal)
           ? () => openInColumn(openTask)
           : undefined
       }
@@ -1443,7 +1456,7 @@ function Workspace({
 
   return (
     <div
-      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""} ${openTask && detailBeside ? "with-detail" : ""}`}
+      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""}`}
     >
       <React.Fragment key="full">
         {sidebar}

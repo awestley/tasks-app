@@ -1,0 +1,115 @@
+/* The app's styles use Glassive's variable names, because the shell's embeds and shared
+   components read them. These rules give those names Clean values (clean.css), so the whole
+   interface is drawn in Clean: white surfaces, hairline borders, near-black primary actions,
+   blue for links and progress, and no glass. The values are theme-independent references,
+   so one rule covers light and dark. */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+  --font-interface: var(--font-sans);
+  --font-text: var(--font-sans);
+  --font-monospace: var(--font-mono);
+
+  --background-primary: var(--bg-surface);
+  --background-primary-alt: var(--bg-subtle);
+  --background-secondary: var(--bg-subtle);
+  --card-background: var(--bg-surface);
+  --background-glass: var(--bg-surface);
+  --background-glass-subtle: var(--bg-surface);
+  --top-header-bg: var(--bg-surface);
+
+  --background-modifier-hover: color-mix(in srgb, var(--text) 5%, transparent);
+  --background-modifier-hover-strong: color-mix(
+    in srgb,
+    var(--text) 9%,
+    transparent
+  );
+  --background-modifier-hover-subtle: color-mix(
+    in srgb,
+    var(--text) 3.5%,
+    transparent
+  );
+  --background-modifier-hover-exsubtle: color-mix(
+    in srgb,
+    var(--text) 2.5%,
+    transparent
+  );
+  --background-modifier-active-hover: var(--accent-soft);
+  --background-modifier-border: var(--border-strong);
+  --background-modifier-border-subtle: var(--border);
+  --background-modifier-border-focus: var(--sky);
+  --background-modifier-seperator: var(--border);
+  --background-modifier-form-field: var(--bg-surface);
+  --background-modifier-error: var(--danger-soft);
+  --background-modifier-success: var(--success-soft);
+  --nav-item-background-selected: var(--bg-muted);
+
+  --text-normal: var(--text);
+  /* Clean's own --text-muted (meta lines) keeps its value; Glassive's faint text maps onto it. */
+  --text-faint: var(--text-muted);
+  --text-accent: var(--accent);
+  --text-accent-hover: var(--accent);
+  --text-error: var(--danger);
+  --text-warning: var(--warning);
+  --text-success: var(--success);
+  --text-on-accent: var(--text-inverse);
+  --text-muted-on-accent: color-mix(in srgb, var(--text-inverse) 75%, transparent);
+  --text-selection: color-mix(in srgb, var(--accent) 22%, transparent);
+  --text-highlight-bg: var(--accent-soft);
+
+  /* Primary actions use the inverse fill; the accent stays for links, focus and progress. */
+  --color-accent: var(--accent);
+  --color-accent-1: var(--accent);
+  --color-accent-2: var(--accent);
+  --interactive-accent: var(--bg-inverse);
+  --interactive-accent-hover: color-mix(
+    in srgb,
+    var(--bg-inverse) 86%,
+    var(--bg-surface)
+  );
+  --interactive-normal: var(--bg-surface);
+  --interactive-hover: var(--bg-subtle);
+
+  --color-red: var(--danger);
+  --color-orange: var(--warning);
+  --color-green: var(--success);
+  --color-blue: var(--accent);
+  --color-cyan: var(--sky);
+
+  --radius-s: var(--radius-sm);
+  --radius-m: var(--radius-md);
+  --radius-l: var(--radius-lg);
+  --radius-pill: var(--radius-md);
+  --input-radius: var(--radius-md);
+  --menu-radius: var(--radius-lg);
+  --modal-radius: var(--radius-xl);
+  --notice-radius: var(--radius-lg);
+  --tooltip-radius: var(--radius-sm);
+  --suggestion-radius: var(--radius-md);
+  --callout-radius: var(--radius-lg);
+  --setting-items-radius: var(--radius-lg);
+  --sidebar-radius: 0px;
+  --card-radius: var(--radius-lg);
+
+  --shadow-card: var(--shadow-xs), 0 0 0 1px var(--border);
+  --shadow-card-mini: var(--shadow-xs);
+  --shadow-raised-xl: var(--shadow-lg);
+  --shadow-raised-control-item: var(--shadow-xs);
+  --shadow-glass-border: 0 0 0 1px var(--border);
+  --shadow-glass-border-tilted: 0 0 0 1px var(--border);
+  --menu-shadow: var(--shadow-md), 0 0 0 1px var(--border);
+  --glass-shadow-inset-edge: 0 0 0 0 transparent;
+  --glass-shadow-inset-l: 0 0 0 0 transparent;
+  --glass-shadow-inset-s: 0 0 0 0 transparent;
+  --glass-shadow-inset-for-control: 0 0 0 0 transparent;
+  --liquid-sidebar-shadow: none;
+
+  --gl-control-bg: var(--bg-surface);
+  --gl-control-filter: none;
+  --gl-control-hover: var(--bg-subtle);
+  --gl-glass-filter: none;
+  --gl-glass-subtle-filter: none;
+  --backdrop-filter-toolbar: none;
+  --backdrop-filter-tooltip: none;
+  --toolbar-progressive-blur-area: 0px;
+}

@@ -9,7 +9,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     hosted,
     phone,
     wide,
-    detailBeside,
+    detailModal,
     pc,
     search,
     setSearch,
@@ -167,7 +167,11 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
       ];
     if (next) {
       setSelected(next.id);
-      if (openId && detailBeside) setOpenId(next.id);
+      if (openId && detailModal) {
+        // The list sits behind the task view, so focus stays in the view.
+        setOpenId(next.id);
+        return;
+      }
       requestAnimationFrame(() =>
         (
           listRef.current?.querySelector(
