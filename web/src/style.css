@@ -672,8 +672,8 @@ input[type="checkbox"] {
   background: color-mix(in oklch, var(--color-orange) 10%, transparent);
 }
 .check-task.priority-3 {
-  border-color: var(--interactive-accent);
-  background: color-mix(in oklch, var(--interactive-accent) 8%, transparent);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
 }
 .task-body {
   display: flex;
@@ -1572,7 +1572,7 @@ input[type="checkbox"] {
   color: var(--color-orange);
 }
 .flag-3 {
-  color: var(--interactive-accent);
+  color: var(--accent);
 }
 
 /* After a touch long-press, the same menu opens as a bottom sheet. */
@@ -1856,7 +1856,7 @@ input[type="checkbox"] {
   background: var(--background-modifier-hover-subtle);
 }
 .task-row.is-open {
-  background: color-mix(in oklch, var(--interactive-accent) 10%, transparent);
+  background: var(--accent-soft);
 }
 .task-row.is-finishing {
   animation: row-done 0.9s ease forwards;
@@ -2585,11 +2585,8 @@ input[type="checkbox"] {
 }
 
 /* ================================================================
-   Task detail: beside the list when wide, over it when narrow.
+   Task detail: a large view over the list on wider screens, full screen on narrow ones.
    ================================================================ */
-.app-shell.with-detail .content-layout {
-  max-width: none;
-}
 .detail {
   position: sticky;
   top: var(--toolbar-height);
@@ -2819,6 +2816,114 @@ input[type="checkbox"] {
   height: var(--control-height-s);
   padding: 0 10px;
   gap: 6px;
+}
+
+/* The large view: content on the left, details in a column on the right. */
+.detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--scrim);
+  animation: gl-fade-in 0.14s ease;
+}
+.detail.is-modal {
+  position: relative;
+  top: auto;
+  width: min(940px, 100%);
+  height: min(760px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: gl-pop-in-subtle 0.18s ease;
+}
+.detail.is-modal .detail-head {
+  height: 52px;
+  padding: 0 12px 0 16px;
+}
+.detail.is-modal .detail-head .icon-button:disabled {
+  opacity: 0.3;
+}
+.detail.is-modal .detail-crumb {
+  margin-left: -8px;
+  font-size: 13px;
+}
+.detail.is-modal .detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  overflow: hidden;
+}
+.detail.is-modal .detail-main {
+  gap: 10px;
+  min-height: 0;
+  padding: 24px 32px 32px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.detail.is-modal .detail-title .check-task {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+}
+.detail.is-modal .detail-title-input {
+  font-size: 22px;
+  line-height: 30px;
+}
+.detail.is-modal .detail-description {
+  padding-left: 34px;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text-secondary);
+}
+.detail.is-modal .detail-description:focus {
+  color: var(--text);
+}
+.detail.is-modal .linked-items,
+.detail.is-modal .detail-main .checklist-editor,
+.detail.is-modal .detail-main > section,
+.detail.is-modal .detail-main > .agent-panel {
+  margin-left: 34px;
+}
+.detail.is-modal .detail-side {
+  margin: 0;
+  padding: 8px 24px 16px;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.detail.is-modal .detail-field {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-height: 0;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.detail.is-modal .detail-field > span {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.detail.is-modal .detail-field > button,
+.detail.is-modal .detail-select {
+  margin-left: -8px;
+  padding: 0 8px;
+  font-size: 14px;
+}
+.detail.is-modal .detail-labels {
+  padding: 2px 0 0;
+}
+.detail.is-modal .detail-more {
+  padding: 12px 0 0;
+}
+.detail.is-modal .detail-foot {
+  margin-top: 16px;
+  padding: 12px 0 0;
+  border-top: 0;
 }
 
 /* Dialog bits: shortcuts, project colours, settings */
@@ -3124,4 +3229,91 @@ html.is-companion:has(.companion.is-floating) body {
 .notification-preferences select,
 .notification-preferences input[type="time"] {
   min-width: 180px;
+}
+
+/* Several selected tasks: the list toolbar swaps to actions for all of them. */
+.selection-toolbar {
+  position: sticky;
+  top: var(--toolbar-height);
+  z-index: 9;
+  /* The padding gives the sticky bar a backdrop without moving the list. */
+  margin: 12px -8px -8px;
+  padding: 8px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+.selection-toolbar > span {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-normal);
+}
+.selection-toolbar > span > svg {
+  color: var(--accent);
+}
+.selection-toolbar > div {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.list-toolbar .icon-only {
+  width: var(--control-height-m);
+  padding: 0;
+  justify-content: center;
+}
+.list-toolbar .danger-on,
+.list-toolbar .danger-on:hover {
+  background: var(--danger);
+  color: var(--on-danger);
+  box-shadow: none;
+}
+.list-toolbar .danger-on > svg {
+  color: var(--on-danger);
+}
+.task-row.is-picked,
+.task-row.is-picked:hover {
+  background: var(--accent-soft);
+}
+.select-task {
+  height: 18px;
+  width: 18px;
+  min-width: 18px;
+  margin-top: 1px;
+  padding: 0;
+  border: 1.5px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--on-accent);
+}
+.select-task svg {
+  width: 13px;
+  height: 13px;
+}
+.select-task:hover {
+  border-color: var(--text-normal);
+}
+.select-task[aria-checked="true"],
+.select-task[aria-checked="true"]:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+@media (max-width: 760px) {
+  .select-task {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+  }
+  .selection-toolbar button > span {
+    display: none;
+  }
+  .selection-toolbar button {
+    width: var(--control-height-m);
+    padding: 0;
+    justify-content: center;
+  }
+  .selection-toolbar .danger-on > span {
+    display: inline;
+  }
+  .selection-toolbar .danger-on {
+    width: auto;
+    padding: 0 12px;
+  }
 }

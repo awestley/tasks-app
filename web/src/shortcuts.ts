@@ -9,7 +9,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     hosted,
     phone,
     wide,
-    detailBeside,
+    detailModal,
     pc,
     search,
     setSearch,
@@ -19,6 +19,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     setOpenId,
     selected,
     setSelected,
+    selection,
     inlineAdd,
     setInlineAdd,
     drawer,
@@ -67,6 +68,25 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     if (t) openInColumn(t);
     return;
   }
+  // Cmd/Ctrl-A selects every task in the list, unless focus is in a text field or a dialog is open.
+  if (
+    mod &&
+    !e.shiftKey &&
+    !e.altKey &&
+    e.key.toLowerCase() === "a" &&
+    !typing &&
+    !modalOpen &&
+    !openId &&
+    selection.canSelect &&
+    flat.length &&
+    !(e.target as HTMLElement).closest?.(
+      "input,textarea,select,[contenteditable]",
+    )
+  ) {
+    e.preventDefault();
+    selection.all();
+    return;
+  }
   if (e.key === "Escape") {
     if (modalOpen) return; // the dialog or menu closes itself
     if (typing) return;
@@ -74,6 +94,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
       setOpenId(null);
       return;
     }
+    if (selection.selecting) return selection.clear();
     if (inlineAdd) return setInlineAdd(null);
     if (search) return setSearch("");
     if (drawer) return setDrawer(false);
@@ -147,7 +168,11 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
       ];
     if (next) {
       setSelected(next.id);
-      if (openId && detailBeside) setOpenId(next.id);
+      if (openId && detailModal) {
+        // The list sits behind the task view, so focus stays in the view.
+        setOpenId(next.id);
+        return;
+      }
       requestAnimationFrame(() =>
         (
           listRef.current?.querySelector(
@@ -156,6 +181,15 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
         )?.focus(),
       );
     }
+    return;
+  }
+  // With several tasks selected, C and 1 to 4 change all of them.
+  if (selection.selecting) {
+    if (key === "c") selection.complete();
+    else if (["1", "2", "3", "4"].includes(key))
+      selection.priority(Number(key));
+    else return;
+    e.preventDefault();
     return;
   }
   const t = target();

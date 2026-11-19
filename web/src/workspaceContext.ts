@@ -5,6 +5,7 @@ import type { usePc } from "@awestley/pc-runtime/react";
 import type { Profile, Project, Task } from "./api";
 import type { MenuEntry, MenuRequest } from "./ContextMenu";
 import type { Toast } from "./pieces";
+import type { Selection } from "./selection";
 import type { QuickDefaults } from "./QuickAdd";
 import type { Permission } from "./reminders";
 import type { View } from "./routes";
@@ -21,7 +22,7 @@ export type W = {
   phone: boolean;
   wide: boolean;
   narrow: boolean;
-  detailBeside: boolean;
+  detailModal: boolean;
   sidebarDocked: boolean;
   coarse: boolean;
   pc: ReturnType<typeof usePc>;
@@ -46,8 +47,11 @@ export type W = {
   groups: Group[];
   openId: string | null;
   setOpenId: Set<string | null>;
+  /** The keyboard cursor: one task that J/K move and shortcuts act on. */
   selected: string | null;
   setSelected: Set<string | null>;
+  /** Several tasks selected to change together. */
+  selection: Selection;
   inlineAdd: string | null;
   setInlineAdd: Set<string | null>;
   drawer: boolean;
@@ -61,6 +65,8 @@ export type W = {
   setPicker: Set<{
     task: Task;
     anchor: DOMRect | { x: number; y: number };
+    /** Set when the date applies to several selected tasks. */
+    tasks?: Task[];
   } | null>;
   finishing: globalThis.Set<string>;
   hovered: Ref<string | null>;
@@ -92,6 +98,8 @@ export type W = {
     target?: string,
   ) => void;
   rowHandlers: (task: Task) => React.HTMLAttributes<HTMLDivElement>;
+  /** The menu for a row: the task's, or the selection's when the row is one of several selected. */
+  rowMenu: (task: Task) => { entries: () => MenuEntry[]; title: string };
   addTaskIn: (next: View) => MenuEntry[];
   projectMenu: (project: Project) => MenuEntry[];
   listMenu: () => MenuEntry[];

@@ -28,6 +28,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  SquareCheck,
   Trash2,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ import {
   viewNames,
   type View,
 } from "./routes";
+import { selectionMenu, shared, taskCount, type Selection } from "./selection";
 import { handleShortcut } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
 import { SignIn } from "./SignIn";
@@ -173,11 +175,15 @@ function Workspace({
   const [drawer, setDrawer] = useState(false);
   const [quick, setQuick] = useState<QuickDefaults | null>(null);
   const [inlineAdd, setInlineAdd] = useState<string | null>(null);
+  // The keyboard cursor (one task). Several selected tasks are `selection` below.
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectionAnchor = useRef<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [picker, setPicker] = useState<{
     task: Task;
     anchor: DOMRect | { x: number; y: number };
+    tasks?: Task[];
   } | null>(null);
   const [bell, setBell] = useState<DOMRect | null>(null);
   const [settings, setSettings] = useState(false);
@@ -198,9 +204,9 @@ function Workspace({
   const today = localDate();
   const wide = !companion && width >= 900;
   const sidebarDocked = wide && sidebarPref;
-  const mainWidth = width - (sidebarDocked ? 260 : 0);
-  const detailBeside = !companion && mainWidth >= 900;
   const narrow = !companion && width < 700;
+  // Wider than a phone, a task opens in a large view over the list, with its details on the right.
+  const detailModal = !companion && !narrow;
   // A phone, or a phone-sized browser window: the native layout. A narrow column on a desktop
   // keeps the drawer layout.
   const coarse = useMedia("(pointer: coarse)");
@@ -287,6 +293,7 @@ function Workspace({
   }, [view, openId, companion]);
 
   function navigate(next: View) {
+    clearSelection();
     setSearch("");
     setDrawer(false);
     setPhoneScreen("list");
@@ -326,7 +333,7 @@ function Workspace({
     }
   }, [view, selectedProject]);
   usePaneTitle(
-    openTask && !detailBeside ? openTask.title : companion ? null : title,
+    openTask && !detailModal ? openTask.title : companion ? null : title,
   );
 
   const { shown, overdue, groups, flat } = useTaskGroups({
@@ -339,6 +346,30 @@ function Workspace({
     finishing,
     selectedProject,
   });
+
+  /* ---------- several selected tasks ---------- */
+
+  // The companion and phone layouts have no selection toolbar.
+  const canSelect = !companion && !phone;
+  const chosen = useMemo(() => {
+    const ids = new Set(selectedIds);
+    return canSelect ? flat.filter((t) => ids.has(t.id)) : [];
+  }, [selectedIds, flat, canSelect]);
+  const chosenIds = useMemo(() => new Set(chosen.map((t) => t.id)), [chosen]);
+  const selecting = chosen.length > 0;
+  useEffect(() => {
+    // Drop tasks that left the list: completed, deleted, moved or filtered out.
+    setSelectedIds((ids) =>
+      ids.every((id) => chosenIds.has(id))
+        ? ids
+        : ids.filter((id) => chosenIds.has(id)),
+    );
+    if (!chosenIds.size) selectionAnchor.current = null;
+  }, [chosenIds]);
+  function clearSelection() {
+    setSelectedIds([]);
+    selectionAnchor.current = null;
+  }
 
   /* ---------- actions ---------- */
 
@@ -364,6 +395,19 @@ function Workspace({
     }
     return task;
   }
+  // A completed task stays in the list for a moment, then leaves.
+  function finish(ids: string[]) {
+    setFinishing((s) => new Set([...s, ...ids]));
+    setTimeout(
+      () =>
+        setFinishing((s) => {
+          const n = new Set(s);
+          for (const id of ids) n.delete(id);
+          return n;
+        }),
+      900,
+    );
+  }
   function toggle(task: Task) {
     if (task.completed) {
       S.patchTask(task.id, { completed: false });
@@ -371,17 +415,8 @@ function Workspace({
       return;
     }
     S.patchTask(task.id, { completed: true });
-    setFinishing((s) => new Set(s).add(task.id));
-    setTimeout(
-      () =>
-        setFinishing((s) => {
-          const n = new Set(s);
-          n.delete(task.id);
-          return n;
-        }),
-      900,
-    );
-    if (openId === task.id && !detailBeside) setOpenId(null);
+    finish([task.id]);
+    if (openId === task.id && !detailModal) setOpenId(null);
     notify(
       task.recurrence
         ? `Completed. Next: ${recurrenceLabel[task.recurrence].toLowerCase()}`
@@ -435,27 +470,28 @@ function Workspace({
     });
     notify("Task duplicated", () => S.deleteTask(copy.id));
   };
+  // Undoes a delete: the task comes back with its id and fields.
+  const recreate = (task: Task) =>
+    S.createTask({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      project_id: task.project_id,
+      due_date: task.due_date,
+      due_time: task.due_time,
+      time_zone: task.time_zone,
+      reminder_minutes: task.reminder_minutes,
+      priority: task.priority,
+      labels: task.labels,
+      recurrence: task.recurrence,
+      checklist: task.checklist,
+      completed: task.completed,
+      completed_at: task.completed_at,
+    });
   const removeTask = (task: Task) => {
     S.deleteTask(task.id);
     if (openId === task.id) setOpenId(null);
-    notify("Task deleted", () =>
-      S.createTask({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        project_id: task.project_id,
-        due_date: task.due_date,
-        due_time: task.due_time,
-        time_zone: task.time_zone,
-        reminder_minutes: task.reminder_minutes,
-        priority: task.priority,
-        labels: task.labels,
-        recurrence: task.recurrence,
-        checklist: task.checklist,
-        completed: task.completed,
-        completed_at: task.completed_at,
-      }),
-    );
+    notify("Task deleted", () => recreate(task));
   };
   const copy = (text: string, message: string) =>
     navigator.clipboard.writeText(text).then(
@@ -475,6 +511,122 @@ function Workspace({
     notify(`${moved.length} moved to today`, () =>
       moved.forEach((m) => S.patchTask(m.id, { due_date: m.due })),
     );
+  };
+  // Changes every listed task, one PATCH each (the outbox sends it with that task's version), and
+  // offers one undo for all of them.
+  function patchMany(
+    list: Task[],
+    changes: (task: Task) => S.TaskChanges,
+    message: string,
+  ) {
+    const undo = list.map((task) => {
+      const next = changes(task);
+      S.patchTask(task.id, next);
+      return [
+        task.id,
+        Object.fromEntries(
+          Object.keys(next).map((k) => [k, task[k as keyof Task]]),
+        ) as S.TaskChanges,
+      ] as const;
+    });
+    notify(message, () =>
+      undo.forEach(([id, before]) => S.patchTask(id, before)),
+    );
+  }
+  const clearedDate = {
+    due_date: null,
+    due_time: null,
+    reminder_minutes: null,
+    recurrence: null,
+  };
+  const selection: Selection = {
+    canSelect,
+    chosen,
+    selecting,
+    has: (id) => chosenIds.has(id),
+    // Cmd/Ctrl-click toggles a task, Shift-click selects a range from the last one toggled. While
+    // tasks are selected, a plain click toggles too.
+    click: (task, e) => {
+      if (!canSelect || (e.target as Element).closest(".row-menu"))
+        return false;
+      const ids = flat.map((t) => t.id);
+      if (e.shiftKey && (selecting || selectionAnchor.current)) {
+        const from = ids.indexOf(selectionAnchor.current ?? task.id),
+          to = ids.indexOf(task.id);
+        const range =
+          from === -1
+            ? [task.id]
+            : ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+        setSelectedIds((current) =>
+          Array.from(new Set([...current, ...range])),
+        );
+        if (from === -1) selectionAnchor.current = task.id;
+        return true;
+      }
+      if (!(e.metaKey || e.ctrlKey || e.shiftKey || selecting)) return false;
+      setSelectedIds((current) =>
+        current.includes(task.id)
+          ? current.filter((id) => id !== task.id)
+          : [...current, task.id],
+      );
+      selectionAnchor.current = task.id;
+      return true;
+    },
+    add: (task) => {
+      setSelectedIds((current) =>
+        current.includes(task.id) ? current : [...current, task.id],
+      );
+      selectionAnchor.current = task.id;
+    },
+    all: () => setSelectedIds(flat.map((t) => t.id)),
+    clear: clearSelection,
+    complete: () => {
+      const allCompleted = chosen.every((t) => t.completed);
+      const list = chosen.filter((t) => t.completed === allCompleted);
+      for (const t of list) S.patchTask(t.id, { completed: !allCompleted });
+      if (!allCompleted) finish(list.map((t) => t.id));
+      notify(
+        `${taskCount(list.length)} ${allCompleted ? "restored" : "completed"}`,
+        () =>
+          list.forEach((t) =>
+            S.patchTask(
+              t.id,
+              allCompleted
+                ? { completed: true }
+                : { completed: false, undo: true },
+            ),
+          ),
+      );
+    },
+    schedule: (due) =>
+      patchMany(
+        chosen,
+        () => (due ? { due_date: due } : clearedDate),
+        due
+          ? `${taskCount(chosen.length)} scheduled for ${dueLabel(due)}`
+          : `Date removed from ${taskCount(chosen.length)}`,
+      ),
+    pickDate: (anchor) => {
+      if (chosen.length) setPicker({ task: chosen[0], tasks: chosen, anchor });
+    },
+    priority: (p) =>
+      patchMany(
+        chosen,
+        () => ({ priority: p }),
+        `Priority set to ${priorityNames[p].toLowerCase()} for ${taskCount(chosen.length)}`,
+      ),
+    move: (project_id, name) =>
+      patchMany(
+        chosen,
+        () => ({ project_id }),
+        `${taskCount(chosen.length)} moved to ${name}`,
+      ),
+    remove: () => {
+      const list = chosen;
+      for (const t of list) S.deleteTask(t.id);
+      if (openId && list.some((t) => t.id === openId)) setOpenId(null);
+      notify(`${taskCount(list.length)} deleted`, () => list.forEach(recreate));
+    },
   };
   const openDetail = (task: Task) => {
     setSelected(task.id);
@@ -589,6 +741,16 @@ function Workspace({
       checked: priorityFilter,
       action: () => setPriorityFilter(!priorityFilter),
     },
+    ...(canSelect && flat.length
+      ? [
+          {
+            label: "Select all",
+            icon: <SquareCheck size={16} />,
+            shortcut: "⌘A",
+            action: selection.all,
+          },
+        ]
+      : []),
     ...(overdue.length
       ? [
           {
@@ -662,9 +824,18 @@ function Workspace({
 
   /* ---------- pieces ---------- */
 
+  // A row's menu: the selection's actions when the row is one of several selected tasks.
+  const rowMenu = (task: Task) =>
+    chosenIds.has(task.id) && chosen.length > 1
+      ? {
+          entries: () => selectionMenu(w),
+          title: `${chosen.length} tasks`,
+        }
+      : { entries: () => taskMenu(task, w), title: task.title };
   // On a phone a row also swipes: right completes, left schedules.
   const rowHandlers = (task: Task) => {
-    const menuProps = menuFor(() => taskMenu(task, w), task.title, task.id);
+    const { entries, title } = rowMenu(task);
+    const menuProps = menuFor(entries, title, task.id);
     if (!phone) return menuProps;
     const swipe = swipeRow({
       right: () => toggle(task),
@@ -707,7 +878,7 @@ function Workspace({
     phone,
     wide,
     narrow,
-    detailBeside,
+    detailModal,
     sidebarDocked,
     coarse,
     pc,
@@ -734,6 +905,7 @@ function Workspace({
     setOpenId,
     selected,
     setSelected,
+    selection,
     inlineAdd,
     setInlineAdd,
     drawer,
@@ -770,6 +942,7 @@ function Workspace({
     menuFor,
     openMenuAt,
     rowHandlers,
+    rowMenu,
     addTaskIn,
     projectMenu,
     listMenu,
@@ -944,7 +1117,20 @@ function Workspace({
       task={openTask}
       projects={projects}
       allLabels={labels}
-      overlay={!detailBeside}
+      overlay={!detailModal}
+      modal={detailModal}
+      step={(by) => {
+        const i = flat.findIndex((t) => t.id === openTask.id);
+        const next = i < 0 ? null : flat[i + by];
+        if (next) {
+          setOpenId(next.id);
+          setSelected(next.id);
+        }
+      }}
+      position={(() => {
+        const i = flat.findIndex((t) => t.id === openTask.id);
+        return { first: i <= 0, last: i < 0 || i === flat.length - 1 };
+      })()}
       toggle={() => toggle(openTask)}
       patch={(changes) => S.patchTask(openTask.id, changes)}
       remove={() => removeTask(openTask)}
@@ -960,7 +1146,7 @@ function Workspace({
       projectMenu={() => moveMenu(openTask, w)}
       priorityMenu={() => priorityMenu(openTask, w)}
       openInColumn={
-        hosted && (companion || detailBeside)
+        hosted && (companion || detailModal)
           ? () => openInColumn(openTask)
           : undefined
       }
@@ -1000,9 +1186,9 @@ function Workspace({
       {picker && (
         <DatePicker
           anchor={picker.anchor}
-          value={picker.task}
+          value={pickerValue(picker)}
           close={() => setPicker(null)}
-          change={(next) => patchDue(picker.task, next)}
+          change={(next) => pickerChange(picker, next)}
         />
       )}
       {bell && (
@@ -1155,9 +1341,9 @@ function Workspace({
         {picker && (
           <DatePicker
             anchor={picker.anchor}
-            value={picker.task}
+            value={pickerValue(picker)}
             close={() => setPicker(null)}
-            change={(next) => patchDue(picker.task, next)}
+            change={(next) => pickerChange(picker, next)}
           />
         )}
         {bell && (
@@ -1172,32 +1358,52 @@ function Workspace({
       </div>
     );
 
-  function patchDue(
-    task: Task,
-    next: {
-      due_date: string | null;
-      due_time: string | null;
-      recurrence: string | null;
-    },
-  ) {
+  type Due = {
+    due_date: string | null;
+    due_time: string | null;
+    recurrence: string | null;
+  };
+  function dueChanges(task: Task, next: Due): S.TaskChanges {
+    return {
+      due_date: next.due_date,
+      due_time: next.due_date ? next.due_time : null,
+      recurrence: next.due_date
+        ? (next.recurrence as Task["recurrence"])
+        : null,
+      reminder_minutes:
+        next.due_date && next.due_time
+          ? task.due_time
+            ? task.reminder_minutes
+            : autoReminder()
+          : null,
+    };
+  }
+  function patchDue(task: Task, next: Due) {
     patch(
       task,
-      {
-        due_date: next.due_date,
-        due_time: next.due_date ? next.due_time : null,
-        recurrence: next.due_date
-          ? (next.recurrence as Task["recurrence"])
-          : null,
-        reminder_minutes:
-          next.due_date && next.due_time
-            ? task.due_time
-              ? task.reminder_minutes
-              : autoReminder()
-            : null,
-      },
+      dueChanges(task, next),
       next.due_date
         ? `Scheduled for ${dueLabel(next.due_date, next.due_time)}`
         : "Date removed",
+    );
+  }
+  // The date picker shows one task's date, or what several selected tasks share.
+  function pickerValue(p: NonNullable<typeof picker>): Due {
+    if (!p.tasks) return p.task;
+    return {
+      due_date: shared(p.tasks, "due_date") ?? null,
+      due_time: shared(p.tasks, "due_time") ?? null,
+      recurrence: shared(p.tasks, "recurrence") ?? null,
+    };
+  }
+  function pickerChange(p: NonNullable<typeof picker>, next: Due) {
+    if (!p.tasks) return patchDue(p.task, next);
+    patchMany(
+      p.tasks,
+      (task) => dueChanges(task, next),
+      next.due_date
+        ? `${taskCount(p.tasks.length)} scheduled for ${dueLabel(next.due_date, next.due_time)}`
+        : `Date removed from ${taskCount(p.tasks.length)}`,
     );
   }
 
@@ -1279,7 +1485,7 @@ function Workspace({
 
   return (
     <div
-      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""} ${openTask && detailBeside ? "with-detail" : ""}`}
+      className={`app-shell ${hosted ? "hosted" : ""} ${sidebarDocked ? "" : "no-sidebar"} ${narrow ? "is-narrow" : ""}`}
     >
       <React.Fragment key="full">
         {sidebar}

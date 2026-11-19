@@ -27,9 +27,11 @@ export function ChecklistEditor({
     <section className="checklist-editor" aria-label="Task checklist">
       <div className="checklist-heading">
         <h3>Checklist</h3>
-        <span>
-          {items.filter((item) => item.completed).length}/{items.length}
-        </span>
+        {items.length > 0 && (
+          <span>
+            {items.filter((item) => item.completed).length}/{items.length}
+          </span>
+        )}
       </div>
       {items.map((item, index) => (
         <div className="checklist-item" key={item.id}>

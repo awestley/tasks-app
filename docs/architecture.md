@@ -26,8 +26,8 @@ Source map:
 - `api/tasks/contract.py`, `events.py`, `search.py`: the Personal Command app contract: manifest, resolve, search, references (including stored links) and the live event stream.
 - `api/tasks/agent.py`: the Flesh out agent, an MCP client of this server and of configured servers such as Notebook.
 - `web/docs`, `web/src/docs.ts`: API reference page at `/docs`, a bundled Swagger UI reading `/api/v1/openapi.json`.
-- `web/src`: React app, API client, responsive styles. `glassive.css` holds the Glassive design tokens (light and dark); `style.css` builds the interface from them.
-- `apple/Tasks`: SwiftUI app, API client, observable store and Keychain storage. `Glassive.swift` mirrors the same color tokens for the native apps.
+- `web/src`: React app, API client, responsive styles. `style.css` is written with Glassive's variable names, which the shell and embeds share; `clean.css` holds the Clean design tokens (light and dark) and `clean-bridge.css` gives the Glassive names Clean values.
+- `apple/Tasks`: SwiftUI app, API client, observable store and Keychain storage. `Clean.swift` mirrors the Clean color tokens for the native apps. `TaskDetail.swift` is the task view: content on the left, details on the right, saving as you edit.
 - `api/migrations`: immutable deployment migrations.
 
 Known first-release limits are listed in the README. In particular, refresh polling is not real-time push; PostgreSQL labels are stored as JSON and label filtering is currently performed after the user-scoped query, which should be moved to an indexed query if accounts grow very large.

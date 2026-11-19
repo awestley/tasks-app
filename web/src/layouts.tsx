@@ -17,6 +17,7 @@ import {
 import { BrowseScreen, type PhoneTab } from "./phone";
 import { WeekStrip } from "./pieces";
 import { store, type View } from "./routes";
+import { SelectionToolbar } from "./selection";
 import type { W } from "./workspaceContext";
 
 export type LayoutParts = {
@@ -222,6 +223,7 @@ export function MainColumn({ w, parts }: { w: W; parts: LayoutParts }) {
     setProjectEditor,
     setSettings,
     menuFor,
+    selection,
   } = w;
   return (
     <div className="main-shell">
@@ -331,41 +333,45 @@ export function MainColumn({ w, parts }: { w: W; parts: LayoutParts }) {
               </button>
             </div>
           </div>
-          <div className="list-toolbar">
-            <span>
-              <Layers size={15} />
-              {view === "completed"
-                ? `${shown.length} completed`
-                : (() => {
-                    const n = shown.filter((t) => !t.completed).length;
-                    return `${n} ${n === 1 ? "task" : "tasks"}`;
-                  })()}
-            </span>
-            <div>
-              <button
-                className={priorityFilter ? "filter-on" : ""}
-                onClick={() => setPriorityFilter(!priorityFilter)}
-              >
-                <ListFilter size={15} />
-                {priorityFilter ? "High priority" : "Filter"}
-              </button>
-              <label>
-                <ArrowDownWideNarrow size={14} />
-                <select
-                  aria-label="Sort tasks"
-                  value={sort}
-                  onChange={(e) => {
-                    setSort(e.target.value);
-                    store("tasks.sort", e.target.value);
-                  }}
+          {selection.selecting ? (
+            <SelectionToolbar w={w} />
+          ) : (
+            <div className="list-toolbar">
+              <span>
+                <Layers size={15} />
+                {view === "completed"
+                  ? `${shown.length} completed`
+                  : (() => {
+                      const n = shown.filter((t) => !t.completed).length;
+                      return `${n} ${n === 1 ? "task" : "tasks"}`;
+                    })()}
+              </span>
+              <div>
+                <button
+                  className={priorityFilter ? "filter-on" : ""}
+                  onClick={() => setPriorityFilter(!priorityFilter)}
                 >
-                  <option value="smart">Due date</option>
-                  <option value="priority">Priority</option>
-                  <option value="name">Name</option>
-                </select>
-              </label>
+                  <ListFilter size={15} />
+                  {priorityFilter ? "High priority" : "Filter"}
+                </button>
+                <label>
+                  <ArrowDownWideNarrow size={14} />
+                  <select
+                    aria-label="Sort tasks"
+                    value={sort}
+                    onChange={(e) => {
+                      setSort(e.target.value);
+                      store("tasks.sort", e.target.value);
+                    }}
+                  >
+                    <option value="smart">Due date</option>
+                    <option value="priority">Priority</option>
+                    <option value="name">Name</option>
+                  </select>
+                </label>
+              </div>
             </div>
-          </div>
+          )}
           {view === "upcoming" && !search && (
             <WeekStrip
               tasks={active}

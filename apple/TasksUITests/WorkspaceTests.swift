@@ -1,7 +1,7 @@
 import XCTest
 
 final class WorkspaceTests: XCTestCase {
-    let base = "http://127.0.0.1:8002"
+    let base = ProcessInfo.processInfo.environment["TASKS_TEST_BASE"] ?? "http://127.0.0.1:8002"
     let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -34,7 +34,7 @@ final class WorkspaceTests: XCTestCase {
         if temporarySession != nil {
             do {
                 let tasks = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
-                for task in tasks where task["title"] as? String == taskTitle {
+                for task in tasks where (task["title"] as? String)?.hasPrefix(taskTitle) == true {
                     _ = try await request("/api/v1/tasks/\(task["id"] as! String)?version=\(task["version"] as! Int)", method:"DELETE")
                 }
             } catch { XCTFail("Could not clean up the temporary test task") }
@@ -142,53 +142,59 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["signInError"].exists, app.debugDescription)
         XCTAssertTrue(local.waitForExistence(timeout: 10), "A saved server shows its sign-in methods right away: " + app.debugDescription)
     }
-    @MainActor func testConflictKeepsDraftAndSecondSaveSucceeds() async throws {
+    /// Opens a task from search into the task view.
+    @MainActor func openTask(_ app: XCUIApplication, _ title: String) {
+        let search = app.searchFields["Search tasks"]
+        search.tap(); search.typeText(title)
+        let row = app.buttons.containing(.staticText, identifier: title).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.tap()
+        XCTAssertTrue(app.textFields["Task title"].waitForExistence(timeout: 5), app.debugDescription)
+    }
+    func saved(_ id: String) async throws -> [String:Any]? {
+        let tasks = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
+        return tasks.first { $0["id"] as? String == id }
+    }
+    /// Waits for the server to hold a value the app saved on its own.
+    func waitForSaved(_ id: String, _ check: @escaping ([String:Any]) -> Bool) async throws {
+        for _ in 0..<20 {
+            let task = try await saved(id)
+            if let task, check(task) { return }
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        XCTFail("The change was not saved")
+    }
+    @MainActor func testEditsSaveAsYouTypeAndKeepAnotherDevicesChange() async throws {
         let app = try await signedInApp()
-        let created = try await request("/api/v1/tasks", method: "POST", body: ["title": taskTitle]) as! [String:Any]
+        let created = try await request("/api/v1/tasks", method: "POST", body: ["title": taskTitle, "checklist": [["title": "First step", "completed": false]]]) as! [String:Any]
         let id = created["id"] as! String
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
-        let search = app.searchFields["Search tasks"]
-        search.tap(); search.typeText(taskTitle)
-        // A row with only a title exposes it as the button's own label.
-        let row = app.buttons[taskTitle]
-        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
-        row.tap()
+        openTask(app, taskTitle)
+        // Another device changes the task after this one loaded it.
+        _ = try await request("/api/v1/tasks/\(id)", method: "PATCH", body: ["version": 1, "priority": 2])
         let description = app.textFields["Description"]
         XCTAssertTrue(description.waitForExistence(timeout: 5))
         description.tap(); description.typeText("Written on this device")
-        _ = try await request("/api/v1/tasks/\(id)", method: "PATCH", body: ["version": 1, "priority": 2])
-        app.buttons["Save"].tap()
-        let notice = app.alerts.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "changed on another device")).firstMatch
-        XCTAssertTrue(notice.waitForExistence(timeout: 10), app.debugDescription)
-        app.alerts.buttons["OK"].tap()
-        // Typing replaces the placeholder that identified the field, so find it by what it now holds.
-        let draft = app.textFields.matching(NSPredicate(format: "value == %@", "Written on this device")).firstMatch
-        XCTAssertTrue(draft.waitForExistence(timeout: 5), "The draft should survive the conflict: " + app.debugDescription)
-        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 5))
-        let save = app.buttons["Save"]
-        let enabled = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: save)
-        await fulfillment(of: [enabled], timeout: 5)
-        save.tap()
-        XCTAssertTrue(app.navigationBars["Edit task"].waitForNonExistence(timeout: 10), app.debugDescription)
-        let saved = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
-        XCTAssertEqual(saved.first { $0["id"] as? String == id }?["description"] as? String, "Written on this device")
+        try await waitForSaved(id) { $0["description"] as? String == "Written on this device" }
+        let current = try await saved(id)
+        let task = try XCTUnwrap(current)
+        XCTAssertEqual(task["priority"] as? Int, 2, "The other device's change should stay")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Task view"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["Close task"].tap()
+        XCTAssertTrue(app.textFields["Task title"].waitForNonExistence(timeout: 5), app.debugDescription)
     }
     @MainActor func testTaskInUTCShowsItsTimeZone() async throws {
         let app = try await signedInApp()
         _ = try await request("/api/v1/tasks", method: "POST", body: ["title": taskTitle, "due_date": "2099-01-01", "due_time": "09:00", "time_zone": "UTC"])
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
-        let search = app.searchFields["Search tasks"]
-        search.tap(); search.typeText(taskTitle)
-        let row = app.buttons.containing(.staticText, identifier: taskTitle).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
-        row.tap()
-        XCTAssertTrue(app.navigationBars["Edit task"].waitForExistence(timeout: 5), app.debugDescription)
-        let picker = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Time zone")).firstMatch
-        if !picker.exists { app.swipeUp() }
-        XCTAssertTrue(picker.waitForExistence(timeout: 5), app.debugDescription)
-        XCTAssertTrue(picker.label.contains("UTC"), picker.label)
+        openTask(app, taskTitle)
+        let zone = app.staticTexts["taskTimeZone"]
+        if !zone.exists { app.swipeUp() }
+        XCTAssertTrue(zone.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertEqual(zone.label, "UTC")
     }
     @MainActor func testAnotherDevicesSessionCanBeEnded() async throws {
         let app = try await signedInApp()
@@ -216,6 +222,62 @@ final class WorkspaceTests: XCTestCase {
         // Settings scrolled down to the device list; the account section is at the top.
         if !app.buttons["Remove local session"].exists { app.swipeDown() }
         XCTAssertTrue(app.buttons["Remove local session"].waitForExistence(timeout: 5), "This device stays signed in")
+    }
+    @MainActor func testSelectSeveralTasksAndChangeThemTogether() async throws {
+        let app = try await signedInApp()
+        var ids: [String: String] = [:]
+        // Due today, so they show in Today without searching. Searching hides the navigation bar.
+        let today = Date().formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
+        for letter in ["A", "B", "C"] {
+            let created = try await request("/api/v1/tasks", method: "POST", body: ["title": "\(taskTitle) \(letter)", "priority": 4, "due_date": today]) as! [String:Any]
+            ids[letter] = created["id"] as? String
+        }
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(taskTitle) C")).firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        // Phones have no modifier keys, so selecting starts from the toolbar.
+        XCTAssertTrue(app.buttons["Select"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Select"].firstMatch.tap()
+        app.buttons["Select \(taskTitle) A"].tap()
+        app.buttons["Select \(taskTitle) B"].tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["Select \(taskTitle) A"].isSelected)
+        app.buttons["Priority"].tap()
+        XCTAssertTrue(app.buttons["Urgent"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Urgent"].tap()
+        var priorities: [String: Int] = [:]
+        for _ in 0..<10 {
+            let tasks = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
+            for task in tasks { if let id = task["id"] as? String { priorities[id] = task["priority"] as? Int } }
+            if priorities[ids["B"]!] == 1 { break }
+            try await Task.sleep(for: .milliseconds(300))
+        }
+        XCTAssertEqual(priorities[ids["A"]!], 1)
+        XCTAssertEqual(priorities[ids["B"]!], 1)
+        XCTAssertEqual(priorities[ids["C"]!], 4, "Unselected tasks keep their priority")
+        // The selection survives the change, so it can be deleted next.
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Delete"].tap()
+        let confirm = app.buttons["Delete 2 tasks"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), app.debugDescription)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForNonExistence(timeout: 10), "Selection ends when its tasks are gone: " + app.debugDescription)
+        let remaining = (try await request("/api/v1/tasks?limit=200") as! [[String:Any]]).compactMap { $0["id"] as? String }
+        XCTAssertFalse(remaining.contains(ids["A"]!))
+        XCTAssertFalse(remaining.contains(ids["B"]!))
+        XCTAssertTrue(remaining.contains(ids["C"]!))
+        // A task's own menu can start a selection too.
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(taskTitle) C")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Select"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Select"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5), app.debugDescription)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "iOS selection"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForNonExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["Complete \(taskTitle) C"].exists, app.debugDescription)
     }
     @MainActor func testQuickEntryAndPersistence() async throws {
         continueAfterFailure = false
@@ -255,24 +317,22 @@ final class WorkspaceTests: XCTestCase {
         let row = app.buttons.containing(.staticText, identifier: taskTitle).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
         row.tap()
-        XCTAssertTrue(app.navigationBars["Edit task"].waitForExistence(timeout: 5), app.debugDescription)
-        XCTAssertEqual(field.value as? String, taskTitle)
+        XCTAssertTrue(app.textFields["Task title"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertEqual(app.textFields["Task title"].value as? String, taskTitle)
         let description = app.textFields["Description"]
         XCTAssertTrue(description.waitForExistence(timeout: 5))
         description.tap(); description.typeText("Edited on iPhone")
-        // Dismiss the keyboard and scroll the form to the reminder controls.
-        app.swipeUp()
+        // The details follow the content on a phone.
         let reminder = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Reminder")).firstMatch
         if !reminder.isHittable { app.swipeUp() }
         XCTAssertTrue(reminder.waitForExistence(timeout: 5), app.debugDescription)
         reminder.tap()
         app.buttons["15 minutes before"].tap()
-        // A reminder offers the choice of a notification or an alarm.
-        let alert = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Alert")).firstMatch
-        if !alert.isHittable { app.swipeUp() }
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), app.debugDescription)
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.navigationBars["Edit task"].waitForNonExistence(timeout: 10), app.debugDescription)
+        let details = XCTAttachment(screenshot: app.screenshot())
+        details.name = "Task view details"; details.lifetime = .keepAlways; add(details)
+        app.buttons["Close task"].tap()
+        XCTAssertTrue(app.textFields["Task title"].waitForNonExistence(timeout: 10), app.debugDescription)
+        try await waitForSaved(task["id"] as! String) { $0["description"] as? String == "Edited on iPhone" && $0["reminder_minutes"] as? Int == 15 }
         let afterEdit = try await request("/api/v1/tasks?limit=200") as! [[String:Any]]
         let edited = try XCTUnwrap(afterEdit.first { $0["id"] as? String == task["id"] as? String })
         XCTAssertEqual(edited["description"] as? String, "Edited on iPhone")

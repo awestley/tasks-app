@@ -28,7 +28,8 @@ test("links, alert style, snooze, notification settings and the API reference", 
   const task = await created.json();
   await page.goto(`/#/task/${task.id}`);
   await page.reload();
-  const detail = page.getByRole("complementary", { name: "Task details" });
+  // On a desktop width the task opens as a dialog over the list.
+  const detail = page.getByRole("dialog", { name: "Task details" });
   await expect(detail.getByLabel("Task title")).toHaveValue(title);
 
   // A link saves at once, separately from the task's version.
@@ -53,6 +54,8 @@ test("links, alert style, snooze, notification settings and the API reference", 
   expect((await current(page, task.id)).snoozed_until).not.toBeNull();
 
   // Notification settings are saved on the server for every device.
+  await detail.getByRole("button", { name: "Close task" }).click();
+  await expect(detail).toBeHidden();
   await page.getByRole("button", { name: "Settings & integrations" }).click();
   await page.getByLabel("Morning summary").check();
   await expect

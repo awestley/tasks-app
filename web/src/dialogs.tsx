@@ -199,6 +199,8 @@ export const SHORTCUTS: [string, string][] = [
   ["V", "Move to a project"],
   ["D", "Duplicate"],
   ["⇧ G", "Go to the task's project"],
+  ["⌘ click  ⇧ click", "Select several tasks"],
+  ["⌘ A", "Select all tasks"],
   ["G then T, I, U, C", "Go to Today, Inbox, Upcoming, Completed"],
   ["M", "Show or hide the sidebar"],
   ["⌘ Z", "Undo"],

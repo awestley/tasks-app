@@ -95,6 +95,32 @@ import Combine
             try await self.refresh()
         }
     }
+    /// Applies the same change to several tasks, one request each, then refreshes once.
+    func updateMany(_ targets: [TodoTask], _ fields: [String: Any]) async {
+        await perform {
+            do {
+                for task in targets {
+                    let _: TodoTask = try await self.api.request("/api/v1/tasks/\(task.id)", method: "PATCH", body: API.body(fields.merging(["version": task.version]) { $1 }))
+                }
+            } catch {
+                // Show the tasks that did change before reporting the one that did not.
+                try? await self.refresh()
+                throw error
+            }
+            try await self.refresh()
+        }
+    }
+    func deleteMany(_ targets: [TodoTask]) async {
+        await perform {
+            do {
+                for task in targets { try await self.api.send("/api/v1/tasks/\(task.id)?version=\(task.version)", method: "DELETE") }
+            } catch {
+                try? await self.refresh()
+                throw error
+            }
+            try await self.refresh()
+        }
+    }
     /// Notifies every enabled device about the task again later.
     func snooze(_ task: TodoTask, minutes: Int? = nil, until: Date? = nil) async {
         await perform {

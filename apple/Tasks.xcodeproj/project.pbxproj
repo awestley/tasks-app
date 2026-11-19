@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0EFF070612F2376176B52DB4 /* Glassive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79980773DF35665A3DB1B5C4 /* Glassive.swift */; };
+		05F2DDD075A67602A3FFD569 /* TaskDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62A83A1D6E4DAD9268C36C7 /* TaskDetail.swift */; };
 		1940E29CEDA263E39784D530 /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46131F91E1164552AF480C5B /* Intents.swift */; };
 		295A213470E229B58223E60A /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5649D5E7531A3656441975 /* API.swift */; };
 		2C63CA111305655B95458C68 /* Tasks-NotificationService-iOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B9201041E212F99517022A59 /* Tasks-NotificationService-iOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -15,10 +15,13 @@
 		3A7309CD81F50C0ACE47B49A /* TaskEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026AB11AA908686F0B19DB00 /* TaskEntity.swift */; };
 		3F8956976E59ADC1F1772444 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A033482BFB9F834DBC142E3 /* Models.swift */; };
 		428BBB1289D44B3A0DD33A56 /* TasksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8771DD3D91EAEBD9B4C0D6F1 /* TasksApp.swift */; };
+		43FB8F39412903403E94C279 /* TaskDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = B62A83A1D6E4DAD9268C36C7 /* TaskDetail.swift */; };
 		44532CCCD8232F0DC8568CBA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11BCC0DD7B6F0C999130CD79 /* Assets.xcassets */; };
+		52A6670DEB871C8CBECC03C2 /* Clean.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488436070E5C35F1214EF487 /* Clean.swift */; };
 		54D963A0B9C67870C9CD5EF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11BCC0DD7B6F0C999130CD79 /* Assets.xcassets */; };
 		619943B1F9E5C4BBDE38795B /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A033482BFB9F834DBC142E3 /* Models.swift */; };
 		66AD909C47B35F09031CAA82 /* TaskEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026AB11AA908686F0B19DB00 /* TaskEntity.swift */; };
+		6DB7071B7A189B0962D8B0D6 /* Clean.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488436070E5C35F1214EF487 /* Clean.swift */; };
 		6F1B54B0937354F08D101981 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A5649D5E7531A3656441975 /* API.swift */; };
 		79DA5FE0D1089CBCACEA03DB /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A995FF9F96809FB8CDC60 /* Notifications.swift */; };
 		79EB6A0A3164833FFCCFE258 /* Tasks-NotificationService-macOS.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 34132EF9F713BA6E3CC716CF /* Tasks-NotificationService-macOS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -38,7 +41,6 @@
 		E50854C22A70AB57992C6AC2 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA488F0183657898D2FBA4B1 /* Views.swift */; };
 		E9057535CBBCE37C6C2AD9C3 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A033482BFB9F834DBC142E3 /* Models.swift */; };
 		EB0719B3E1D66B7FC062FD69 /* WorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D779A662E1019558C5E7C59 /* WorkspaceTests.swift */; };
-		FE19C74F2DE02319BB16685D /* Glassive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79980773DF35665A3DB1B5C4 /* Glassive.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,17 +98,18 @@
 		34132EF9F713BA6E3CC716CF /* Tasks-NotificationService-macOS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Tasks-NotificationService-macOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3CC7647A70EFAA98AA2C81F5 /* Tasks-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Tasks-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		46131F91E1164552AF480C5B /* Intents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intents.swift; sourceTree = "<group>"; };
+		488436070E5C35F1214EF487 /* Clean.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clean.swift; sourceTree = "<group>"; };
 		5A033482BFB9F834DBC142E3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5B5F1A02888AAE357AAD21A7 /* Tasks-iOS-UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "Tasks-iOS-UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E1A995FF9F96809FB8CDC60 /* Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
 		6A5649D5E7531A3656441975 /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
-		79980773DF35665A3DB1B5C4 /* Glassive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glassive.swift; sourceTree = "<group>"; };
 		7E071C3E36EAAAE726B270E6 /* Info-iOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-iOS.plist"; sourceTree = "<group>"; };
 		8771DD3D91EAEBD9B4C0D6F1 /* TasksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksApp.swift; sourceTree = "<group>"; };
 		87CB6E142C1A3ED4906E0B00 /* Tasks-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tasks-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8931CE56D48D2D5BF8132AC8 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		9D779A662E1019558C5E7C59 /* WorkspaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTests.swift; sourceTree = "<group>"; };
 		AA488F0183657898D2FBA4B1 /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
+		B62A83A1D6E4DAD9268C36C7 /* TaskDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetail.swift; sourceTree = "<group>"; };
 		B9201041E212F99517022A59 /* Tasks-NotificationService-iOS.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "Tasks-NotificationService-iOS.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5AA0AEC2AC6155883BD90BF /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		DB6FAA8372B3313CEA4243E0 /* Alarms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alarms.swift; sourceTree = "<group>"; };
@@ -119,12 +122,13 @@
 				DB6FAA8372B3313CEA4243E0 /* Alarms.swift */,
 				6A5649D5E7531A3656441975 /* API.swift */,
 				11BCC0DD7B6F0C999130CD79 /* Assets.xcassets */,
-				79980773DF35665A3DB1B5C4 /* Glassive.swift */,
+				488436070E5C35F1214EF487 /* Clean.swift */,
 				7E071C3E36EAAAE726B270E6 /* Info-iOS.plist */,
 				46131F91E1164552AF480C5B /* Intents.swift */,
 				5A033482BFB9F834DBC142E3 /* Models.swift */,
 				5E1A995FF9F96809FB8CDC60 /* Notifications.swift */,
 				8931CE56D48D2D5BF8132AC8 /* Store.swift */,
+				B62A83A1D6E4DAD9268C36C7 /* TaskDetail.swift */,
 				026AB11AA908686F0B19DB00 /* TaskEntity.swift */,
 				8771DD3D91EAEBD9B4C0D6F1 /* TasksApp.swift */,
 				AA488F0183657898D2FBA4B1 /* Views.swift */,
@@ -272,7 +276,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					1449CE9FB9AD15DCA6CB17AC = {
 						ProvisioningStyle = Automatic;
@@ -363,11 +367,12 @@
 			files = (
 				295A213470E229B58223E60A /* API.swift in Sources */,
 				8E9F49D58B20A508D2D675CE /* Alarms.swift in Sources */,
-				FE19C74F2DE02319BB16685D /* Glassive.swift in Sources */,
+				52A6670DEB871C8CBECC03C2 /* Clean.swift in Sources */,
 				B3267C082D308D4A47206775 /* Intents.swift in Sources */,
 				8B6D7E13FB18430B8E37C3DD /* Models.swift in Sources */,
 				A6E88AFE8D69689B5D70D3A2 /* Notifications.swift in Sources */,
 				D4A996AA78D3E33671B76FC9 /* Store.swift in Sources */,
+				05F2DDD075A67602A3FFD569 /* TaskDetail.swift in Sources */,
 				3A7309CD81F50C0ACE47B49A /* TaskEntity.swift in Sources */,
 				428BBB1289D44B3A0DD33A56 /* TasksApp.swift in Sources */,
 				D878E31BFCC8048826D1A30D /* Views.swift in Sources */,
@@ -387,11 +392,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				DE90DFD49E8316A7D82FB4F7 /* API.swift in Sources */,
-				0EFF070612F2376176B52DB4 /* Glassive.swift in Sources */,
+				6DB7071B7A189B0962D8B0D6 /* Clean.swift in Sources */,
 				1940E29CEDA263E39784D530 /* Intents.swift in Sources */,
 				619943B1F9E5C4BBDE38795B /* Models.swift in Sources */,
 				79DA5FE0D1089CBCACEA03DB /* Notifications.swift in Sources */,
 				AA71993C2D0E62AA06A3BBAD /* Store.swift in Sources */,
+				43FB8F39412903403E94C279 /* TaskDetail.swift in Sources */,
 				66AD909C47B35F09031CAA82 /* TaskEntity.swift in Sources */,
 				3476356596E2D483835FBB1F /* TasksApp.swift in Sources */,
 				E50854C22A70AB57992C6AC2 /* Views.swift in Sources */,
