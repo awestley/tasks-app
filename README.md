@@ -147,7 +147,17 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 }
 ```
 
-Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools: `list_tasks`, `get_task`, `list_projects`, `create_task`, `update_task`, `complete_task`, `snooze_task`, `delete_task`, `create_project`, `update_project`, `parse_task`, and for links `link_item`, `unlink_item`, `list_project_links`, `find_linked`. Prompts: `flesh_out_task`, `plan_project`, `capture_in_notebook`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change.
+Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools:
+
+- Finding: `search` (ranked, the same results as the app's search, matching checklist items and labels too), `list_tasks` (filters), `get_task`, `list_projects`, `get_project` (with its links).
+- Changing one task: `create_task`, `update_task` (with `undo` to reverse a completion you just made), `complete_task`, `snooze_task`, `delete_task`, `parse_task` (preview quick-entry text).
+- Changing several tasks, like selecting them in the apps: `update_tasks` (complete or reopen, date, priority, move to a project or space, labels) and `delete_tasks`. Each task is changed on its own with its own version, and the result lists any that failed.
+- Projects: `create_project`, `update_project`, `delete_project` (its tasks move to Inbox).
+- Links: `link_item`, `unlink_item`, `find_linked` (stored links and `[[note:<id>]]` mentions in descriptions).
+
+Prompts: `flesh_out_task`, `plan_project`, `capture_in_notebook`. Read a task's version before modifying it. A stale update returns 409 rather than silently overwriting another device's change. Errors carry the API's own message.
+
+Over HTTP the tools call the API inside the same server, so `TASKS_API_URL` only matters for the stdio adapter.
 
 ### Working with other apps
 

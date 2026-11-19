@@ -8,19 +8,31 @@ import httpx
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
+from pydantic import BaseModel, Field
 
 from .schemas import ChecklistItem
+
+
+class TaskVersion(BaseModel):
+    """One task to change, with the version from your last read of it."""
+
+    task_id: str
+    version: int = Field(ge=1)
+
 
 mcp = FastMCP(
     "Tasks",
     instructions=(
-        "Manage the user's tasks and projects. Read before editing, and supply the returned version. "
-        "Dates are local calendar dates. Only make changes the user has requested. "
+        "Manage the user's tasks and projects. Find tasks with search (ranked, matches titles, descriptions, "
+        "checklists and labels) or list_tasks (filters by project, label, due date or completion). Read before "
+        "editing, and supply the returned version. Dates are local calendar dates. Only make changes the user "
+        "has requested. To change several tasks the same way, use update_tasks. "
         "Tasks is the hub for the user's work: a task or project can link to items in other apps by "
         "reference (pc://<app>/<type>/<id>, for example pc://notes/note/<id> from the Notebook server) "
-        "or to web pages. Every task and project has its own ref; when you write about one in another app, "
-        "use [[task:<id>|Title]] or [[project:<id>|Name]]. The prompts flesh_out_task, plan_project and "
-        "capture_in_notebook describe common workflows across servers."
+        "or to web pages, with link_item or by writing [[note:<id>|Title]] in a task's description. "
+        "find_linked finds both kinds. Every task and project has its own ref; when you write about one in "
+        "another app, use [[task:<id>|Title]] or [[project:<id>|Name]]. The prompts flesh_out_task, "
+        "plan_project and capture_in_notebook describe common workflows across servers."
     ),
     stateless_http=True,
     json_response=True,
@@ -39,6 +51,21 @@ def http_app(public_url: str):
     return mcp.streamable_http_app()
 
 
+def api_client(request) -> tuple[httpx.AsyncClient, str]:
+    """Over HTTP the tools run inside the API server, so they call it in process: no address to configure,
+    and the request still passes the same authentication, validation and middleware. Over stdio they call
+    TASKS_API_URL."""
+    if request is not None:
+        from .main import app  # The API imports this module to mount it, so import it when first needed.
+
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), timeout=20), "http://tasks.internal"
+    base = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000").rstrip("/")
+    url = urlparse(base)
+    if url.scheme != "https" and not (url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1"}):
+        raise ValueError("TASKS_API_URL must use HTTPS, except for localhost")
+    return httpx.AsyncClient(timeout=20), base
+
+
 async def call(ctx: Context, path: str, method="GET", data=None, params=None):
     request = ctx.request_context.request
     token = (
@@ -48,21 +75,31 @@ async def call(ctx: Context, path: str, method="GET", data=None, params=None):
     )
     if not token:
         raise ValueError("Set TASKS_TOKEN or send a Bearer token with your MCP request")
-    base = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000").rstrip("/")
-    url = urlparse(base)
-    if url.scheme != "https" and not (url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1"}):
-        raise ValueError("TASKS_API_URL must use HTTPS, except for localhost")
-    async with httpx.AsyncClient(timeout=20) as client:
+    client, base = api_client(request)
+    async with client:
         response = await client.request(
             method, base + "/api/v1" + path, json=data, params=params, headers={"Authorization": "Bearer " + token}
         )
         if not response.is_success:
-            try:
-                detail = response.json().get("detail", "Request failed")
-            except ValueError:
-                detail = "Request failed"
-            raise ValueError(f"The server returned {response.status_code}: {detail}")
+            raise ValueError(f"The server returned {response.status_code}: {error_text(response)}")
         return response.json() if response.status_code != 204 else {"ok": True}
+
+
+def error_text(response) -> str:
+    """The API's own words: FastAPI's detail (a message, or the first validation error), or the shared
+    search contract's error code."""
+    try:
+        body = response.json()
+    except ValueError:
+        return "Request failed"
+    if not isinstance(body, dict):
+        return "Request failed"
+    detail = body.get("detail") or body.get("error")
+    if isinstance(detail, list) and detail and isinstance(detail[0], dict):
+        first = detail[0]
+        where = ".".join(str(part) for part in first.get("loc", [])[1:])
+        return f"{where}: {first.get('msg', 'invalid')}" if where else str(first.get("msg", "Invalid input"))
+    return str(detail) if detail else "Request failed"
 
 
 def task_path(task_id: str, suffix: str = "") -> str:
@@ -89,6 +126,59 @@ write = ToolAnnotations(readOnlyHint=False, destructiveHint=False)
 destructive = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
 
 
+TASK_FIELDS = {
+    "title",
+    "description",
+    "project_id",
+    "space",
+    "due_date",
+    "due_time",
+    "time_zone",
+    "reminder_minutes",
+    "priority",
+    "labels",
+    "recurrence",
+    "completed",
+    "checklist",
+    "alert_style",
+}
+# What the apps change on several selected tasks at once.
+BULK_FIELDS = {"completed", "due_date", "due_time", "priority", "project_id", "space", "labels"}
+MAX_BULK = 100
+
+
+def bulk_targets(tasks: list[TaskVersion]) -> list[tuple[str, int]]:
+    if not tasks or len(tasks) > MAX_BULK:
+        raise ValueError(f"Give 1 to {MAX_BULK} tasks, each with task_id and version")
+    if len({item.task_id for item in tasks}) != len(tasks):
+        raise ValueError("Give each task once")
+    for item in tasks:
+        task_path(item.task_id)
+    return [(item.task_id, item.version) for item in tasks]
+
+
+async def each(ctx: Context, targets, action) -> dict:
+    """Run an action per task and report each outcome, so one stale version doesn't stop the rest."""
+    results = []
+    for task_id, version in targets:
+        try:
+            result = await action(task_id, version)
+            results.append({"task_id": task_id, "ok": True, "version": (result or {}).get("version")})
+        except ValueError as error:
+            results.append({"task_id": task_id, "ok": False, "error": str(error)})
+    done = sum(1 for result in results if result["ok"])
+    return {"changed": done, "failed": len(results) - done, "results": results}
+
+
+@mcp.tool(annotations=read_only)
+async def search(
+    ctx: Context, query: str, types: str | None = None, limit: int = 20, cursor: str | None = None
+) -> dict:
+    """Search tasks and projects, best match first. Matches task titles, descriptions, checklist items and labels, and project names; "quoted phrases" match exactly. types: task, project or task,project. limit: 1 to 50. Pass next_cursor back as cursor for more. Each item has its ref (pc://tasks/task/<id>), title, subtitle (due date and project), snippet and version. Results cover both the work and personal spaces; to stay in one, use list_tasks with space or check each task."""
+    params = {"q": query, "types": types, "limit": limit, "cursor": cursor}
+    return await call(ctx, "/search", params={k: v for k, v in params.items() if v is not None})
+
+
 @mcp.tool(annotations=read_only)
 async def list_tasks(
     ctx: Context,
@@ -100,8 +190,8 @@ async def list_tasks(
     due_before: str | None = None,
     offset: int = 0,
     limit: int = 100,
-) -> list:
-    """Find tasks. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. space is 'work' or 'personal'; the user keeps the two apart. Dates: YYYY-MM-DD."""
+) -> list[dict]:
+    """List tasks by filter, oldest first. query matches title or description text. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. space is 'work' or 'personal'; the user keeps the two apart. Dates: YYYY-MM-DD. To find tasks by words, prefer search."""
     params = {
         "q": query,
         "offset": offset,
@@ -122,15 +212,16 @@ async def get_task(ctx: Context, task_id: str) -> dict:
 
 
 @mcp.tool(annotations=read_only)
-async def list_projects(ctx: Context, space: str | None = None) -> list:
+async def list_projects(ctx: Context, space: str | None = None) -> list[dict]:
     """List the user's project IDs, names, colors, spaces (work or personal) and refs."""
     return await call(ctx, "/projects", params={"space": space} if space else None)
 
 
 @mcp.tool(annotations=read_only)
-async def list_project_links(ctx: Context, project_id: str) -> list:
-    """List what a project links to: notes, other items and web pages."""
-    return await call(ctx, project_path(project_id, "/links"))
+async def get_project(ctx: Context, project_id: str) -> dict:
+    """Read one project with its ref and its links to notes, other items and web pages. For its tasks, call list_tasks with this project_id."""
+    project = await call(ctx, project_path(project_id))
+    return {**project, "links": await call(ctx, project_path(project_id, "/links"))}
 
 
 @mcp.tool(annotations=write)
@@ -162,13 +253,13 @@ async def link_item(
 async def unlink_item(ctx: Context, link_id: str, task_id: str | None = None, project_id: str | None = None) -> dict:
     """Remove one link from a task or a project. The linked item itself is not changed."""
     if not re.fullmatch(r"[0-9a-fA-F-]{36}", link_id):
-        raise ValueError("link_id must be an ID returned by get_task or list_project_links")
+        raise ValueError("link_id must be an ID returned by get_task or get_project")
     return await call(ctx, owner_path(task_id, project_id) + "/" + link_id, "DELETE")
 
 
 @mcp.tool(annotations=read_only)
 async def find_linked(ctx: Context, ref: str) -> dict:
-    """Find the tasks and projects that link to a reference, for example the tasks for a note (pc://notes/note/<id>). Returns items with each one's ref, title and url."""
+    """Find the tasks and projects that point at a reference, for example the tasks for a note (pc://notes/note/<id>): those with a stored link, and tasks whose description mentions it as [[note:<id>]] or the full ref. Returns items with each one's ref, title, subtitle and url."""
     return await call(ctx, "/references", params={"target": ref})
 
 
@@ -213,27 +304,27 @@ async def create_task(
 
 
 @mcp.tool(annotations=write)
-async def update_task(ctx: Context, task_id: str, version: int, changes: dict) -> dict:
-    """Edit a task using its current version. Changes may include title, description, project_id, space (work or personal; changing only space takes the task out of its project), due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. On 409, reread before retrying."""
-    allowed = {
-        "title",
-        "description",
-        "project_id",
-        "space",
-        "due_date",
-        "due_time",
-        "time_zone",
-        "reminder_minutes",
-        "priority",
-        "labels",
-        "recurrence",
-        "completed",
-        "checklist",
-        "alert_style",
-    }
-    if not changes or not set(changes).issubset(allowed):
+async def update_task(ctx: Context, task_id: str, version: int, changes: dict, undo: bool = False) -> dict:
+    """Edit a task using its current version. Changes may include title, description, project_id, space (work or personal; changing only space takes the task out of its project), due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. To reverse a completion you just made, send completed=false with undo=true: a recurring task's new next occurrence is then removed too, if it hasn't been changed. On 409, reread before retrying."""
+    if not changes or not set(changes).issubset(TASK_FIELDS):
         raise ValueError("Supply at least one supported task field")
-    return await call(ctx, task_path(task_id), "PATCH", {**changes, "version": version})
+    body = {**changes, "version": version}
+    if undo:
+        if changes.get("completed") is not False:
+            raise ValueError("undo only applies with completed=false")
+        body["undo"] = True
+    return await call(ctx, task_path(task_id), "PATCH", body)
+
+
+@mcp.tool(annotations=write)
+async def update_tasks(ctx: Context, tasks: list[TaskVersion], changes: dict) -> dict:
+    """Apply the same change to several tasks, as selecting tasks in the apps does: complete or reopen (completed), reschedule (due_date, due_time), set priority, move (project_id, null for Inbox), move to the 'work' or 'personal' space (space alone takes tasks out of their projects) or set labels. tasks is a list of {task_id, version} from your last read, up to 100. Each task is changed on its own and reported in results; on a 409 for one, reread it and retry only that one."""
+    if not changes or not set(changes).issubset(BULK_FIELDS):
+        raise ValueError("Changes may include " + ", ".join(sorted(BULK_FIELDS)))
+    targets = bulk_targets(tasks)
+    return await each(
+        ctx, targets, lambda task_id, version: call(ctx, task_path(task_id), "PATCH", {**changes, "version": version})
+    )
 
 
 @mcp.tool(annotations=write)
@@ -255,10 +346,25 @@ async def delete_task(ctx: Context, task_id: str, version: int) -> dict:
     return await call(ctx, task_path(task_id), "DELETE", params={"version": version})
 
 
+@mcp.tool(annotations=destructive)
+async def delete_tasks(ctx: Context, tasks: list[TaskVersion]) -> dict:
+    """Permanently delete several tasks, each given as {task_id, version} from your last read, up to 100. Only do this at the user's explicit request, after listing what will be deleted."""
+    targets = bulk_targets(tasks)
+    return await each(
+        ctx, targets, lambda task_id, version: call(ctx, task_path(task_id), "DELETE", params={"version": version})
+    )
+
+
 @mcp.tool(annotations=write)
 async def create_project(ctx: Context, name: str, color: str = "#2563eb", space: str = "personal") -> dict:
     """Create a project in the 'work' or 'personal' space. Color must be a six-digit hexadecimal color including #."""
     return await call(ctx, "/projects", "POST", {"name": name, "color": color, "space": space})
+
+
+@mcp.tool(annotations=destructive)
+async def delete_project(ctx: Context, project_id: str) -> dict:
+    """Delete a project. Its tasks are kept and move to Inbox; its links are removed. Only do this at the user's explicit request."""
+    return await call(ctx, project_path(project_id), "DELETE")
 
 
 @mcp.tool(annotations=read_only)
@@ -294,7 +400,7 @@ def flesh_out_task(task_id: str, guidance: str = "") -> str:
 def plan_project(project_id: str, goal: str = "") -> str:
     """Break a project into tasks, using its linked notes for context."""
     return (
-        f"Plan project {project_id}. Call list_projects and list_project_links, then list_tasks with this "
+        f"Plan project {project_id}. Call get_project for its name and links, then list_tasks with this "
         f"project_id to see what exists. {NOTEBOOK_HINT}\n\n"
         "Propose the missing tasks as a short ordered list (title, optional due date, priority, checklist), "
         "without duplicating existing tasks. After the user approves, create them with create_task in this "
