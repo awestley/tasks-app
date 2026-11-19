@@ -46,7 +46,7 @@ Completing a task checks every checklist item atomically. Reopening the task pre
 
 ## Quick entry and reminders
 
-`POST /api/v1/tasks/parse` accepts `text` and an IANA `time_zone`, returning a parsed title, optional scheduling/project/priority fields, labels and recognized phrases without saving. Project lookup is scoped to the caller. The `parse_task` MCP tool uses the same endpoint. Clients show the preview before applying it. Standard task creation accepts explicit fields and does not silently parse titles.
+`POST /api/v1/tasks/parse` accepts `text` and an IANA `time_zone`, returning a parsed title, optional scheduling/project/priority fields, labels and recognized phrases without saving. Project lookup is scoped to the caller. The `parse_task` MCP tool uses the same endpoint. Clients show the preview before applying it. Standard task creation accepts explicit fields and does not silently parse titles. Siri's Add Task and the `add_task` MCP tool parse, then create with explicit fields; when nothing is recognized, the text becomes the title unchanged.
 
 Tasks now include optional `due_time` (HH:MM), `time_zone` (IANA, UTC default for API clients), and `reminder_minutes` (null or an integer 0 through 10080). A time requires a date; a reminder requires both. PATCH omission preserves fields; null clears the time or reminder, but not the time zone. Clear dependent fields together when removing a date. Existing task version checks apply to schedule edits. See [reminder semantics](reminders.md) for DST, recurrence and delivery guarantees.
 
