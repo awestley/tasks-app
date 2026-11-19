@@ -38,7 +38,15 @@ import {
   usePc,
   useSurface,
 } from "@awestley/pc-runtime/react";
-import { api, localDate, type Project, type Task } from "./api";
+import {
+  api,
+  localDate,
+  spaceNames,
+  spaceOf,
+  type Project,
+  type Space,
+  type Task,
+} from "./api";
 import { ContextMenu, type MenuEntry, type MenuRequest } from "./ContextMenu";
 import { clearStaleNotifications, disableBrowserPush } from "./PushSettings";
 import { MainColumn, PhonePage } from "./layouts";
@@ -157,8 +165,18 @@ function Workspace({
 }) {
   const user = S.useStore((s) => s.user)!;
   const config = S.useStore((s) => s.config);
-  const tasks = S.useStore((s) => s.tasks);
-  const projects = S.useStore((s) => s.projects);
+  const allTasks = S.useStore((s) => s.tasks);
+  const allProjects = S.useStore((s) => s.projects);
+  // Work and personal are never shown together: everything below sees only the current space.
+  const space = S.useStore((s) => s.space);
+  const tasks = useMemo(
+    () => allTasks.filter((t) => spaceOf(t) === space),
+    [allTasks, space],
+  );
+  const projects = useMemo(
+    () => allProjects.filter((p) => spaceOf(p) === space),
+    [allProjects, space],
+  );
   const online = S.useStore((s) => s.online);
   const pending = S.useStore((s) => s.pending);
   const retrying = S.useStore((s) => s.retrying);
@@ -277,10 +295,41 @@ function Workspace({
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
   }, []);
+  // A link to a task or project in the other space opens that space.
+  useEffect(() => {
+    const t = openId && allTasks.find((x) => x.id === openId);
+    const p =
+      view.startsWith("project:") &&
+      allProjects.find((x) => x.id === view.slice(8));
+    const target = t || p;
+    if (target && spaceOf(target) !== S.getState().space)
+      S.setSpace(spaceOf(target));
+    // Only when the route changes, so another tab switching space is not undone here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, openId, allTasks.length > 0]);
+  // Another view switched space: leave a project of the other space.
+  useEffect(() => {
+    if (
+      view.startsWith("project:") &&
+      allProjects.some((p) => p.id === view.slice(8) && spaceOf(p) !== space)
+    )
+      navigate("today");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [space]);
+  function switchSpace(next: Space) {
+    if (next === space) return;
+    S.setSpace(next);
+    const screen = phoneScreen;
+    navigate(
+      view.startsWith("project:") || view.startsWith("label:") ? "today" : view,
+    );
+    // Switching from the phone's Browse screen stays there.
+    if (screen === "browse") setPhoneScreen("browse");
+  }
   // #/task/<id> on its own: show the task's list behind it.
   useEffect(() => {
     if (initial.view || !initial.taskId) return;
-    const t = tasks.find((x) => x.id === initial.taskId);
+    const t = allTasks.find((x) => x.id === initial.taskId);
     if (t)
       setView(
         t.completed
@@ -479,6 +528,7 @@ function Workspace({
       title: task.title,
       description: task.description,
       project_id: task.project_id,
+      space: spaceOf(task),
       due_date: task.due_date,
       due_time: task.due_time,
       time_zone: task.time_zone,
@@ -500,6 +550,7 @@ function Workspace({
       title: task.title,
       description: task.description,
       project_id: task.project_id,
+      space: spaceOf(task),
       due_date: task.due_date,
       due_time: task.due_time,
       time_zone: task.time_zone,
@@ -610,6 +661,12 @@ function Workspace({
         chosen,
         () => ({ project_id }),
         `${taskCount(chosen.length)} moved to ${name}`,
+      ),
+    space: (space: Space) =>
+      patchMany(
+        chosen,
+        () => ({ space, project_id: null }),
+        `${taskCount(chosen.length)} moved to ${spaceNames[space]}`,
       ),
     remove: () => {
       const list = chosen;
@@ -856,6 +913,8 @@ function Workspace({
     coarse,
     pc,
     user,
+    space,
+    switchSpace,
     projects,
     active,
     labels,
@@ -1207,11 +1266,24 @@ function Workspace({
         <ProjectEditor
           project={projectEditor === "new" ? null : projectEditor}
           close={() => setProjectEditor(null)}
-          save={(name, color) => {
+          space={space}
+          save={(name, color, projectSpace) => {
             if (projectEditor === "new") {
-              const p = S.createProject(name, color);
+              const p = S.createProject(name, color, projectSpace);
+              if (projectSpace !== space) S.setSpace(projectSpace);
               navigate(`project:${p.id}`);
-            } else S.patchProject(projectEditor.id, { name, color });
+            } else {
+              S.patchProject(projectEditor.id, {
+                name,
+                color,
+                space: projectSpace,
+              });
+              // The project and its tasks left this space.
+              if (projectSpace !== spaceOf(projectEditor)) {
+                navigate("today");
+                notify(`Moved ${name} to ${spaceNames[projectSpace]}`);
+              }
+            }
             setProjectEditor(null);
           }}
           remove={

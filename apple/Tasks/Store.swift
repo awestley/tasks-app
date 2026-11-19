@@ -2,8 +2,15 @@ import Foundation
 import Combine
 
 @MainActor final class Store: ObservableObject {
-    @Published var tasks: [TodoTask] = []
-    @Published var projects: [Project] = []
+    /// Every task and project, in both spaces. Lists use `tasks` and `projects`.
+    @Published var allTasks: [TodoTask] = []
+    @Published var allProjects: [Project] = []
+    /// The space this device shows. Work and personal tasks are never listed together.
+    @Published var space = Space(rawValue: UserDefaults.standard.string(forKey: "space") ?? "") ?? .personal {
+        didSet { UserDefaults.standard.set(space.rawValue, forKey: "space") }
+    }
+    var tasks: [TodoTask] { allTasks.filter { $0.inSpace == space } }
+    var projects: [Project] { allProjects.filter { $0.inSpace == space } }
     @Published var profile: Profile?
     @Published var error: String?
     /// Set while the server cannot be reached, such as "Can't reach localhost:8004." Cleared by the next successful refresh.
@@ -44,8 +51,8 @@ import Combine
     /// so choosing it again signs straight back in.
     func changeServer() {
         profile = nil
-        tasks = []
-        projects = []
+        allTasks = []
+        allProjects = []
         unreachable = nil
         error = nil
     }
@@ -53,8 +60,8 @@ import Combine
     private func endSession() {
         try? Keychain.save(nil, server: server)
         profile = nil
-        tasks = []
-        projects = []
+        allTasks = []
+        allProjects = []
         unreachable = nil
         error = "Your session has ended. Sign in again."
     }
@@ -69,7 +76,7 @@ import Combine
               url.path.isEmpty, url.user == nil, url.password == nil,
               url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1"].contains(host))
         else { throw APIError(message: "Enter an HTTPS origin without a path, such as https://tasks.example.com.") }
-        if self.server != value { profile = nil; tasks = []; projects = []; unreachable = nil }
+        if self.server != value { profile = nil; allTasks = []; allProjects = []; unreachable = nil }
         self.server = value
         UserDefaults.standard.set(value, forKey: "serverURL")
     }
@@ -91,8 +98,8 @@ import Combine
         }
         let (nextProfile, nextProjects) = try await (person, groups)
         profile = nextProfile
-        projects = nextProjects
-        tasks = all
+        allProjects = nextProjects
+        allTasks = all
         unreachable = nil
         Notifications.shared.attach(self)
         // Not awaited: system notification and alarm calls must never hold up the task list.
@@ -162,7 +169,7 @@ import Combine
     }
     func duplicate(_ task: TodoTask) async {
         await perform {
-            let copy = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist.map { ChecklistItem(title: $0.title, completed: $0.completed) }, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification")
+            let copy = TaskDraft(title: task.title, description: task.description, project_id: task.project_id, due_date: task.due_date, due_time: task.due_time, time_zone: task.time_zone, reminder_minutes: task.reminder_minutes, priority: task.priority, labels: task.labels, checklist: task.checklist.map { ChecklistItem(title: $0.title, completed: $0.completed) }, recurrence: task.recurrence, alert_style: task.alert_style ?? "notification", space: task.inSpace.rawValue)
             try await self.save(copy, id: nil)
         }
     }
@@ -183,8 +190,8 @@ import Combine
         Notifications.shared.clearLocal()
         try Keychain.save(nil, server: server)
         profile = nil
-        tasks = []
-        projects = []
+        allTasks = []
+        allProjects = []
         unreachable = nil
     }
     func deleteAccount() async throws {

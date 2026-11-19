@@ -9,6 +9,8 @@ from .scheduling import due_instant, zone_name
 
 # Far from the limits of datetime, so time zone and reminder arithmetic cannot overflow.
 MIN_DUE_YEAR, MAX_DUE_YEAR = 1900, 2999
+# Work and personal tasks are kept apart. A task in a project is in the project's space.
+Space = Literal["personal", "work"]
 
 
 class Model(BaseModel):
@@ -18,6 +20,7 @@ class Model(BaseModel):
 class ProjectIn(Model):
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(default="#2563eb", pattern=r"^#[0-9a-fA-F]{6}$")
+    space: Space = "personal"
 
 
 class ProjectCreate(ProjectIn):
@@ -29,10 +32,13 @@ class ProjectPatch(Model):
     # Omit a field to keep it. Null is invalid, so these defaults only mark the fields as optional.
     name: str = Field(default=None, min_length=1, max_length=100)
     color: str = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    # Moving a project moves its tasks with it.
+    space: Space = None
 
 
 class ProjectOut(ProjectIn):
     id: str
+    space: str = "personal"
 
     @computed_field
     @property
@@ -88,6 +94,8 @@ class TaskIn(Model):
     title: str = Field(min_length=1, max_length=500)
     description: str = Field(default="", max_length=10000)
     project_id: str | None = None
+    # Taken from the project when there is one.
+    space: Space = "personal"
     due_date: date | None = None
     due_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     time_zone: str = Field(default="UTC", max_length=100)
@@ -155,6 +163,8 @@ class TaskPatch(Model):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=10000)
     project_id: str | None = None
+    # Moving a task to the other space without a new project_id takes it out of its project.
+    space: Space | None = None
     due_date: date | None = None
     due_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     time_zone: str | None = Field(default=None, max_length=100)
@@ -183,6 +193,7 @@ class TaskOut(Model):
     title: str
     description: str
     project_id: str | None
+    space: str = "personal"
     due_date: date | None
     due_time: str | None
     time_zone: str
