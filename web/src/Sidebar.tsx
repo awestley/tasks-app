@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { store, viewNames } from "./routes";
+import { SpaceSwitch } from "./SpaceSwitch";
 import type { W } from "./workspaceContext";
 
 const viewIcons = {
@@ -27,6 +28,8 @@ export function Sidebar({ w, status }: { w: W; status: React.ReactNode }) {
     hosted,
     wide,
     user,
+    space,
+    switchSpace,
     projects,
     active,
     labels,
@@ -67,13 +70,11 @@ export function Sidebar({ w, status }: { w: W; status: React.ReactNode }) {
       {!hosted && (
         <button className="workspace-switch" onClick={() => setSettings(true)}>
           <span className="avatar">{user.name.slice(0, 1)}</span>
-          <span>
-            {user.name}
-            <small>Personal workspace</small>
-          </span>
+          <span>{user.name}</span>
           <ChevronDown size={14} />
         </button>
       )}
+      <SpaceSwitch space={space} change={switchSpace} />
       <button className="quick-add" onClick={() => openQuick()}>
         <Plus size={18} /> Add task <kbd>Q</kbd>
       </button>

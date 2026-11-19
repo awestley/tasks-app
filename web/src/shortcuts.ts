@@ -197,7 +197,12 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
       setMenu({
         x: box.left + 40,
         y: box.bottom,
-        entries: projectChoices(w, shared(chosen, "project_id"), bulk.move),
+        entries: projectChoices(
+          w,
+          shared(chosen, "project_id"),
+          bulk.move,
+          bulk.space,
+        ),
         title: "Move to",
         sheet: false,
       });

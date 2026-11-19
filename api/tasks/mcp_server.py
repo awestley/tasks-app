@@ -95,18 +95,20 @@ async def list_tasks(
     query: str = "",
     completed: bool | None = None,
     project_id: str | None = None,
+    space: str | None = None,
     label: str | None = None,
     due_before: str | None = None,
     offset: int = 0,
     limit: int = 100,
 ) -> list:
-    """Find tasks. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. Dates: YYYY-MM-DD."""
+    """Find tasks. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. space is 'work' or 'personal'; the user keeps the two apart. Dates: YYYY-MM-DD."""
     params = {
         "q": query,
         "offset": offset,
         "limit": limit,
         "completed": completed,
         "project_id": project_id,
+        "space": space,
         "label": label,
         "due_before": due_before,
     }
@@ -120,9 +122,9 @@ async def get_task(ctx: Context, task_id: str) -> dict:
 
 
 @mcp.tool(annotations=read_only)
-async def list_projects(ctx: Context) -> list:
-    """List the user's project IDs, names, colors and refs."""
-    return await call(ctx, "/projects")
+async def list_projects(ctx: Context, space: str | None = None) -> list:
+    """List the user's project IDs, names, colors, spaces (work or personal) and refs."""
+    return await call(ctx, "/projects", params={"space": space} if space else None)
 
 
 @mcp.tool(annotations=read_only)
@@ -132,11 +134,13 @@ async def list_project_links(ctx: Context, project_id: str) -> list:
 
 
 @mcp.tool(annotations=write)
-async def update_project(ctx: Context, project_id: str, name: str | None = None, color: str | None = None) -> dict:
-    """Rename a project or change its color (six-digit hexadecimal including #)."""
-    changes = {k: v for k, v in {"name": name, "color": color}.items() if v is not None}
+async def update_project(
+    ctx: Context, project_id: str, name: str | None = None, color: str | None = None, space: str | None = None
+) -> dict:
+    """Rename a project, change its color (six-digit hexadecimal including #), or move it and its tasks to the 'work' or 'personal' space."""
+    changes = {k: v for k, v in {"name": name, "color": color, "space": space}.items() if v is not None}
     if not changes:
-        raise ValueError("Give a name or a color")
+        raise ValueError("Give a name, a color or a space")
     return await call(ctx, project_path(project_id), "PATCH", changes)
 
 
@@ -174,6 +178,7 @@ async def create_task(
     title: str,
     description: str = "",
     project_id: str | None = None,
+    space: str = "personal",
     due_date: str | None = None,
     due_time: str | None = None,
     time_zone: str = "UTC",
@@ -184,7 +189,7 @@ async def create_task(
     checklist: list[ChecklistItem] | None = None,
     alert_style: str = "notification",
 ) -> dict:
-    """Create a task. Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device."""
+    """Create a task. space is 'work' or 'personal' (a task in a project takes the project's space). Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device."""
     return await call(
         ctx,
         "/tasks",
@@ -193,6 +198,7 @@ async def create_task(
             "title": title,
             "description": description,
             "project_id": project_id,
+            "space": space,
             "due_date": due_date,
             "due_time": due_time,
             "time_zone": time_zone,
@@ -208,11 +214,12 @@ async def create_task(
 
 @mcp.tool(annotations=write)
 async def update_task(ctx: Context, task_id: str, version: int, changes: dict) -> dict:
-    """Edit a task using its current version. Changes may include title, description, project_id, due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. On 409, reread before retrying."""
+    """Edit a task using its current version. Changes may include title, description, project_id, space (work or personal; changing only space takes the task out of its project), due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. On 409, reread before retrying."""
     allowed = {
         "title",
         "description",
         "project_id",
+        "space",
         "due_date",
         "due_time",
         "time_zone",
@@ -249,9 +256,9 @@ async def delete_task(ctx: Context, task_id: str, version: int) -> dict:
 
 
 @mcp.tool(annotations=write)
-async def create_project(ctx: Context, name: str, color: str = "#2563eb") -> dict:
-    """Create a project. Color must be a six-digit hexadecimal color including #."""
-    return await call(ctx, "/projects", "POST", {"name": name, "color": color})
+async def create_project(ctx: Context, name: str, color: str = "#2563eb", space: str = "personal") -> dict:
+    """Create a project in the 'work' or 'personal' space. Color must be a six-digit hexadecimal color including #."""
+    return await call(ctx, "/projects", "POST", {"name": name, "color": color, "space": space})
 
 
 @mcp.tool(annotations=read_only)

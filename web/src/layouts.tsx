@@ -14,6 +14,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { spaceNames } from "./api";
 import { BrowseScreen, type PhoneTab } from "./phone";
 import { SelectionBar } from "./SelectionBar";
 import { WeekStrip } from "./pieces";
@@ -74,6 +75,8 @@ export function PhonePage({
       counts={counts}
       projectCount={(id) => active.filter((t) => t.project_id === id).length}
       labelCount={(l) => active.filter((t) => t.labels.includes(l)).length}
+      space={w.space}
+      switchSpace={w.switchSpace}
       go={(next) => navigate(next as View)}
       addProject={() => setProjectEditor("new")}
       projectProps={(p) => menuFor(() => projectMenu(p), p.name)}
@@ -245,7 +248,7 @@ export function MainColumn({ w, parts }: { w: W; parts: LayoutParts }) {
         )}
         {!hosted && (
           <div className="breadcrumb">
-            My workspace <span className="crumb-sep">/</span>{" "}
+            {spaceNames[w.space]} <span className="crumb-sep">/</span>{" "}
             <span>{title}</span>
           </div>
         )}

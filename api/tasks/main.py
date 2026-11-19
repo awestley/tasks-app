@@ -52,6 +52,7 @@ from .schemas import (
     ProjectPatch,
     SessionOut,
     SnoozeIn,
+    Space,
     TaskCreate,
     TaskDetailOut,
     TaskIn,
@@ -256,8 +257,11 @@ def delete_me(request: Request, user=Depends(authenticate), db: Session = Depend
 
 
 @api.get("/projects", response_model=list[ProjectOut])
-def projects(user=Depends(authenticate), db: Session = Depends(get_db)):
-    return db.scalars(select(Project).where(Project.user_id == user.id).order_by(Project.created_at)).all()
+def projects(space: Space | None = None, user=Depends(authenticate), db: Session = Depends(get_db)):
+    query = select(Project).where(Project.user_id == user.id)
+    if space:
+        query = query.where(Project.space == space)
+    return db.scalars(query.order_by(Project.created_at)).all()
 
 
 @api.get("/projects/{project_id}", response_model=ProjectOut)
@@ -293,8 +297,18 @@ def edit_project(project_id: str, data: ProjectPatch, user=Depends(authenticate)
     project = owned(db, Project, project_id, user)
     for name, value in data.model_dump(exclude_unset=True).items():
         setattr(project, name, value)
+    # A project's tasks are always in its space, so they move with it.
+    moved = db.execute(
+        update(Task)
+        .where(Task.project_id == project.id, Task.user_id == user.id, Task.space != project.space)
+        .values(space=project.space, version=Task.version + 1, updated_at=now())
+        .returning(Task.id, Task.version)
+        .execution_options(synchronize_session=False)
+    ).all()
     db.commit()
     events.publish(user.id, project_ref(project.id), "updated")
+    for task_id, version in moved:
+        events.publish(user.id, task_ref(task_id), "updated", version)
     return project
 
 
@@ -328,6 +342,7 @@ def task_revision(user=Depends(authenticate), db: Session = Depends(get_db)):
 def tasks(
     q: str = Query("", max_length=500),
     project_id: str | None = None,
+    space: Space | None = None,
     completed: bool | None = None,
     label: str | None = None,
     due_before: date | None = None,
@@ -341,6 +356,8 @@ def tasks(
         query = query.where(Task.title.icontains(q, autoescape=True) | Task.description.icontains(q, autoescape=True))
     if project_id:
         query = query.where(Task.project_id.is_(None) if project_id == "inbox" else Task.project_id == project_id)
+    if space:
+        query = query.where(Task.space == space)
     if completed is not None:
         query = query.where(Task.completed == completed)
     if due_before:
@@ -365,9 +382,9 @@ def get_task(task_id: str, user=Depends(authenticate), db: Session = Depends(get
 def create_task(data: TaskCreate, response: Response, user=Depends(authenticate), db: Session = Depends(get_db)):
     if data.id and (found := existing(db, Task, str(data.id), user, response)):
         return found
-    if data.project_id is not None:
-        owned(db, Project, data.project_id, user)
     fields = data.model_dump(exclude={"id"})
+    if data.project_id is not None:
+        fields["space"] = owned(db, Project, data.project_id, user).space
     fields["completed_at"] = (fields["completed_at"] or now()) if fields["completed"] else None
     task = Task(id=str(data.id) if data.id else uid(), user_id=user.id, **fields)
     db.add(task)
@@ -401,7 +418,13 @@ def mutate(db, user, task_id, data):
     except ValidationError as error:
         raise HTTPException(422, "Invalid task: " + str(error.errors()[0]["msg"])) from error
     if validated.project_id is not None:
-        owned(db, Project, validated.project_id, user)
+        project = owned(db, Project, validated.project_id, user)
+        if project.space != validated.space:
+            # Sending only a new space moves the task out of its project; otherwise the project decides.
+            if "space" in changes and "project_id" not in changes:
+                validated.project_id = None
+            else:
+                validated.space = project.space
     changes.update(validated.model_dump())
     complete = changes.get("completed", task.completed)
     if complete is None:

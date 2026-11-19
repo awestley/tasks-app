@@ -1059,22 +1059,6 @@
         ],
         "summary": "Projects",
         "operationId": "projects_api_v1_projects_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ProjectOut"
-                  },
-                  "type": "array",
-                  "title": "Response Projects Api V1 Projects Get"
-                }
-              }
-            }
-          }
-        },
         "security": [
           {
             "HTTPBearer": []
@@ -1082,7 +1066,55 @@
           {
             "APIKeyCookie": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "personal",
+                    "work"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Space"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectOut"
+                  },
+                  "title": "Response Projects Api V1 Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "tags": [
@@ -1090,15 +1122,23 @@
         ],
         "summary": "Create Project",
         "operationId": "create_project_api_v1_projects_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProjectCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -1121,15 +1161,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          },
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/projects/{project_id}": {
@@ -1352,6 +1384,26 @@
                 }
               ],
               "title": "Project Id"
+            }
+          },
+          {
+            "name": "space",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "personal",
+                    "work"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Space"
             }
           },
           {
@@ -2935,6 +2987,15 @@
             "title": "Color",
             "default": "#2563eb"
           },
+          "space": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "work"
+            ],
+            "title": "Space",
+            "default": "personal"
+          },
           "id": {
             "anyOf": [
               {
@@ -2969,6 +3030,11 @@
             "title": "Color",
             "default": "#2563eb"
           },
+          "space": {
+            "type": "string",
+            "title": "Space",
+            "default": "personal"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -3000,6 +3066,14 @@
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}$",
             "title": "Color"
+          },
+          "space": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "work"
+            ],
+            "title": "Space"
           }
         },
         "additionalProperties": false,
@@ -3244,6 +3318,15 @@
             ],
             "title": "Project Id"
           },
+          "space": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "work"
+            ],
+            "title": "Space",
+            "default": "personal"
+          },
           "due_date": {
             "anyOf": [
               {
@@ -3396,6 +3479,11 @@
               }
             ],
             "title": "Project Id"
+          },
+          "space": {
+            "type": "string",
+            "title": "Space",
+            "default": "personal"
           },
           "due_date": {
             "anyOf": [
@@ -3573,6 +3661,11 @@
               }
             ],
             "title": "Project Id"
+          },
+          "space": {
+            "type": "string",
+            "title": "Space",
+            "default": "personal"
           },
           "due_date": {
             "anyOf": [
@@ -3761,6 +3854,21 @@
               }
             ],
             "title": "Project Id"
+          },
+          "space": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "personal",
+                  "work"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space"
           },
           "due_date": {
             "anyOf": [

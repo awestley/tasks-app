@@ -97,7 +97,7 @@ enum NotificationAction {
         if let previous, previous != device.id { _ = try? await store.api.send("/api/v1/push/subscriptions/\(previous)", method: "DELETE") }
         status = "Notifications enabled on this device."
         #if os(iOS)
-        await Alarms.shared.sync(store.tasks, force: true)
+        await Alarms.shared.sync(store.allTasks, force: true)
         #endif
     }
     func disable() async throws {

@@ -365,6 +365,10 @@ struct WorkspaceView: View {
         let targets = chosen
         Task { await store.updateMany(targets, fields) }
     }
+    /// Takes the selected tasks out of their projects, into the other space's Inbox.
+    func moveSelected(to space: Space) {
+        update(selected: ["space": space.rawValue, "project_id": NSNull()])
+    }
     var dateChoice: Binding<String?> {
         Binding(get: { shared { $0.due_date ?? "" } }, set: { if let value = $0 { scheduleSelected(value) } })
     }
@@ -401,6 +405,7 @@ struct WorkspaceView: View {
         }
         Divider()
         Picker(selection: projectChoice) { projectOptions } label: { Label("Move to", systemImage: "folder") }.pickerStyle(.menu)
+        Button { moveSelected(to: store.space.other) } label: { Label("Move to \(store.space.other.name)", systemImage: store.space.other.symbol) }
         if chosen.count < filtered.count {
             Button { selectedIDs = Set(filtered.map(\.id)) } label: { Label("Select all", systemImage: "checkmark.square") }
         }
@@ -420,7 +425,10 @@ struct WorkspaceView: View {
                 }
                 Menu { Picker("Date", selection: dateChoice) { dateOptions }.pickerStyle(.inline) } label: { Label("Date", systemImage: "calendar") }
                 Menu { Picker("Priority", selection: priorityChoice) { priorityOptions }.pickerStyle(.inline) } label: { Label("Priority", systemImage: "flag") }
-                Menu { Picker("Move to", selection: projectChoice) { projectOptions }.pickerStyle(.inline) } label: { Label("Move to", systemImage: "folder") }
+                Menu {
+                    Picker("Move to", selection: projectChoice) { projectOptions }.pickerStyle(.inline)
+                    Button { moveSelected(to: store.space.other) } label: { Label(store.space.other.name, systemImage: store.space.other.symbol) }
+                } label: { Label("Move to", systemImage: "folder") }
                 Button(role: .destructive) { pendingBulkDelete = true } label: { Label("Delete", systemImage: "trash") }
             }.disabled(chosen.isEmpty || store.busy)
             #if os(iOS)
@@ -451,6 +459,9 @@ struct WorkspaceView: View {
                     UnreachableBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }
                 #endif
+                Section {
+                    SpacePicker(space: $store.space).listRowSeparator(.hidden)
+                }
                 Section {
                     ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")].filter { includeTabLists || !Self.tabLists.contains($0.0) }, id: \.0) { tag, name, symbol in
                         Label(name, systemImage: symbol).tag(tag)
@@ -615,6 +626,10 @@ struct WorkspaceView: View {
             if size != .compact, ["browse", "search"].contains(selection) { selection = "today" }
         }
         #endif
+        .onChange(of: store.space) {
+            endSelection()
+            if let selection, selection.hasPrefix("label:") || store.allProjects.contains(where: { $0.id == selection }) { self.selection = "today" }
+        }
         // Drop tasks that left the list: completed, deleted, moved or filtered out.
         .onChange(of: filtered.map(\.id)) { _, ids in
             let kept = selectedIDs.intersection(ids)
@@ -636,7 +651,10 @@ struct WorkspaceView: View {
         }
         .onChange(of: notifications.selectedTaskID, initial: true) { _, id in
             guard let id else { return }
-            if let target = store.tasks.first(where: { $0.id == id }) { editor = TaskEditorSelection(task: target) }
+            if let target = store.allTasks.first(where: { $0.id == id }) {
+                store.space = target.inSpace
+                editor = TaskEditorSelection(task: target)
+            }
             notifications.selectedTaskID = nil
         }
         .sheet(item: $editor) { destination in
@@ -663,6 +681,15 @@ struct WorkspaceView: View {
                 try await store.refresh()
             } } }
         }
+    }
+}
+/// Personal or Work. The app shows one space at a time.
+struct SpacePicker: View {
+    @Binding var space: Space
+    var body: some View {
+        Picker("Space", selection: $space) {
+            ForEach(Space.allCases) { Label($0.name, systemImage: $0.symbol).tag($0) }
+        }.pickerStyle(.segmented).labelsHidden()
     }
 }
 /// Title, description and details of a task row.
@@ -766,6 +793,9 @@ struct TaskMenu: View {
             Label("Inbox", systemImage: "tray").tag("")
             ForEach(store.projects) { project in Text("# " + project.name).tag(project.id) }
         } label: { Label("Move to", systemImage: "folder") }.pickerStyle(.menu)
+        Button { Task { await store.update(task, ["space": store.space.other.rawValue, "project_id": NSNull()]) } } label: {
+            Label("Move to \(store.space.other.name)", systemImage: store.space.other.symbol)
+        }
         Button { Task { await store.duplicate(task) } } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
         Button {
             let link = "\(store.server)/?task=\(task.id)"
@@ -828,7 +858,7 @@ struct TaskEditorView: View {
     /// Keeps the draft and adopts the latest version, so the next attempt succeeds on purpose.
     func conflict(_ retry: String) async throws -> APIError {
         try await store.refresh()
-        guard let latest = store.tasks.first(where: { $0.id == task?.id }) else {
+        guard let latest = store.allTasks.first(where: { $0.id == task?.id }) else {
             return APIError(message: "This task was deleted on another device.")
         }
         draft.version = latest.version
@@ -951,7 +981,7 @@ struct TaskEditorView: View {
                     loadTime(task.due_time)
                     hasDate = task.due_date != nil
                     date = task.due_date.map(DateOnly.date) ?? Date()
-                } else { smart = true; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
+                } else { smart = true; draft.space = store.space.rawValue; draft.project_id = initialProject; hasDate = initialDate != nil; date = initialDate ?? Date() }
             }
             .task(id: draft.title + draft.time_zone + String(smart)) {
                 parsed = nil; parsedInput = ""; parseError = ""
@@ -986,6 +1016,7 @@ struct ProjectEditorView: View {
     let project: Project?
     @State private var name = ""
     @State private var color = "#2563eb"
+    @State private var space = Space.personal
     @State private var confirmDelete = false
     var body: some View {
         NavigationStack {
@@ -996,6 +1027,11 @@ struct ProjectEditorView: View {
                         Label(value, systemImage: "circle.fill").foregroundStyle(Color(hex: value)).tag(value)
                     }
                 }
+                Section {
+                    SpacePicker(space: $space)
+                } footer: {
+                    if let project, project.inSpace != space { Text("Its tasks move with it.") }
+                }
                 if let project { LinksSection(owner: "/api/v1/projects/\(project.id)") }
                 if project != nil { Button("Delete project", role: .destructive) { confirmDelete = true } }
             }.formStyle(.grouped).navigationTitle(project == nil ? "Add project" : "Edit project")
@@ -1003,14 +1039,14 @@ struct ProjectEditorView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") { Task { await store.perform {
-                            let _: Project = try await store.api.request(project.map { "/api/v1/projects/\($0.id)" } ?? "/api/v1/projects", method: project == nil ? "POST" : "PATCH", body: API.body(["name": name, "color": color]))
+                            let _: Project = try await store.api.request(project.map { "/api/v1/projects/\($0.id)" } ?? "/api/v1/projects", method: project == nil ? "POST" : "PATCH", body: API.body(["name": name, "color": color, "space": space.rawValue]))
                             try await store.refresh(); dismiss()
                         } } }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || store.busy)
                     }
                 }
         }.frame(idealWidth: 450, idealHeight: 300)
             .tasksErrorAlert()
-            .onAppear { name = project?.name ?? ""; color = project?.color ?? "#2563eb" }
+            .onAppear { name = project?.name ?? ""; color = project?.color ?? "#2563eb"; space = project?.inSpace ?? store.space }
             .confirmationDialog("Delete this project? Its tasks will move to Inbox.", isPresented: $confirmDelete) {
                 Button("Delete project", role: .destructive) { if let project { Task { await store.perform {
                     try await store.api.send("/api/v1/projects/\(project.id)", method: "DELETE")

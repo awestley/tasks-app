@@ -1,9 +1,19 @@
 import Foundation
 
+/// Work and personal tasks are kept apart: the apps show one space at a time.
+enum Space: String, CaseIterable, Identifiable {
+    case personal, work
+    var id: String { rawValue }
+    var name: String { self == .work ? "Work" : "Personal" }
+    var symbol: String { self == .work ? "briefcase" : "house" }
+    var other: Space { self == .work ? .personal : .work }
+}
 struct Project: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var color: String
+    var space: String? = "personal"
+    var inSpace: Space { Space(rawValue: space ?? "") ?? .personal }
 }
 struct ChecklistItem: Codable, Identifiable, Hashable {
     var id = UUID().uuidString
@@ -15,6 +25,8 @@ struct TodoTask: Codable, Identifiable, Hashable {
     var title: String
     var description: String
     var project_id: String?
+    /// Always the project's space when the task is in a project.
+    var space: String? = "personal"
     var due_date: String?
     var due_time: String?
     var time_zone: String
@@ -28,6 +40,7 @@ struct TodoTask: Codable, Identifiable, Hashable {
     var completed: Bool
     var version: Int
     var isAlarm: Bool { alert_style == "alarm" }
+    var inSpace: Space { Space(rawValue: space ?? "") ?? .personal }
     /// The due time as an instant, read in the task's own time zone.
     var dueInstant: Date? {
         guard let due_date, let due_time, let zone = TimeZone(identifier: time_zone) else { return nil }
@@ -104,7 +117,9 @@ struct TaskDraft: Encodable {
     var recurrence: String?
     var alert_style = "notification"
     var version: Int?
-    enum CodingKeys: String, CodingKey { case title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes, alert_style }
+    /// Set for a new task; a project decides it otherwise.
+    var space: String?
+    enum CodingKeys: String, CodingKey { case title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes, alert_style, space }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(title, forKey: .title)
@@ -120,6 +135,7 @@ struct TaskDraft: Encodable {
         try container.encode(recurrence, forKey: .recurrence)
         try container.encode(alert_style, forKey: .alert_style)
         try container.encodeIfPresent(version, forKey: .version)
+        try container.encodeIfPresent(space, forKey: .space)
     }
 }
 enum DateOnly {
