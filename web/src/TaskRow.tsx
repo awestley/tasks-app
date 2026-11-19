@@ -9,6 +9,7 @@ import {
   Tag,
 } from "lucide-react";
 import type { Task } from "./api";
+import { rowMenu } from "./taskMenus";
 import {
   dueLabel,
   dueTone,
@@ -46,10 +47,11 @@ export function TaskRow({
     goToProject,
     openMenuAt,
     rowHandlers,
-    rowMenu,
-    selection,
+    picked,
+    picking,
+    clickRow,
   } = w;
-  const picked = selection.has(task.id);
+  const isPicked = picked.has(task.id);
   const project = projects.find((p) => p.id === task.project_id);
   const done = task.completed;
   const checklistDone = task.checklist.filter((i) => i.completed).length;
@@ -123,13 +125,13 @@ export function TaskRow({
       tabIndex={
         selected === task.id || (!selected && flat[0]?.id === task.id) ? 0 : -1
       }
-      className={`task-row ${done ? "is-complete" : ""} ${finishing.has(task.id) ? "is-finishing" : ""} ${menu?.target === task.id ? "menu-target" : ""} ${selected === task.id ? "is-selected" : ""} ${openId === task.id ? "is-open" : ""} ${picked ? "is-picked" : ""}`}
+      className={`task-row ${done ? "is-complete" : ""} ${finishing.has(task.id) ? "is-finishing" : ""} ${menu?.target === task.id ? "menu-target" : ""} ${selected === task.id ? "is-selected" : ""} ${openId === task.id ? "is-open" : ""} ${isPicked ? "is-picked" : ""}`}
       onMouseDown={(e) => {
-        // Shift-click selects a range of tasks, not text.
-        if (e.shiftKey && selection.canSelect) e.preventDefault();
+        // Shift-click picks a range of tasks, not text.
+        if (e.shiftKey) e.preventDefault();
       }}
       onClickCapture={(e) => {
-        if (selection.click(task, e)) {
+        if (clickRow(task, e)) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -151,16 +153,15 @@ export function TaskRow({
           </span>
         </>
       )}
-      {selection.selecting ? (
-        // Clicks reach the row's capture handler, which toggles the task.
+      {picking ? (
         <button
-          className="select-task"
+          className="pick-task"
           role="checkbox"
-          aria-checked={picked}
+          aria-checked={isPicked}
           aria-label={`Select ${task.title}`}
           tabIndex={-1}
         >
-          {picked && <Check size={13} strokeWidth={2.5} />}
+          <Check size={12} strokeWidth={3} />
         </button>
       ) : (
         <button
@@ -230,7 +231,7 @@ export function TaskRow({
         aria-label={`More actions for ${task.title}`}
         aria-haspopup="menu"
         onClick={(e) => {
-          const { entries, title } = rowMenu(task);
+          const { entries, title } = rowMenu(task, w);
           openMenuAt(e, entries(), title, task.id);
         }}
       >

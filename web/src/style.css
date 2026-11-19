@@ -3231,21 +3231,23 @@ html.is-companion:has(.companion.is-floating) body {
   min-width: 180px;
 }
 
-/* Several selected tasks: the list toolbar swaps to actions for all of them. */
+/* Picking several tasks: the list toolbar swaps to actions for them. */
 .selection-toolbar {
   position: sticky;
-  top: var(--toolbar-height);
+  top: 0;
   z-index: 9;
-  /* The padding gives the sticky bar a backdrop without moving the list. */
-  margin: 12px -8px -8px;
+  margin-top: 12px;
+  margin-left: -8px;
+  margin-right: -8px;
+  margin-bottom: -8px;
   padding: 8px;
+  border-radius: var(--menu-radius);
   background: var(--background-primary);
   color: var(--text-normal);
 }
 .selection-toolbar > span {
   font-weight: 500;
   font-size: 14px;
-  color: var(--text-normal);
 }
 .selection-toolbar > span > svg {
   color: var(--accent);
@@ -3261,46 +3263,43 @@ html.is-companion:has(.companion.is-floating) body {
 }
 .list-toolbar .danger-on,
 .list-toolbar .danger-on:hover {
-  background: var(--danger);
-  color: var(--on-danger);
-  box-shadow: none;
-}
-.list-toolbar .danger-on > svg {
-  color: var(--on-danger);
+  background: var(--color-red);
+  color: var(--text-on-accent);
 }
 .task-row.is-picked,
 .task-row.is-picked:hover {
   background: var(--accent-soft);
 }
-.select-task {
+.pick-task {
   height: 18px;
   width: 18px;
   min-width: 18px;
-  margin-top: 1px;
   padding: 0;
-  border: 1.5px solid var(--border-control);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--on-accent);
+  margin-top: 1px;
+  border: 1.5px solid var(--color-base-60);
+  border-radius: 5px;
+  color: transparent;
 }
-.select-task svg {
-  width: 13px;
-  height: 13px;
-}
-.select-task:hover {
-  border-color: var(--text-normal);
-}
-.select-task[aria-checked="true"],
-.select-task[aria-checked="true"]:hover {
-  background: var(--accent);
+.pick-task:hover {
   border-color: var(--accent);
 }
+.pick-task[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.is-phone .pick-task {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin-top: 0;
+}
+.is-phone .selection-toolbar,
+.companion .selection-toolbar {
+  top: 0;
+  margin: 0 0 8px;
+}
 @media (max-width: 760px) {
-  .select-task {
-    width: 20px;
-    height: 20px;
-    min-width: 20px;
-  }
   .selection-toolbar button > span {
     display: none;
   }

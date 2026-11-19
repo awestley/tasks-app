@@ -3,7 +3,7 @@
   "info": {
     "title": "Tasks API",
     "description": "Private task management. Authenticate with a revocable personal access token or a session.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "paths": {
     "/auth/config": {

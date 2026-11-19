@@ -15,9 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { BrowseScreen, type PhoneTab } from "./phone";
+import { SelectionBar } from "./SelectionBar";
 import { WeekStrip } from "./pieces";
 import { store, type View } from "./routes";
-import { SelectionToolbar } from "./selection";
 import type { W } from "./workspaceContext";
 
 export type LayoutParts = {
@@ -223,7 +223,7 @@ export function MainColumn({ w, parts }: { w: W; parts: LayoutParts }) {
     setProjectEditor,
     setSettings,
     menuFor,
-    selection,
+    picking,
   } = w;
   return (
     <div className="main-shell">
@@ -333,8 +333,8 @@ export function MainColumn({ w, parts }: { w: W; parts: LayoutParts }) {
               </button>
             </div>
           </div>
-          {selection.selecting ? (
-            <SelectionToolbar w={w} />
+          {picking ? (
+            <SelectionBar w={w} />
           ) : (
             <div className="list-toolbar">
               <span>

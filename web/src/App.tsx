@@ -28,7 +28,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  SquareCheck,
   Trash2,
 } from "lucide-react";
 
@@ -53,11 +52,18 @@ import {
   viewNames,
   type View,
 } from "./routes";
-import { selectionMenu, shared, taskCount, type Selection } from "./selection";
 import { handleShortcut } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
 import { SignIn } from "./SignIn";
-import { dateOptions, moveMenu, priorityMenu, taskMenu } from "./taskMenus";
+import {
+  dateOptions,
+  moveMenu,
+  priorityMenu,
+  rowMenu,
+  taskCount,
+  taskMenu,
+} from "./taskMenus";
+import { SelectionBar } from "./SelectionBar";
 import { TaskRow } from "./TaskRow";
 import { usePressMenu } from "./usePressMenu";
 import { useTaskGroups } from "./useTaskGroups";
@@ -81,6 +87,7 @@ import {
 } from "./phone";
 import {
   DatePicker,
+  type Due,
   dueLabel,
   formatTime,
   priorityNames,
@@ -175,16 +182,16 @@ function Workspace({
   const [drawer, setDrawer] = useState(false);
   const [quick, setQuick] = useState<QuickDefaults | null>(null);
   const [inlineAdd, setInlineAdd] = useState<string | null>(null);
-  // The keyboard cursor (one task). Several selected tasks are `selection` below.
   const [selected, setSelected] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const selectionAnchor = useRef<string | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [picker, setPicker] = useState<{
     task: Task;
     anchor: DOMRect | { x: number; y: number };
-    tasks?: Task[];
+    many?: Task[];
   } | null>(null);
+  // Tasks picked to change together. Only tasks in the current list stay picked.
+  const [picked, setPicked] = useState<string[]>([]);
+  const pickAnchor = useRef<string | null>(null);
   const [bell, setBell] = useState<DOMRect | null>(null);
   const [settings, setSettings] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
@@ -293,13 +300,13 @@ function Workspace({
   }, [view, openId, companion]);
 
   function navigate(next: View) {
-    clearSelection();
     setSearch("");
     setDrawer(false);
     setPhoneScreen("list");
     setOpenId(null);
     setSelected(null);
     setInlineAdd(null);
+    clearPicks();
     if (next !== view) {
       setView(next);
       if (!companion) location.hash = hashFor(next);
@@ -346,30 +353,51 @@ function Workspace({
     finishing,
     selectedProject,
   });
-
-  /* ---------- several selected tasks ---------- */
-
-  // The companion and phone layouts have no selection toolbar.
-  const canSelect = !companion && !phone;
-  const chosen = useMemo(() => {
-    const ids = new Set(selectedIds);
-    return canSelect ? flat.filter((t) => ids.has(t.id)) : [];
-  }, [selectedIds, flat, canSelect]);
-  const chosenIds = useMemo(() => new Set(chosen.map((t) => t.id)), [chosen]);
-  const selecting = chosen.length > 0;
+  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  const chosen = flat.filter((t) => pickedSet.has(t.id));
+  const picking = chosen.length > 0;
   useEffect(() => {
     // Drop tasks that left the list: completed, deleted, moved or filtered out.
-    setSelectedIds((ids) =>
-      ids.every((id) => chosenIds.has(id))
+    const visible = new Set(flat.map((t) => t.id));
+    setPicked((ids) =>
+      ids.every((id) => visible.has(id))
         ? ids
-        : ids.filter((id) => chosenIds.has(id)),
+        : ids.filter((id) => visible.has(id)),
     );
-    if (!chosenIds.size) selectionAnchor.current = null;
-  }, [chosenIds]);
-  function clearSelection() {
-    setSelectedIds([]);
-    selectionAnchor.current = null;
+  }, [flat]);
+  function clearPicks() {
+    setPicked([]);
+    pickAnchor.current = null;
   }
+  const pickAll = () => setPicked(flat.map((t) => t.id));
+  const pickTask = (task: Task) => {
+    setPicked((ids) => (ids.includes(task.id) ? ids : [...ids, task.id]));
+    pickAnchor.current = task.id;
+  };
+  const clickRow = (task: Task, e: React.MouseEvent) => {
+    if ((e.target as Element).closest(".row-menu, .row-actions, .task-project"))
+      return false;
+    if (e.shiftKey && (picking || pickAnchor.current)) {
+      const ids = flat.map((t) => t.id);
+      const from = ids.indexOf(pickAnchor.current ?? task.id),
+        to = ids.indexOf(task.id);
+      const range =
+        from === -1
+          ? [task.id]
+          : ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+      setPicked((current) => Array.from(new Set([...current, ...range])));
+      if (from === -1) pickAnchor.current = task.id;
+      return true;
+    }
+    if (!(e.metaKey || e.ctrlKey || e.shiftKey || picking)) return false;
+    setPicked((current) =>
+      current.includes(task.id)
+        ? current.filter((id) => id !== task.id)
+        : [...current, task.id],
+    );
+    pickAnchor.current = task.id;
+    return true;
+  };
 
   /* ---------- actions ---------- */
 
@@ -395,19 +423,6 @@ function Workspace({
     }
     return task;
   }
-  // A completed task stays in the list for a moment, then leaves.
-  function finish(ids: string[]) {
-    setFinishing((s) => new Set([...s, ...ids]));
-    setTimeout(
-      () =>
-        setFinishing((s) => {
-          const n = new Set(s);
-          for (const id of ids) n.delete(id);
-          return n;
-        }),
-      900,
-    );
-  }
   function toggle(task: Task) {
     if (task.completed) {
       S.patchTask(task.id, { completed: false });
@@ -415,7 +430,16 @@ function Workspace({
       return;
     }
     S.patchTask(task.id, { completed: true });
-    finish([task.id]);
+    setFinishing((s) => new Set(s).add(task.id));
+    setTimeout(
+      () =>
+        setFinishing((s) => {
+          const n = new Set(s);
+          n.delete(task.id);
+          return n;
+        }),
+      900,
+    );
     if (openId === task.id && !detailModal) setOpenId(null);
     notify(
       task.recurrence
@@ -470,7 +494,6 @@ function Workspace({
     });
     notify("Task duplicated", () => S.deleteTask(copy.id));
   };
-  // Undoes a delete: the task comes back with its id and fields.
   const recreate = (task: Task) =>
     S.createTask({
       id: task.id,
@@ -512,110 +535,77 @@ function Workspace({
       moved.forEach((m) => S.patchTask(m.id, { due_date: m.due })),
     );
   };
-  // Changes every listed task, one PATCH each (the outbox sends it with that task's version), and
-  // offers one undo for all of them.
+  /** Changes several tasks at once; one undo puts every task back. */
   function patchMany(
     list: Task[],
     changes: (task: Task) => S.TaskChanges,
     message: string,
   ) {
-    const undo = list.map((task) => {
-      const next = changes(task);
-      S.patchTask(task.id, next);
-      return [
-        task.id,
-        Object.fromEntries(
-          Object.keys(next).map((k) => [k, task[k as keyof Task]]),
-        ) as S.TaskChanges,
-      ] as const;
+    const steps = list.map((task) => {
+      const after = changes(task);
+      const before = Object.fromEntries(
+        Object.keys(after).map((k) => [k, task[k as keyof Task]]),
+      ) as S.TaskChanges;
+      return { id: task.id, before, after };
     });
+    for (const step of steps) S.patchTask(step.id, step.after);
     notify(message, () =>
-      undo.forEach(([id, before]) => S.patchTask(id, before)),
+      steps.forEach((step) => S.patchTask(step.id, step.before)),
     );
   }
-  const clearedDate = {
-    due_date: null,
-    due_time: null,
-    reminder_minutes: null,
-    recurrence: null,
-  };
-  const selection: Selection = {
-    canSelect,
-    chosen,
-    selecting,
-    has: (id) => chosenIds.has(id),
-    // Cmd/Ctrl-click toggles a task, Shift-click selects a range from the last one toggled. While
-    // tasks are selected, a plain click toggles too.
-    click: (task, e) => {
-      if (!canSelect || (e.target as Element).closest(".row-menu"))
-        return false;
-      const ids = flat.map((t) => t.id);
-      if (e.shiftKey && (selecting || selectionAnchor.current)) {
-        const from = ids.indexOf(selectionAnchor.current ?? task.id),
-          to = ids.indexOf(task.id);
-        const range =
-          from === -1
-            ? [task.id]
-            : ids.slice(Math.min(from, to), Math.max(from, to) + 1);
-        setSelectedIds((current) =>
-          Array.from(new Set([...current, ...range])),
-        );
-        if (from === -1) selectionAnchor.current = task.id;
-        return true;
-      }
-      if (!(e.metaKey || e.ctrlKey || e.shiftKey || selecting)) return false;
-      setSelectedIds((current) =>
-        current.includes(task.id)
-          ? current.filter((id) => id !== task.id)
-          : [...current, task.id],
-      );
-      selectionAnchor.current = task.id;
-      return true;
-    },
-    add: (task) => {
-      setSelectedIds((current) =>
-        current.includes(task.id) ? current : [...current, task.id],
-      );
-      selectionAnchor.current = task.id;
-    },
-    all: () => setSelectedIds(flat.map((t) => t.id)),
-    clear: clearSelection,
+  const bulk = {
     complete: () => {
-      const allCompleted = chosen.every((t) => t.completed);
-      const list = chosen.filter((t) => t.completed === allCompleted);
-      for (const t of list) S.patchTask(t.id, { completed: !allCompleted });
-      if (!allCompleted) finish(list.map((t) => t.id));
+      const restore = chosen.every((t) => t.completed);
+      const list = chosen.filter((t) => t.completed === restore);
+      for (const t of list) S.patchTask(t.id, { completed: !restore });
+      if (!restore) {
+        setFinishing((s) => new Set([...s, ...list.map((t) => t.id)]));
+        setTimeout(
+          () =>
+            setFinishing((s) => {
+              const n = new Set(s);
+              for (const t of list) n.delete(t.id);
+              return n;
+            }),
+          900,
+        );
+      }
       notify(
-        `${taskCount(list.length)} ${allCompleted ? "restored" : "completed"}`,
+        `${taskCount(list.length)} ${restore ? "restored" : "completed"}`,
         () =>
           list.forEach((t) =>
             S.patchTask(
               t.id,
-              allCompleted
-                ? { completed: true }
-                : { completed: false, undo: true },
+              restore ? { completed: true } : { completed: false, undo: true },
             ),
           ),
       );
     },
-    schedule: (due) =>
+    schedule: (due: string | null) =>
       patchMany(
         chosen,
-        () => (due ? { due_date: due } : clearedDate),
+        () =>
+          due
+            ? { due_date: due }
+            : {
+                due_date: null,
+                due_time: null,
+                reminder_minutes: null,
+                recurrence: null,
+              },
         due
           ? `${taskCount(chosen.length)} scheduled for ${dueLabel(due)}`
           : `Date removed from ${taskCount(chosen.length)}`,
       ),
-    pickDate: (anchor) => {
-      if (chosen.length) setPicker({ task: chosen[0], tasks: chosen, anchor });
-    },
-    priority: (p) =>
+    pickDate: (anchor: DOMRect | { x: number; y: number }) =>
+      chosen[0] && setPicker({ task: chosen[0], anchor, many: chosen }),
+    priority: (priority: number) =>
       patchMany(
         chosen,
-        () => ({ priority: p }),
-        `Priority set to ${priorityNames[p].toLowerCase()} for ${taskCount(chosen.length)}`,
+        () => ({ priority }),
+        `Priority set to ${priorityNames[priority].toLowerCase()}`,
       ),
-    move: (project_id, name) =>
+    move: (project_id: string | null, name: string) =>
       patchMany(
         chosen,
         () => ({ project_id }),
@@ -741,16 +731,6 @@ function Workspace({
       checked: priorityFilter,
       action: () => setPriorityFilter(!priorityFilter),
     },
-    ...(canSelect && flat.length
-      ? [
-          {
-            label: "Select all",
-            icon: <SquareCheck size={16} />,
-            shortcut: "⌘A",
-            action: selection.all,
-          },
-        ]
-      : []),
     ...(overdue.length
       ? [
           {
@@ -824,19 +804,12 @@ function Workspace({
 
   /* ---------- pieces ---------- */
 
-  // A row's menu: the selection's actions when the row is one of several selected tasks.
-  const rowMenu = (task: Task) =>
-    chosenIds.has(task.id) && chosen.length > 1
-      ? {
-          entries: () => selectionMenu(w),
-          title: `${chosen.length} tasks`,
-        }
-      : { entries: () => taskMenu(task, w), title: task.title };
   // On a phone a row also swipes: right completes, left schedules.
   const rowHandlers = (task: Task) => {
-    const { entries, title } = rowMenu(task);
+    const { entries, title } = rowMenu(task, w);
     const menuProps = menuFor(entries, title, task.id);
-    if (!phone) return menuProps;
+    // While picking, a tap picks the row instead of swiping it.
+    if (!phone || picking) return menuProps;
     const swipe = swipeRow({
       right: () => toggle(task),
       left: () =>
@@ -905,7 +878,14 @@ function Workspace({
     setOpenId,
     selected,
     setSelected,
-    selection,
+    picked: pickedSet,
+    chosen,
+    picking,
+    pickTask,
+    pickAll,
+    clearPicks,
+    clickRow,
+    bulk,
     inlineAdd,
     setInlineAdd,
     drawer,
@@ -942,7 +922,6 @@ function Workspace({
     menuFor,
     openMenuAt,
     rowHandlers,
-    rowMenu,
     addTaskIn,
     projectMenu,
     listMenu,
@@ -955,101 +934,107 @@ function Workspace({
   keyRef.current = (e: KeyboardEvent) => handleShortcut(e, w);
 
   const sections = (
-    <div className="task-groups" ref={listRef} role="list">
-      {groups.map((g) => {
-        const isUpcomingDay = view === "upcoming" && !g.overdue && !!g.add;
-        if (
-          !g.tasks.length &&
-          !isUpcomingDay &&
-          g.key !== "main" &&
-          g.key !== "search"
-        )
-          return null;
-        return (
-          <section
-            className={`task-section ${g.overdue ? "is-overdue" : ""}`}
-            key={g.key}
-            data-group={g.key}
-          >
-            {g.title && (
-              <h3 className={g.overdue ? "overdue" : ""}>
-                <span className="group-title">{g.title}</span>
-                {g.key !== "main" && g.key !== "search" && (
-                  <span className="group-count">{g.tasks.length || ""}</span>
-                )}
-                {g.overdue && (
-                  <button onClick={rescheduleOverdue} title="Move all to today">
-                    Reschedule
-                  </button>
-                )}
-              </h3>
-            )}
-            {g.tasks.map((t) => (
-              <TaskRow key={t.id} task={t} inGroup={g.key} w={w} />
-            ))}
-            {g.add &&
-              view !== "completed" &&
-              !search &&
-              (!phone || view === "upcoming") &&
-              (inlineAdd === g.key ? (
-                <QuickAdd
-                  variant="inline"
-                  projects={projects}
-                  labels={labels}
-                  defaults={g.add}
-                  add={addTask}
-                  createProject={newProject}
-                  close={() => setInlineAdd(null)}
-                  autoFocus
-                />
-              ) : (
-                !companion && (
-                  <button
-                    className="add-task-row"
-                    onClick={() =>
-                      phone ? openQuick(g.add) : setInlineAdd(g.key)
-                    }
-                  >
-                    <Plus size={18} /> Add task
-                    {g.key === "main" && (
-                      <span>
-                        or press <kbd>Q</kbd>
-                      </span>
-                    )}
-                  </button>
-                )
+    <>
+      {picking && (phone || companion) && <SelectionBar w={w} />}
+      <div className="task-groups" ref={listRef} role="list">
+        {groups.map((g) => {
+          const isUpcomingDay = view === "upcoming" && !g.overdue && !!g.add;
+          if (
+            !g.tasks.length &&
+            !isUpcomingDay &&
+            g.key !== "main" &&
+            g.key !== "search"
+          )
+            return null;
+          return (
+            <section
+              className={`task-section ${g.overdue ? "is-overdue" : ""}`}
+              key={g.key}
+              data-group={g.key}
+            >
+              {g.title && (
+                <h3 className={g.overdue ? "overdue" : ""}>
+                  <span className="group-title">{g.title}</span>
+                  {g.key !== "main" && g.key !== "search" && (
+                    <span className="group-count">{g.tasks.length || ""}</span>
+                  )}
+                  {g.overdue && (
+                    <button
+                      onClick={rescheduleOverdue}
+                      title="Move all to today"
+                    >
+                      Reschedule
+                    </button>
+                  )}
+                </h3>
+              )}
+              {g.tasks.map((t) => (
+                <TaskRow key={t.id} task={t} inGroup={g.key} w={w} />
               ))}
-          </section>
-        );
-      })}
-      {!shown.length && (
-        <div className="empty-state">
-          <div>
-            <CheckCheck size={30} />
+              {g.add &&
+                view !== "completed" &&
+                !search &&
+                (!phone || view === "upcoming") &&
+                (inlineAdd === g.key ? (
+                  <QuickAdd
+                    variant="inline"
+                    projects={projects}
+                    labels={labels}
+                    defaults={g.add}
+                    add={addTask}
+                    createProject={newProject}
+                    close={() => setInlineAdd(null)}
+                    autoFocus
+                  />
+                ) : (
+                  !companion && (
+                    <button
+                      className="add-task-row"
+                      onClick={() =>
+                        phone ? openQuick(g.add) : setInlineAdd(g.key)
+                      }
+                    >
+                      <Plus size={18} /> Add task
+                      {g.key === "main" && (
+                        <span>
+                          or press <kbd>Q</kbd>
+                        </span>
+                      )}
+                    </button>
+                  )
+                ))}
+            </section>
+          );
+        })}
+        {!shown.length && (
+          <div className="empty-state">
+            <div>
+              <CheckCheck size={30} />
+            </div>
+            <h2>
+              {search
+                ? "Nothing found"
+                : view === "completed"
+                  ? "No completed tasks"
+                  : view === "today"
+                    ? "All clear for today"
+                    : "No tasks"}
+            </h2>
+            <p>
+              {search
+                ? "Try a different search."
+                : view === "completed"
+                  ? "Completed tasks show up here."
+                  : companion
+                    ? "Type above to add one."
+                    : phone
+                      ? "Tap + to add one."
+                      : "Press Q to add one."}
+            </p>
           </div>
-          <h2>
-            {search
-              ? "Nothing found"
-              : view === "completed"
-                ? "No completed tasks"
-                : view === "today"
-                  ? "All clear for today"
-                  : "No tasks"}
-          </h2>
-          <p>
-            {search
-              ? "Try a different search."
-              : view === "completed"
-                ? "Completed tasks show up here."
-                : companion
-                  ? "Type above to add one."
-                  : phone
-                    ? "Tap + to add one."
-                    : "Press Q to add one."}
-          </p>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 
   const bellButton = (
@@ -1186,9 +1171,9 @@ function Workspace({
       {picker && (
         <DatePicker
           anchor={picker.anchor}
-          value={pickerValue(picker)}
+          value={picker.task}
           close={() => setPicker(null)}
-          change={(next) => pickerChange(picker, next)}
+          change={(next) => patchDue(picker.task, next)}
         />
       )}
       {bell && (
@@ -1341,9 +1326,9 @@ function Workspace({
         {picker && (
           <DatePicker
             anchor={picker.anchor}
-            value={pickerValue(picker)}
+            value={picker.task}
             close={() => setPicker(null)}
-            change={(next) => pickerChange(picker, next)}
+            change={(next) => patchDue(picker.task, next)}
           />
         )}
         {bell && (
@@ -1358,11 +1343,6 @@ function Workspace({
       </div>
     );
 
-  type Due = {
-    due_date: string | null;
-    due_time: string | null;
-    recurrence: string | null;
-  };
   function dueChanges(task: Task, next: Due): S.TaskChanges {
     return {
       due_date: next.due_date,
@@ -1379,31 +1359,22 @@ function Workspace({
     };
   }
   function patchDue(task: Task, next: Due) {
+    if (picker?.many) {
+      patchMany(
+        picker.many,
+        (t) => dueChanges(t, next),
+        next.due_date
+          ? `${taskCount(picker.many.length)} scheduled for ${dueLabel(next.due_date, next.due_time)}`
+          : `Date removed from ${taskCount(picker.many.length)}`,
+      );
+      return;
+    }
     patch(
       task,
       dueChanges(task, next),
       next.due_date
         ? `Scheduled for ${dueLabel(next.due_date, next.due_time)}`
         : "Date removed",
-    );
-  }
-  // The date picker shows one task's date, or what several selected tasks share.
-  function pickerValue(p: NonNullable<typeof picker>): Due {
-    if (!p.tasks) return p.task;
-    return {
-      due_date: shared(p.tasks, "due_date") ?? null,
-      due_time: shared(p.tasks, "due_time") ?? null,
-      recurrence: shared(p.tasks, "recurrence") ?? null,
-    };
-  }
-  function pickerChange(p: NonNullable<typeof picker>, next: Due) {
-    if (!p.tasks) return patchDue(p.task, next);
-    patchMany(
-      p.tasks,
-      (task) => dueChanges(task, next),
-      next.due_date
-        ? `${taskCount(p.tasks.length)} scheduled for ${dueLabel(next.due_date, next.due_time)}`
-        : `Date removed from ${taskCount(p.tasks.length)}`,
     );
   }
 

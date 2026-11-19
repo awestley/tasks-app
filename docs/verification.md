@@ -150,17 +150,18 @@ Both branches numbered migrations 0004 and 0005 differently. The chain is now 00
 
 Not verified: iOS UI tests on a simulator, live push and alarms, sign-in through a real Personal Command shell, and the GitHub Actions run.
 
-## Task view and reconciling dev with Clean and multi-select, November 19, 2026
+## Task view and the Clean design on dev, November 19, 2026
 
-The local `claude/code-review-fixes` branch had the Clean design and multi-select, and dev had links, Flesh out and the rebuilt web app (with the Glassive look). This branch starts from dev and brings the other two in:
+The local `claude/code-review-fixes` branch had the Clean design, and dev had links, Flesh out, the rebuilt web app (with the Glassive look) and, since version 0.2.0, multi-select. This branch starts from dev and brings Clean back:
 
-- Web: `clean.css` and `clean-bridge.css` give the Glassive variable names Clean values, so the rebuilt app draws in Clean. Medium priority and the open row use Clean's blue. Multi-select is reimplemented in the rebuilt app's structure (`selection.tsx`).
-- Apple: Clean.swift, multi-select and the UI tests come back from the Clean branch. Links and Flesh out are added back from dev.
+- Web: `clean.css` and `clean-bridge.css` give the Glassive variable names Clean values, so the rebuilt app draws in Clean. Medium priority, the open row and multi-selected rows use Clean's blue.
+- Apple: `Clean.swift` replaces `Glassive.swift`, and the views use the Clean colors again, including dev's unreachable-server banner.
 - The task view is now a large view with the task's content on the left (title, description, checklist, links, Flesh out) and its details on the right (project, date, priority, labels, reminder). It saves as you edit. On the web it opens over the list on screens 700px and wider and moves between tasks with J/K or its arrows. On macOS and iPad it is a large sheet with two columns, and on iPhone the details follow the content. Adding a task still uses the add form.
+- Multi-select is dev's own. An earlier port of it on this branch was replaced by dev's when merging.
 
-Results:
-- Web: typecheck clean, 49 unit tests passed, and 31 browser tests passed, including a new multi-select spec. The integrations and scheduling specs were updated because the task view is now a dialog.
+Results after merging dev at ca79875:
+- Web: typecheck clean, 49 unit tests passed, and 31 browser tests passed. The integrations and scheduling specs were updated because the task view is now a dialog.
 - iOS UI tests on iPhone 17 (iOS 27.2): 8 of 8 passed. Two were rewritten for the new view: edits save as you type and keep another device's change, and the time zone shows in the details.
-- iPad Pro 13-inch: the task view test passed in two columns. `testQuickEntryAndPersistence` failed at "Use details and edit" in the add form, which this change does not touch; it passes on iPhone.
+- iPad Pro 13-inch, before the merge: the task view test passed in two columns. `testQuickEntryAndPersistence` failed at "Use details and edit" in the add form, which this change does not touch; it passes on iPhone.
 - macOS Debug build passed. The Mac app was not run, because a test build shares the installed app's settings and sign-in.
 - `scripts/test-ios.sh` takes `TASKS_TEST_PORT` when another worktree's run holds port 8002.

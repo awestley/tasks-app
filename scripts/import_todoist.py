@@ -157,6 +157,18 @@ def priority(value):
     return 5 - int(value or 1)
 
 
+def plain_title(text):
+    """Todoist renders Markdown links in titles. Keep the link text in the title and move each URL out."""
+    links = []
+
+    def keep_text(match):
+        links.append(match.group(2))
+        return match.group(1)
+
+    title = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", keep_text, text).strip()
+    return title or "Untitled", links
+
+
 def label_name(text):
     return text.strip().lower()[:40]
 
@@ -234,9 +246,11 @@ def build_plan(data, sections_as_labels, default_zone):
     planned_tasks = []
     top_level = [i for i in items if i.get("parent_id") not in by_id]
     for item in sorted(top_level, key=lambda i: (i["project_id"], i.get("child_order") or 0)):
-        title = item["content"].strip() or "Untitled"
+        title, links = plain_title(item["content"])
         where = f"'{title[:60]}'"
         description = (item.get("description") or "").strip()
+        if links:
+            description = "\n".join(links + ([description] if description else []))
         task = {
             "title": title[:TITLE_LIMIT],
             "priority": priority(item.get("priority")),
@@ -266,6 +280,18 @@ def build_plan(data, sections_as_labels, default_zone):
         if item.get("deadline"):
             description += f"\n\nDeadline in Todoist: {item['deadline'].get('date')}"
 
+        # A reminder here needs a due time. When an all-day task has a timed reminder on its due date,
+        # give the task that time so the alert still fires when Todoist would have sent it.
+        if task.get("due_date") and not task.get("due_time"):
+            for reminder in reminders.get(item["id"], []):
+                at = (reminder.get("due") or {}).get("date") or ""
+                if reminder.get("type") == "absolute" and "T" in at:
+                    at_day, at_clock, _ = parse_due(reminder["due"], task["time_zone"])
+                    if at_day.isoformat() == task["due_date"]:
+                        task["due_time"] = at_clock
+                        notes.append(f"{where}: all-day task now due at {at_clock}, the time of its Todoist reminder.")
+                        break
+
         offsets = []
         for reminder in reminders.get(item["id"], []):
             if reminder.get("type") == "relative" and reminder.get("minute_offset") is not None:
@@ -281,6 +307,8 @@ def build_plan(data, sections_as_labels, default_zone):
                     offsets.append(minutes)
                 else:
                     notes.append(f"{where}: a reminder after the due time was skipped.")
+            elif reminder.get("type") == "absolute":
+                notes.append(f"{where}: a reminder was skipped because the task has no due time.")
             else:
                 notes.append(f"{where}: a {reminder.get('type', 'unknown')} reminder was skipped.")
         offsets = [m for m in offsets if 0 <= m <= 10080]
@@ -292,8 +320,10 @@ def build_plan(data, sections_as_labels, default_zone):
             notes.append(f"{where}: reminder skipped because the task has no due time.")
 
         for child in descendants(item["id"]):
-            text = child["content"].strip() or "Untitled"
+            text, child_links = plain_title(child["content"])
             task["checklist"].append({"title": text[:TITLE_LIMIT]})
+            for link in child_links:
+                description += f"\n\n{text}: {link}"
             lost = [k for k in ("due", "description", "labels") if child.get(k)]
             if lost or comments.get(child["id"]):
                 notes.append(

@@ -1,5 +1,5 @@
 // The keyboard: Q adds, G then a letter changes list, J and K move, and letters act on the selected task.
-import { moveMenu } from "./taskMenus";
+import { moveMenu, projectChoices, shared } from "./taskMenus";
 import { store, type View } from "./routes";
 import type { W } from "./workspaceContext";
 
@@ -19,7 +19,6 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     setOpenId,
     selected,
     setSelected,
-    selection,
     inlineAdd,
     setInlineAdd,
     drawer,
@@ -47,6 +46,13 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     goToProject,
     setShortcuts,
     setFocusKey,
+    chosen,
+    picking,
+    picked,
+    pickTask,
+    pickAll,
+    clearPicks,
+    bulk,
   } = w;
   const typing = (e.target as HTMLElement).matches?.(
     "input,textarea,select,[contenteditable]",
@@ -56,6 +62,18 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     e.preventDefault();
     toast.undo();
     setToast({ id: Date.now(), text: "Undone" });
+    return;
+  }
+  if (
+    mod &&
+    e.key.toLowerCase() === "a" &&
+    !typing &&
+    !modalOpen &&
+    !openId &&
+    flat.length
+  ) {
+    e.preventDefault();
+    pickAll();
     return;
   }
   if (mod && e.key.toLowerCase() === "k" && !hosted) {
@@ -68,25 +86,6 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     if (t) openInColumn(t);
     return;
   }
-  // Cmd/Ctrl-A selects every task in the list, unless focus is in a text field or a dialog is open.
-  if (
-    mod &&
-    !e.shiftKey &&
-    !e.altKey &&
-    e.key.toLowerCase() === "a" &&
-    !typing &&
-    !modalOpen &&
-    !openId &&
-    selection.canSelect &&
-    flat.length &&
-    !(e.target as HTMLElement).closest?.(
-      "input,textarea,select,[contenteditable]",
-    )
-  ) {
-    e.preventDefault();
-    selection.all();
-    return;
-  }
   if (e.key === "Escape") {
     if (modalOpen) return; // the dialog or menu closes itself
     if (typing) return;
@@ -94,7 +93,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
       setOpenId(null);
       return;
     }
-    if (selection.selecting) return selection.clear();
+    if (picking) return clearPicks();
     if (inlineAdd) return setInlineAdd(null);
     if (search) return setSearch("");
     if (drawer) return setDrawer(false);
@@ -183,12 +182,29 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
     }
     return;
   }
-  // With several tasks selected, C and 1 to 4 change all of them.
-  if (selection.selecting) {
-    if (key === "c") selection.complete();
-    else if (["1", "2", "3", "4"].includes(key))
-      selection.priority(Number(key));
-    else return;
+  const rowBox = (id: string) =>
+    listRef.current
+      ?.querySelector(`[data-id="${CSS.escape(id)}"]`)
+      ?.getBoundingClientRect() || new DOMRect(100, 100, 0, 0);
+  if (picking) {
+    if (key === "c") bulk.complete();
+    else if (["1", "2", "3", "4"].includes(key)) bulk.priority(Number(key));
+    else if (key === "t") {
+      const box = rowBox(chosen[0].id);
+      bulk.pickDate({ x: box.left + 40, y: box.bottom });
+    } else if (key === "v") {
+      const box = rowBox(chosen[0].id);
+      setMenu({
+        x: box.left + 40,
+        y: box.bottom,
+        entries: projectChoices(w, shared(chosen, "project_id"), bulk.move),
+        title: "Move to",
+        sheet: false,
+      });
+    } else if (key === "s") {
+      const t = target();
+      if (t && !picked.has(t.id)) pickTask(t);
+    } else return;
     e.preventDefault();
     return;
   }
@@ -197,6 +213,7 @@ export function handleShortcut(e: KeyboardEvent, w: W) {
   if (key === "Enter" || key === "e") openDetail(t);
   else if (key === "c" || (key === " " && companion)) toggle(t);
   else if (key === "d") duplicate(t);
+  else if (key === "s") pickTask(t);
   else if (key === "G") goToProject(t);
   else if (key === "t") {
     const row = listRef.current?.querySelector(

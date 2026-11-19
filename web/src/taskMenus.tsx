@@ -18,9 +18,10 @@ import {
   SquareCheck,
   Sunrise,
   Trash2,
+  X,
 } from "lucide-react";
-import type { MenuEntry, MenuItem, MenuOption } from "./ContextMenu";
-import { api, type Project, type Task } from "./api";
+import type { MenuEntry, MenuRow } from "./ContextMenu";
+import { api, type Task } from "./api";
 import { isoDate, nextWeekDate, weekendDate } from "./parse";
 import { refreshSoon } from "./store";
 import { taskLink } from "./routes";
@@ -38,9 +39,9 @@ export function dateChoices(
   w: W,
   value: string | null | undefined,
   change: (due: string | null) => void,
-  more: () => void,
-): MenuOption[] {
-  const { today } = w;
+  more: (anchor: { x: number; y: number }) => void,
+) {
+  const { today, menu } = w;
   const now = new Date();
   const dates: [string, string, React.ReactNode][] = [
     [
@@ -79,46 +80,32 @@ export function dateChoices(
     {
       label: "No date",
       icon: <CircleSlash size={20} />,
-      selected: value === null,
+      selected: value !== undefined && !value,
       action: () => change(null),
     },
-    { label: "More dates", icon: <Ellipsis size={20} />, action: more },
+    {
+      label: "More dates",
+      icon: <Ellipsis size={20} />,
+      action: () => more({ x: menu?.x ?? innerWidth / 2, y: menu?.y ?? 120 }),
+    },
   ];
 }
 
 export function dateOptions(task: Task, w: W) {
-  const { menu, setPicker, schedule } = w;
   return dateChoices(
     w,
-    task.due_date || null,
-    (due) => schedule(task, due),
-    () =>
-      setPicker({
-        task,
-        anchor: { x: menu?.x ?? innerWidth / 2, y: menu?.y ?? 120 },
-      }),
+    task.due_date,
+    (due) => w.schedule(task, due),
+    (anchor) => w.setPicker({ task, anchor }),
   );
 }
 
-/** Priority choices for a menu row. `value` is undefined when several tasks differ. */
-export function priorityChoices(
-  value: number | undefined,
-  change: (priority: number) => void,
-): MenuOption[] {
-  return [1, 2, 3, 4].map((p) => ({
-    label: priorityNames[p],
-    icon: <PriorityFlag priority={p} size={20} />,
-    selected: value === p,
-    action: () => change(p),
-  }));
-}
-
-/** Project choices. `current` is undefined when several tasks differ. */
-export function moveChoices(
-  projects: Project[],
+/** Project choices. `current` is undefined when several tasks are in different projects. */
+export function projectChoices(
+  w: W,
   current: string | null | undefined,
   move: (projectId: string | null, name: string) => void,
-): MenuItem[] {
+): MenuEntry[] {
   return [
     {
       label: "Inbox",
@@ -126,7 +113,7 @@ export function moveChoices(
       checked: current === null,
       action: () => move(null, "Inbox"),
     },
-    ...projects.map((p) => ({
+    ...w.projects.map((p) => ({
       label: p.name,
       icon: (
         <span className="project-hash" style={{ color: p.color }}>
@@ -139,10 +126,26 @@ export function moveChoices(
   ];
 }
 
+/** Priority choices as a row of buttons. `value` is undefined when several tasks differ. */
+export function priorityRow(
+  value: number | undefined,
+  change: (priority: number) => void,
+): MenuRow {
+  return {
+    row: "Priority",
+    shortcut: "1–4",
+    options: [1, 2, 3, 4].map((p) => ({
+      label: priorityNames[p],
+      icon: <PriorityFlag priority={p} size={20} />,
+      selected: value === p,
+      action: () => change(p),
+    })),
+  };
+}
+
 export function moveMenu(task: Task, w: W): MenuEntry[] {
-  const { patch, projects } = w;
-  return moveChoices(projects, task.project_id || null, (project_id, name) =>
-    patch(task, { project_id }, `Moved to ${name}`),
+  return projectChoices(w, task.project_id, (project_id, name) =>
+    w.patch(task, { project_id }, `Moved to ${name}`),
   );
 }
 
@@ -196,7 +199,7 @@ export function taskMenu(task: Task, w: W): MenuEntry[] {
     copy,
     removeTask,
     goToProject,
-    selection,
+    pickTask,
   } = w;
   return [
     {
@@ -230,24 +233,16 @@ export function taskMenu(task: Task, w: W): MenuEntry[] {
       key: "c",
       action: () => toggle(task),
     },
-    ...(selection.canSelect
-      ? [
-          {
-            label: "Select",
-            icon: <SquareCheck size={16} />,
-            shortcut: "S",
-            key: "s",
-            action: () => selection.add(task),
-          },
-        ]
-      : []),
+    {
+      label: "Select",
+      icon: <SquareCheck size={16} />,
+      shortcut: "S",
+      key: "s",
+      action: () => pickTask(task),
+    },
     "separator",
     { row: "Date", shortcut: "T", options: dateOptions(task, w) },
-    {
-      row: "Priority",
-      shortcut: "1–4",
-      options: priorityChoices(task.priority, (p) => setPriority(task, p)),
-    },
+    priorityRow(task.priority, (p) => setPriority(task, p)),
     "separator",
     ...(!task.completed
       ? [
@@ -325,4 +320,79 @@ export function taskMenu(task: Task, w: W): MenuEntry[] {
       action: () => removeTask(task),
     },
   ];
+}
+
+/** A value every selected task shares, or undefined when they differ. */
+export function shared<K extends keyof Task>(tasks: Task[], key: K) {
+  return tasks.every((t) => t[key] === tasks[0]?.[key])
+    ? tasks[0]?.[key]
+    : undefined;
+}
+
+export const taskCount = (n: number) => (n === 1 ? "1 task" : `${n} tasks`);
+
+/** Actions for every selected task: right-click on a selected row, or long-press on a phone. */
+export function selectionMenu(w: W): MenuEntry[] {
+  const { chosen, flat, bulk, pickAll, clearPicks } = w;
+  const allDone = chosen.every((t) => t.completed);
+  return [
+    {
+      label: allDone ? "Restore" : "Complete",
+      icon: <CheckCircle2 size={16} />,
+      shortcut: "C",
+      key: "c",
+      action: bulk.complete,
+    },
+    "separator",
+    {
+      row: "Date",
+      shortcut: "T",
+      options: dateChoices(
+        w,
+        shared(chosen, "due_date"),
+        bulk.schedule,
+        bulk.pickDate,
+      ),
+    },
+    priorityRow(shared(chosen, "priority"), bulk.priority),
+    "separator",
+    {
+      label: "Move to",
+      icon: <FolderInput size={16} />,
+      shortcut: "V",
+      key: "v",
+      items: projectChoices(w, shared(chosen, "project_id"), bulk.move),
+    },
+    ...(chosen.length < flat.length
+      ? [
+          {
+            label: "Select all",
+            icon: <SquareCheck size={16} />,
+            shortcut: "⌘A",
+            action: pickAll,
+          },
+        ]
+      : []),
+    {
+      label: "Clear selection",
+      icon: <X size={16} />,
+      shortcut: "Esc",
+      action: clearPicks,
+    },
+    "separator",
+    {
+      label: `Delete ${taskCount(chosen.length)}`,
+      icon: <Trash2 size={16} />,
+      danger: true,
+      confirm: "Confirm delete",
+      action: bulk.remove,
+    },
+  ];
+}
+
+/** The menu for a row: the selection's actions when the row is one of several selected tasks. */
+export function rowMenu(task: Task, w: W) {
+  return w.picked.has(task.id) && w.chosen.length > 1
+    ? { entries: () => selectionMenu(w), title: `${w.chosen.length} tasks` }
+    : { entries: () => taskMenu(task, w), title: task.title };
 }

@@ -6,6 +6,8 @@ import Combine
     @Published var projects: [Project] = []
     @Published var profile: Profile?
     @Published var error: String?
+    /// Set while the server cannot be reached, such as "Can't reach localhost:8004." Cleared by the next successful refresh.
+    @Published var unreachable: String?
     @Published var busy = false
     @Published var server = UserDefaults.standard.string(forKey: "serverURL") ?? ""
     var api: API { API(server: server, token: Keychain.read(server: server)) }
@@ -18,7 +20,34 @@ import Combine
         do { try await action() } catch { report(error) }
     }
     func report(_ error: Error) {
-        if let error = error as? APIError, error.sessionEnded { endSession() } else { self.error = error.localizedDescription }
+        if let error = error as? APIError, error.sessionEnded { endSession(); return }
+        let text = message(for: error)
+        if Store.isConnectionFailure(error) { unreachable = text }
+        self.error = text
+    }
+    /// Connection failures mean the server is down, the address is wrong, or this device is offline.
+    static func isConnectionFailure(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [.cannotConnectToHost, .cannotFindHost, .timedOut, .notConnectedToInternet, .networkConnectionLost,
+                .dnsLookupFailed, .cannotLoadFromNetwork, .internationalRoamingOff, .dataNotAllowed].contains(error.code)
+    }
+    /// Names the server in connection failures, so a wrong or stopped server is obvious.
+    func message(for error: Error) -> String {
+        Store.isConnectionFailure(error) ? "Can't reach \(Store.displayName(server))." : error.localizedDescription
+    }
+    /// The host and port, such as localhost:8004 or tasks.example.com.
+    static func displayName(_ server: String) -> String {
+        guard let url = URL(string: server), let host = url.host else { return server }
+        return url.port.map { "\(host):\($0)" } ?? host
+    }
+    /// Returns to the sign-in card so the server address can be changed. Keeps the saved session for this server,
+    /// so choosing it again signs straight back in.
+    func changeServer() {
+        profile = nil
+        tasks = []
+        projects = []
+        unreachable = nil
+        error = nil
     }
     /// Keeps notification settings on purpose, so they resume after signing in again.
     private func endSession() {
@@ -26,6 +55,7 @@ import Combine
         profile = nil
         tasks = []
         projects = []
+        unreachable = nil
         error = "Your session has ended. Sign in again."
     }
     /// True once the person has chosen a server.
@@ -39,7 +69,7 @@ import Combine
               url.path.isEmpty, url.user == nil, url.password == nil,
               url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1"].contains(host))
         else { throw APIError(message: "Enter an HTTPS origin without a path, such as https://tasks.example.com.") }
-        if self.server != value { profile = nil; tasks = []; projects = [] }
+        if self.server != value { profile = nil; tasks = []; projects = []; unreachable = nil }
         self.server = value
         UserDefaults.standard.set(value, forKey: "serverURL")
     }
@@ -63,6 +93,7 @@ import Combine
         profile = nextProfile
         projects = nextProjects
         tasks = all
+        unreachable = nil
         Notifications.shared.attach(self)
         // Not awaited: system notification and alarm calls must never hold up the task list.
         Task { await Notifications.shared.didRefresh(all) }
@@ -154,6 +185,7 @@ import Combine
         profile = nil
         tasks = []
         projects = []
+        unreachable = nil
     }
     func deleteAccount() async throws {
         try await api.send("/api/v1/me", method: "DELETE")

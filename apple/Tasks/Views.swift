@@ -9,21 +9,49 @@ import AppKit
 struct StoreErrorAlert: ViewModifier {
     @EnvironmentObject var store: Store
     var active: Bool
+    /// The workspace shows connection failures in a banner instead, so it skips them here.
+    var bannerShowsUnreachable: Bool
+    private var bannerCovers: Bool { bannerShowsUnreachable && store.error != nil && store.error == store.unreachable }
     func body(content: Content) -> some View {
         content.alert("Something needs your attention", isPresented: Binding(
-            get: { active && store.error != nil },
+            get: { active && store.error != nil && !bannerCovers },
             set: { if active && !$0 { store.error = nil } }
         )) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
+            // Clear it, so the same message does not reappear later as an alert in a sheet.
+            .onChange(of: store.error, initial: true) { if active && bannerCovers { store.error = nil } }
+            .onChange(of: active) { if active && bannerCovers { store.error = nil } }
     }
 }
 extension View {
-    func tasksErrorAlert(active: Bool = true) -> some View {
-        modifier(StoreErrorAlert(active: active))
+    func tasksErrorAlert(active: Bool = true, bannerShowsUnreachable: Bool = false) -> some View {
+        modifier(StoreErrorAlert(active: active, bannerShowsUnreachable: bannerShowsUnreachable))
     }
 }
-
+/// Shown above the task list while the server cannot be reached, so old tasks are not mistaken for current ones.
+struct UnreachableBanner: View {
+    @EnvironmentObject var store: Store
+    var body: some View {
+        if let message = store.unreachable {
+            VStack(alignment: .leading, spacing: 6) {
+                Label { Text(message).foregroundStyle(Clean.text) } icon: { Image(systemName: "wifi.exclamationmark").foregroundStyle(Clean.danger) }
+                    .font(.callout)
+                HStack(spacing: 16) {
+                    // Borderless, so in a list row each button handles only its own tap.
+                    Button(store.busy ? "Retrying..." : "Retry") { Task { await store.perform { try await store.refresh() } } }
+                        .buttonStyle(.borderless).disabled(store.busy)
+                    Button("Change server") { store.changeServer() }.buttonStyle(.borderless)
+                }.font(.callout)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Clean.danger.opacity(0.1))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("unreachableBanner")
+        }
+    }
+}
 struct RootView: View {
     @EnvironmentObject var store: Store
     var body: some View {
@@ -165,11 +193,18 @@ struct LoginView: View {
             let result: AuthConfig = try await store.api.request("/auth/config")
             // The person may have typed another server while this one answered.
             guard Store.origin(server) == requested else { return }
+            // Only on Continue: at launch the app is already restoring the saved session.
+            if fromPerson, store.profile == nil, Keychain.read(server: requested) != nil {
+                // This device is still signed in to this server, such as after Change server or a server restart.
+                store.error = nil
+                await store.restore()
+                if store.profile != nil { return }
+            }
             config = result
             checkedServer = requested
             if result.apple_enabled { await loadChallenge() }
         } catch {
-            if Store.origin(server) == requested { store.error = error.localizedDescription }
+            if Store.origin(server) == requested { store.error = store.message(for: error) }
         }
     }
     /// A challenge is single-use and expires after ten minutes, so each Apple attempt gets a fresh one.
@@ -181,7 +216,7 @@ struct LoginView: View {
         do {
             let result: AppleChallenge = try await store.api.request("/auth/apple/challenge", method: "POST", body: API.body(["client_id": Bundle.main.bundleIdentifier ?? ""]))
             if checkedServer == requested { challenge = result }
-        } catch { store.error = error.localizedDescription }
+        } catch { store.error = store.message(for: error) }
     }
     func finishApple(_ result: Result<ASAuthorization, Error>, challenge used: AppleChallenge) async {
         if case .failure(let error) = result {
@@ -226,6 +261,9 @@ struct WorkspaceView: View {
     @State private var projectEditor: ProjectEditorSelection?
     @State private var pendingDelete: TodoTask?
     @State private var pendingProjectDelete: Project?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
     // Multi-select. Only tasks in the current list stay selected.
     @State private var selecting = false
     @State private var selectedIDs = Set<String>()
@@ -398,6 +436,12 @@ struct WorkspaceView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
+                #if os(iOS)
+                // On iPhone the sidebar is the first screen, so the banner has to be here as well.
+                if sizeClass == .compact, store.unreachable != nil {
+                    UnreachableBanner().listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
+                #endif
                 Section {
                     ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")], id: \.0) { tag, name, symbol in
                         Label(name, systemImage: symbol).tag(tag)
@@ -429,6 +473,7 @@ struct WorkspaceView: View {
                 }
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
+                UnreachableBanner()
                 if selection == "today", search.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Clean.textMuted)
@@ -544,7 +589,7 @@ struct WorkspaceView: View {
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(item: $projectEditor) { ProjectEditorView(project: $0.project) }
-        .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings)
+        .tasksErrorAlert(active: editor == nil && projectEditor == nil && !showSettings, bannerShowsUnreachable: true)
         .confirmationDialog("Permanently delete this task?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { task in
             Button("Delete task", role: .destructive) { Task { await store.perform { try await store.delete(task) } } }
         }
@@ -940,7 +985,12 @@ struct SettingsView: View {
             Form {
                 Section("Account") {
                     Text(store.profile?.email ?? "")
-                    Text(store.server).font(.caption).foregroundStyle(Clean.textMuted)
+                    HStack {
+                        Text(store.server).font(.caption).foregroundStyle(Clean.textMuted)
+                        Spacer()
+                        // Borderless, so tapping the address does not count as tapping the button.
+                        Button("Change server") { dismiss(); store.changeServer() }.buttonStyle(.borderless)
+                    }
                     Button("Sign out") { Task { await store.perform { try await store.signOut(); dismiss() } } }
                     // Best effort on the server. Unregistering below makes APNs retire this device's token anyway.
                     Button("Remove local session") { Task { await store.perform { try? await notifications.disable(); try store.forgetSession(); dismiss() } } }
