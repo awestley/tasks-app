@@ -52,6 +52,7 @@ def test_tools_and_prompts_are_listed(mcp):
         "get_task",
         "get_project",
         "create_task",
+        "add_task",
         "update_task",
         "update_tasks",
         "delete_tasks",
@@ -177,6 +178,42 @@ def test_spaces_through_the_tools(mcp):
     # Changing only the space takes a task out of its project.
     assert moved["space"] == "personal" and moved["project_id"] is None
     assert {t["title"] for t in mcp.tool("list_tasks", {"space": "personal"})} == {"Draft numbers", "Book review"}
+
+
+def test_add_task_reads_the_line_like_quick_add(mcp):
+    home = mcp.tool("create_project", {"name": "Home", "space": "work"})
+    added = mcp.tool(
+        "add_task",
+        {"text": "Call the plumber tomorrow 3pm p2 @phone #Home", "time_zone": "America/New_York"},
+    )
+    task = added["task"]
+    assert task["title"] == "Call the plumber"
+    assert task["due_time"] == "15:00" and task["due_date"] and task["time_zone"] == "America/New_York"
+    assert task["priority"] == 2 and task["labels"] == ["phone"]
+    # The project decides the space.
+    assert task["project_id"] == home["id"] and task["space"] == "work"
+    assert added["recognized"]
+    plain = mcp.tool("add_task", {"text": "  Read the manual ", "time_zone": "UTC", "space": "work"})
+    assert plain["task"]["title"] == "Read the manual" and plain["task"]["space"] == "work"
+    assert plain["recognized"] == [] and plain["task"]["due_date"] is None
+    assert "text" in mcp.failure("add_task", {"text": " ", "time_zone": "UTC"})
+
+
+def test_a_repeated_create_with_the_same_id_returns_the_first(mcp):
+    chosen = "3f0c8a52-6a51-4d55-9a3c-2f1d1b7a9e10"
+    first = mcp.tool("add_task", {"text": "Water plants friday", "time_zone": "UTC", "id": chosen})
+    again = mcp.tool("add_task", {"text": "Water plants friday", "time_zone": "UTC", "id": chosen})
+    assert first["task"]["id"] == again["task"]["id"] == chosen
+    assert len(mcp.tool("list_tasks", {"query": "Water plants"})) == 1
+    created = mcp.tool("create_task", {"title": "Once", "id": chosen.replace("3f", "4f", 1)})
+    assert mcp.tool("create_task", {"title": "Once", "id": created["id"]})["id"] == created["id"]
+    project = "5a1b2c3d-0000-4000-8000-000000000001"
+    assert mcp.tool("create_project", {"name": "P", "id": project})["id"] == project
+    assert mcp.tool("create_project", {"name": "P", "id": project})["id"] == project
+    assert len(mcp.tool("list_projects")) == 1
+    assert "UUID" in mcp.failure("create_task", {"title": "x", "id": "not-a-uuid"})
+    taken = mcp("tools/call", {"name": "create_task", "arguments": {"title": "x", "id": chosen}}, mcp.other)
+    assert taken["result"]["isError"] and "409" in taken["result"]["content"][0]["text"]
 
 
 def test_errors_carry_the_api_message(mcp):

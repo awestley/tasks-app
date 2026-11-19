@@ -12,7 +12,7 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 - English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, and alarm-style reminders on iPhone. Siri and Shortcuts can add, complete, snooze, move and open tasks, find them through the Spotlight index, and act on the task on screen. Push delivery requires server configuration and device permission.
 - Work and Personal spaces. Every task and project belongs to one, and each app shows one space at a time: the switch is at the top of the sidebar (Browse on a phone). Lists, counts, labels, search and quick add stay inside the current space, and each device remembers its own. A task in a project is in the project's space; Move to sends a task to the other space's Inbox, and moving a project in its editor takes its tasks along. Existing tasks start in Personal. The API and MCP tools take `space` (`personal` or `work`).
 - Versioned REST API and generated OpenAPI contract.
-- MCP over stdio and authenticated Streamable HTTP, with tools for searching, changing one or several tasks, projects and links.
+- MCP over stdio and authenticated Streamable HTTP, with tools to find, add, change and link tasks and projects. See [API and MCP](#api-and-mcp).
 - Sign in with Apple code exchange, signature/audience/issuer/expiry/nonce validation, one-time challenges, browser binding, and revocable sessions.
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
@@ -150,7 +150,8 @@ Remote MCP URL: `https://YOUR_DOMAIN/mcp/`, with an Authorization bearer header.
 Keep actual tokens in your client's secret store or private configuration. Never commit them. Tools:
 
 - Finding: `search` (ranked, the same results as the app's search, matching checklist items and labels too), `list_tasks` (filters), `get_task`, `list_projects`, `get_project` (with its links).
-- Changing one task: `create_task`, `update_task` (with `undo` to reverse a completion you just made), `complete_task`, `snooze_task`, `delete_task`, `parse_task` (preview quick-entry text).
+- Adding: `add_task` takes one line of text and reads dates, priority, labels, a project and a reminder out of it, like quick add and Siri's Add Task; `create_task` sets each field. Both, and `create_project`, accept an `id` you choose, so a retried call returns the item made the first time.
+- Changing one task: `update_task` (with `undo` to reverse a completion you just made), `complete_task`, `snooze_task`, `delete_task`, `parse_task` (preview quick-entry text).
 - Changing several tasks, like selecting them in the apps: `update_tasks` (complete or reopen, date, priority, move to a project or space, labels) and `delete_tasks`. Each task is changed on its own with its own version, and the result lists any that failed.
 - Projects: `create_project`, `update_project`, `delete_project` (its tasks move to Inbox).
 - Links: `link_item`, `unlink_item`, `find_linked` (stored links and `[[note:<id>]]` mentions in descriptions).
