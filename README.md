@@ -12,7 +12,7 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 - English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, and alarm-style reminders on iPhone. Siri and Shortcuts can add, complete, snooze, move and open tasks, find them through the Spotlight index, and act on the task on screen. Push delivery requires server configuration and device permission.
 - Work and Personal spaces. Every task and project belongs to one, and each app shows one space at a time: the switch is at the top of the sidebar (Browse on a phone). Lists, counts, labels, search and quick add stay inside the current space, and each device remembers its own. A task in a project is in the project's space; Move to sends a task to the other space's Inbox, and moving a project in its editor takes its tasks along. Existing tasks start in Personal. The API and MCP tools take `space` (`personal` or `work`).
 - Versioned REST API and generated OpenAPI contract.
-- MCP over stdio and authenticated Streamable HTTP, with nine task and project tools.
+- MCP over stdio and authenticated Streamable HTTP, with tools for searching, changing one or several tasks, projects and links.
 - Sign in with Apple code exchange, signature/audience/issuer/expiry/nonce validation, one-time challenges, browser binding, and revocable sessions.
 - PostgreSQL production storage, Alembic migrations, Docker image, DigitalOcean App Platform specification, and Droplet deployment with automatic HTTPS through Caddy.
 
@@ -125,7 +125,7 @@ Run the iOS UI test with `bash scripts/test-ios.sh SIMULATOR_UDID` (find a devic
 
 ## API and MCP
 
-API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
+API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Lists take `space` (`personal` or `work`), and `PATCH /api/v1/tasks` and `POST /api/v1/tasks/delete` change or delete up to 100 tasks in one request. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
 
 Browse the API reference at `https://YOUR_DOMAIN/docs`, also linked from **Settings & integrations**. Try it out uses your browser session, or a token entered under **Authorize**. The schema itself is at `/api/v1/openapi.json`. The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
 

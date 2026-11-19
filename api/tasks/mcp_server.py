@@ -157,17 +157,17 @@ def bulk_targets(tasks: list[TaskVersion]) -> list[tuple[str, int]]:
     return [(item.task_id, item.version) for item in tasks]
 
 
-async def each(ctx: Context, targets, action) -> dict:
-    """Run an action per task and report each outcome, so one stale version doesn't stop the rest."""
+async def each(ctx: Context, path: str, method: str, body: dict) -> dict:
+    """One bulk request; the API changes each task on its own and reports each outcome."""
+    outcome = await call(ctx, path, method, body)
     results = []
-    for task_id, version in targets:
-        try:
-            result = await action(task_id, version)
-            results.append({"task_id": task_id, "ok": True, "version": (result or {}).get("version")})
-        except ValueError as error:
-            results.append({"task_id": task_id, "ok": False, "error": str(error)})
-    done = sum(1 for result in results if result["ok"])
-    return {"changed": done, "failed": len(results) - done, "results": results}
+    for item in outcome["results"]:
+        if not item["ok"]:
+            error = f"The server returned {item['status']}: {item['error']}"
+            results.append({"task_id": item["task_id"], "ok": False, "error": error})
+        else:
+            results.append({"task_id": item["task_id"], "ok": True, "version": item.get("version")})
+    return {**outcome, "results": results}
 
 
 @mcp.tool(annotations=read_only)
@@ -321,10 +321,8 @@ async def update_tasks(ctx: Context, tasks: list[TaskVersion], changes: dict) ->
     """Apply the same change to several tasks, as selecting tasks in the apps does: complete or reopen (completed), reschedule (due_date, due_time), set priority, move (project_id, null for Inbox), move to the 'work' or 'personal' space (space alone takes tasks out of their projects) or set labels. tasks is a list of {task_id, version} from your last read, up to 100. Each task is changed on its own and reported in results; on a 409 for one, reread it and retry only that one."""
     if not changes or not set(changes).issubset(BULK_FIELDS):
         raise ValueError("Changes may include " + ", ".join(sorted(BULK_FIELDS)))
-    targets = bulk_targets(tasks)
-    return await each(
-        ctx, targets, lambda task_id, version: call(ctx, task_path(task_id), "PATCH", {**changes, "version": version})
-    )
+    targets = [{"task_id": task_id, "version": version} for task_id, version in bulk_targets(tasks)]
+    return await each(ctx, "/tasks", "PATCH", {"tasks": targets, "changes": changes})
 
 
 @mcp.tool(annotations=write)
@@ -349,10 +347,8 @@ async def delete_task(ctx: Context, task_id: str, version: int) -> dict:
 @mcp.tool(annotations=destructive)
 async def delete_tasks(ctx: Context, tasks: list[TaskVersion]) -> dict:
     """Permanently delete several tasks, each given as {task_id, version} from your last read, up to 100. Only do this at the user's explicit request, after listing what will be deleted."""
-    targets = bulk_targets(tasks)
-    return await each(
-        ctx, targets, lambda task_id, version: call(ctx, task_path(task_id), "DELETE", params={"version": version})
-    )
+    targets = [{"task_id": task_id, "version": version} for task_id, version in bulk_targets(tasks)]
+    return await each(ctx, "/tasks/delete", "POST", {"tasks": targets})
 
 
 @mcp.tool(annotations=write)

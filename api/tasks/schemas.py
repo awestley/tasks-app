@@ -180,6 +180,69 @@ class TaskPatch(Model):
     undo: bool | None = None
 
 
+MAX_BULK = 100
+
+
+class TaskVersionIn(Model):
+    """One task to change, with the version from the last read of it."""
+
+    task_id: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+
+
+class BulkChanges(Model):
+    """What selecting several tasks in the apps can change. Omit a field to keep it."""
+
+    completed: bool | None = None
+    due_date: date | None = None
+    due_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    priority: int = Field(default=None, ge=1, le=4)
+    # Null moves the tasks to Inbox.
+    project_id: str | None = None
+    # A new space without a project_id takes the tasks out of their projects.
+    space: Space = None
+    labels: list[str] = Field(default=None, max_length=20)
+
+
+def unique_tasks(tasks):
+    if len({item.task_id for item in tasks}) != len(tasks):
+        raise ValueError("Give each task once")
+    return tasks
+
+
+class TaskBulkUpdate(Model):
+    tasks: list[TaskVersionIn] = Field(min_length=1, max_length=MAX_BULK)
+    changes: BulkChanges
+    _unique = field_validator("tasks")(unique_tasks)
+
+    @model_validator(mode="after")
+    def something_to_change(self):
+        if not self.changes.model_fields_set:
+            raise ValueError("Give at least one change")
+        return self
+
+
+class TaskBulkDelete(Model):
+    tasks: list[TaskVersionIn] = Field(min_length=1, max_length=MAX_BULK)
+    _unique = field_validator("tasks")(unique_tasks)
+
+
+class BulkResult(Model):
+    task_id: str
+    ok: bool
+    # The task's new version after a change; absent after a delete or a failure.
+    version: int | None = None
+    # On failure, the status the single-task request would have returned (404, 409 or 422) and its message.
+    status: int | None = None
+    error: str | None = None
+
+
+class BulkOut(Model):
+    changed: int
+    failed: int
+    results: list[BulkResult]
+
+
 class ChecklistItemOut(Model):
     id: str
     title: str
