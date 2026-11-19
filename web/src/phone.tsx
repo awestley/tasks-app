@@ -19,7 +19,8 @@ import {
   Settings,
   Tag,
 } from "lucide-react";
-import type { Project } from "./api";
+import type { Project, Space } from "./api";
+import { SpaceSwitch } from "./SpaceSwitch";
 
 export type PhoneTab = "inbox" | "today" | "upcoming" | "search" | "browse";
 
@@ -266,6 +267,8 @@ export function BrowseScreen({
   counts,
   projectCount,
   labelCount,
+  space,
+  switchSpace,
   go,
   addProject,
   projectProps,
@@ -280,6 +283,8 @@ export function BrowseScreen({
   counts: { all: number; completed: number };
   projectCount: (id: string) => number;
   labelCount: (label: string) => number;
+  space: Space;
+  switchSpace: (space: Space) => void;
   go: (view: string) => void;
   addProject: () => void;
   projectProps: (project: Project) => CellProps;
@@ -298,6 +303,7 @@ export function BrowseScreen({
           <div className="phone-bar-actions">{status}</div>
         </div>
         <h1>Browse</h1>
+        <SpaceSwitch space={space} change={switchSpace} />
       </header>
       <div className="phone-group">
         <Cell

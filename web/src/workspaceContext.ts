@@ -2,7 +2,7 @@
 // owns the state and builds this on each render.
 import type React from "react";
 import type { usePc } from "@awestley/pc-runtime/react";
-import type { Profile, Project, Task } from "./api";
+import type { Profile, Project, Space, Task } from "./api";
 import type { MenuEntry, MenuRequest } from "./ContextMenu";
 import type { Toast } from "./pieces";
 import type { QuickDefaults } from "./QuickAdd";
@@ -26,6 +26,9 @@ export type W = {
   coarse: boolean;
   pc: ReturnType<typeof usePc>;
   user: Profile;
+  /** The space shown. `projects`, `active` and every list below hold only its tasks. */
+  space: Space;
+  switchSpace: (space: Space) => void;
   projects: Project[];
   active: Task[];
   labels: string[];
@@ -64,6 +67,7 @@ export type W = {
     pickDate: (anchor: DOMRect | { x: number; y: number }) => void;
     priority: (priority: number) => void;
     move: (projectId: string | null, name: string) => void;
+    space: (space: Space) => void;
     remove: () => void;
   };
   inlineAdd: string | null;

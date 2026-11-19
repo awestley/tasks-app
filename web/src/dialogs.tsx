@@ -10,8 +10,16 @@ import {
   X,
   CircleAlert,
 } from "lucide-react";
-import { api, type Profile, type Session, type Token } from "./api";
+import {
+  api,
+  spaceOf,
+  type Profile,
+  type Session,
+  type Space,
+  type Token,
+} from "./api";
 import { LinksEditor } from "./LinksEditor";
+import { SpaceSwitch } from "./SpaceSwitch";
 import { PushSettings } from "./PushSettings";
 import { autoReminder, setAutoReminder } from "./reminders";
 import { flush } from "./store";
@@ -92,24 +100,30 @@ const SWATCHES = [
 ];
 export function ProjectEditor({
   project,
+  space: currentSpace,
   close,
   save,
   remove,
 }: {
-  project: { id?: string; name: string; color: string } | null;
+  project: { id?: string; name: string; color: string; space?: Space } | null;
+  /** The space shown, where a new project goes unless another is chosen. */
+  space: Space;
   close: () => void;
-  save: (name: string, color: string) => void;
+  save: (name: string, color: string, space: Space) => void;
   remove?: () => void;
 }) {
   const [name, setName] = useState(project?.name || ""),
     [color, setColor] = useState(project?.color || "#2563eb"),
+    [space, setSpace] = useState<Space>(
+      project ? spaceOf(project) : currentSpace,
+    ),
     [confirm, setConfirm] = useState(false);
   return (
     <Modal close={close} label="Project editor">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) save(name.trim(), color);
+          if (name.trim()) save(name.trim(), color, space);
         }}
       >
         <div className="modal-heading">
@@ -154,6 +168,13 @@ export function ProjectEditor({
             />
           </div>
         </div>
+        <div className="field-label">
+          Space
+          <SpaceSwitch space={space} change={setSpace} label="Project space" />
+        </div>
+        {project && space !== spaceOf(project) && (
+          <p className="muted">Its tasks move with it.</p>
+        )}
         {confirm && (
           <p className="muted">Tasks in this project will move to Inbox.</p>
         )}

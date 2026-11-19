@@ -84,8 +84,16 @@ final class WorkspaceTests: XCTestCase {
         let notNow = app.buttons["Not Now"]
         if notNow.waitForExistence(timeout: 3) { notNow.tap() }
     }
+    /// On iPhone, search lives in its own tab.
+    @MainActor func search(_ app: XCUIApplication, for text: String) {
+        let tab = app.tabBars.buttons["Search"]
+        if tab.exists { tab.tap() }
+        let field = app.searchFields["Search tasks"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
+        field.tap(); field.typeText(text)
+    }
     @MainActor func openSettings(_ app: XCUIApplication) {
-        if !app.buttons["Settings"].exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
+        if !app.buttons["Settings"].exists { app.tabBars.buttons["Browse"].tap() }
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5), app.debugDescription)
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.buttons["Remove local session"].waitForExistence(timeout: 5), app.debugDescription)
@@ -144,8 +152,7 @@ final class WorkspaceTests: XCTestCase {
     }
     /// Opens a task from search into the task view.
     @MainActor func openTask(_ app: XCUIApplication, _ title: String) {
-        let search = app.searchFields["Search tasks"]
-        search.tap(); search.typeText(title)
+        search(app, for: title)
         let row = app.buttons.containing(.staticText, identifier: title).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
         row.tap()
@@ -235,9 +242,11 @@ final class WorkspaceTests: XCTestCase {
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), app.debugDescription)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(taskTitle) C")).firstMatch.waitForExistence(timeout: 5), app.debugDescription)
-        // Phones have no modifier keys, so selecting starts from the toolbar.
-        XCTAssertTrue(app.buttons["Select"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
-        app.buttons["Select"].firstMatch.tap()
+        // Phones have no modifier keys, so selecting starts from the More menu.
+        XCTAssertTrue(app.buttons["More"].firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["More"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Select tasks"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Select tasks"].tap()
         app.buttons["Select \(taskTitle) A"].tap()
         app.buttons["Select \(taskTitle) B"].tap()
         XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), app.debugDescription)
@@ -312,8 +321,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertNotNil(task["due_date"] as? String)
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["Add task"].waitForExistence(timeout: 15), "Session should survive relaunch")
-        let search = app.searchFields["Search tasks"]
-        search.tap(); search.typeText(taskTitle)
+        search(app, for: taskTitle)
         let row = app.buttons.containing(.staticText, identifier: taskTitle).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
         row.tap()
@@ -345,7 +353,7 @@ final class WorkspaceTests: XCTestCase {
         let completed = try XCTUnwrap(afterCompletion.first { $0["id"] as? String == task["id"] as? String })
         XCTAssertEqual(completed["completed"] as? Bool, true)
         if app.buttons["close"].exists { app.buttons["close"].tap() }
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["Browse"].tap()
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5), app.debugDescription)
         app.buttons["Settings"].tap()
         app.buttons["Enable notifications"].tap()

@@ -101,6 +101,8 @@ class Project(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     color: Mapped[str] = mapped_column(String(7), default="#2563eb")
+    # "personal" or "work". The apps show one space at a time, and a project's tasks are in its space.
+    space: Mapped[str] = mapped_column(String(10), default="personal", server_default="personal", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
@@ -109,6 +111,8 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), index=True)
+    # "personal" or "work". Always the project's space when the task is in a project.
+    space: Mapped[str] = mapped_column(String(10), default="personal", server_default="personal", index=True)
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str] = mapped_column(Text, default="")
     due_date: Mapped[datetime | None] = mapped_column(Date, index=True)

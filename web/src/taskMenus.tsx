@@ -21,7 +21,8 @@ import {
   X,
 } from "lucide-react";
 import type { MenuEntry, MenuRow } from "./ContextMenu";
-import { api, type Task } from "./api";
+import { api, spaceNames, type Space, type Task } from "./api";
+import { otherSpace, spaceIcons } from "./SpaceSwitch";
 import { isoDate, nextWeekDate, weekendDate } from "./parse";
 import { refreshSoon } from "./store";
 import { taskLink } from "./routes";
@@ -100,12 +101,18 @@ export function dateOptions(task: Task, w: W) {
   );
 }
 
-/** Project choices. `current` is undefined when several tasks are in different projects. */
+/**
+ * Project choices in this space, then the other space's Inbox. `current` is undefined when several
+ * tasks are in different projects.
+ */
 export function projectChoices(
   w: W,
   current: string | null | undefined,
   move: (projectId: string | null, name: string) => void,
+  toSpace: (space: Space) => void,
 ): MenuEntry[] {
+  const other = otherSpace(w.space);
+  const OtherIcon = spaceIcons[other];
   return [
     {
       label: "Inbox",
@@ -123,6 +130,12 @@ export function projectChoices(
       checked: current === p.id,
       action: () => move(p.id, p.name),
     })),
+    "separator",
+    {
+      label: spaceNames[other],
+      icon: <OtherIcon size={16} />,
+      action: () => toSpace(other),
+    },
   ];
 }
 
@@ -144,8 +157,16 @@ export function priorityRow(
 }
 
 export function moveMenu(task: Task, w: W): MenuEntry[] {
-  return projectChoices(w, task.project_id, (project_id, name) =>
-    w.patch(task, { project_id }, `Moved to ${name}`),
+  return projectChoices(
+    w,
+    task.project_id,
+    (project_id, name) => w.patch(task, { project_id }, `Moved to ${name}`),
+    (space) =>
+      w.patch(
+        task,
+        { space, project_id: null },
+        `Moved to ${spaceNames[space]}`,
+      ),
   );
 }
 
@@ -361,7 +382,12 @@ export function selectionMenu(w: W): MenuEntry[] {
       icon: <FolderInput size={16} />,
       shortcut: "V",
       key: "v",
-      items: projectChoices(w, shared(chosen, "project_id"), bulk.move),
+      items: projectChoices(
+        w,
+        shared(chosen, "project_id"),
+        bulk.move,
+        bulk.space,
+      ),
     },
     ...(chosen.length < flat.length
       ? [

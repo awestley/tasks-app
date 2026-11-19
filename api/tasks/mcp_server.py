@@ -130,6 +130,7 @@ TASK_FIELDS = {
     "title",
     "description",
     "project_id",
+    "space",
     "due_date",
     "due_time",
     "time_zone",
@@ -142,7 +143,7 @@ TASK_FIELDS = {
     "alert_style",
 }
 # What the apps change on several selected tasks at once.
-BULK_FIELDS = {"completed", "due_date", "due_time", "priority", "project_id", "labels"}
+BULK_FIELDS = {"completed", "due_date", "due_time", "priority", "project_id", "space", "labels"}
 MAX_BULK = 100
 
 
@@ -173,7 +174,7 @@ async def each(ctx: Context, targets, action) -> dict:
 async def search(
     ctx: Context, query: str, types: str | None = None, limit: int = 20, cursor: str | None = None
 ) -> dict:
-    """Search tasks and projects, best match first. Matches task titles, descriptions, checklist items and labels, and project names; "quoted phrases" match exactly. types: task, project or task,project. limit: 1 to 50. Pass next_cursor back as cursor for more. Each item has its ref (pc://tasks/task/<id>), title, subtitle (due date and project), snippet and version."""
+    """Search tasks and projects, best match first. Matches task titles, descriptions, checklist items and labels, and project names; "quoted phrases" match exactly. types: task, project or task,project. limit: 1 to 50. Pass next_cursor back as cursor for more. Each item has its ref (pc://tasks/task/<id>), title, subtitle (due date and project), snippet and version. Results cover both the work and personal spaces; to stay in one, use list_tasks with space or check each task."""
     params = {"q": query, "types": types, "limit": limit, "cursor": cursor}
     return await call(ctx, "/search", params={k: v for k, v in params.items() if v is not None})
 
@@ -184,18 +185,20 @@ async def list_tasks(
     query: str = "",
     completed: bool | None = None,
     project_id: str | None = None,
+    space: str | None = None,
     label: str | None = None,
     due_before: str | None = None,
     offset: int = 0,
     limit: int = 100,
 ) -> list[dict]:
-    """List tasks by filter, oldest first. query matches title or description text. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. Dates: YYYY-MM-DD. To find tasks by words, prefer search."""
+    """List tasks by filter, oldest first. query matches title or description text. Page with offset/limit (max 200). Use project_id='inbox' for unfiled tasks. space is 'work' or 'personal'; the user keeps the two apart. Dates: YYYY-MM-DD. To find tasks by words, prefer search."""
     params = {
         "q": query,
         "offset": offset,
         "limit": limit,
         "completed": completed,
         "project_id": project_id,
+        "space": space,
         "label": label,
         "due_before": due_before,
     }
@@ -209,9 +212,9 @@ async def get_task(ctx: Context, task_id: str) -> dict:
 
 
 @mcp.tool(annotations=read_only)
-async def list_projects(ctx: Context) -> list[dict]:
-    """List the user's project IDs, names, colors and refs."""
-    return await call(ctx, "/projects")
+async def list_projects(ctx: Context, space: str | None = None) -> list[dict]:
+    """List the user's project IDs, names, colors, spaces (work or personal) and refs."""
+    return await call(ctx, "/projects", params={"space": space} if space else None)
 
 
 @mcp.tool(annotations=read_only)
@@ -222,11 +225,13 @@ async def get_project(ctx: Context, project_id: str) -> dict:
 
 
 @mcp.tool(annotations=write)
-async def update_project(ctx: Context, project_id: str, name: str | None = None, color: str | None = None) -> dict:
-    """Rename a project or change its color (six-digit hexadecimal including #)."""
-    changes = {k: v for k, v in {"name": name, "color": color}.items() if v is not None}
+async def update_project(
+    ctx: Context, project_id: str, name: str | None = None, color: str | None = None, space: str | None = None
+) -> dict:
+    """Rename a project, change its color (six-digit hexadecimal including #), or move it and its tasks to the 'work' or 'personal' space."""
+    changes = {k: v for k, v in {"name": name, "color": color, "space": space}.items() if v is not None}
     if not changes:
-        raise ValueError("Give a name or a color")
+        raise ValueError("Give a name, a color or a space")
     return await call(ctx, project_path(project_id), "PATCH", changes)
 
 
@@ -264,6 +269,7 @@ async def create_task(
     title: str,
     description: str = "",
     project_id: str | None = None,
+    space: str = "personal",
     due_date: str | None = None,
     due_time: str | None = None,
     time_zone: str = "UTC",
@@ -274,7 +280,7 @@ async def create_task(
     checklist: list[ChecklistItem] | None = None,
     alert_style: str = "notification",
 ) -> dict:
-    """Create a task. Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device."""
+    """Create a task. space is 'work' or 'personal' (a task in a project takes the project's space). Priority 1 is urgent, 4 normal. Recurrence: daily, weekly, monthly; requires a due date. Checklist items have title, optional id, and completed. A reminder needs due_date and due_time (HH:MM) with an IANA time_zone; reminder_minutes=0 means at due time. alert_style 'alarm' rings the reminder as an alarm on iPhone; other devices get a notification. Clients must opt into push on each device."""
     return await call(
         ctx,
         "/tasks",
@@ -283,6 +289,7 @@ async def create_task(
             "title": title,
             "description": description,
             "project_id": project_id,
+            "space": space,
             "due_date": due_date,
             "due_time": due_time,
             "time_zone": time_zone,
@@ -298,7 +305,7 @@ async def create_task(
 
 @mcp.tool(annotations=write)
 async def update_task(ctx: Context, task_id: str, version: int, changes: dict, undo: bool = False) -> dict:
-    """Edit a task using its current version. Changes may include title, description, project_id, due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. To reverse a completion you just made, send completed=false with undo=true: a recurring task's new next occurrence is then removed too, if it hasn't been changed. On 409, reread before retrying."""
+    """Edit a task using its current version. Changes may include title, description, project_id, space (work or personal; changing only space takes the task out of its project), due_date, due_time (HH:MM), time_zone (IANA), reminder_minutes (0 at due time, null disabled), alert_style (notification or alarm), priority, labels, recurrence, completed, checklist. Checklist arrays replace the full list; preserve item IDs. Null clears optional fields. To reverse a completion you just made, send completed=false with undo=true: a recurring task's new next occurrence is then removed too, if it hasn't been changed. On 409, reread before retrying."""
     if not changes or not set(changes).issubset(TASK_FIELDS):
         raise ValueError("Supply at least one supported task field")
     body = {**changes, "version": version}
@@ -311,7 +318,7 @@ async def update_task(ctx: Context, task_id: str, version: int, changes: dict, u
 
 @mcp.tool(annotations=write)
 async def update_tasks(ctx: Context, tasks: list[TaskVersion], changes: dict) -> dict:
-    """Apply the same change to several tasks, as selecting tasks in the apps does: complete or reopen (completed), reschedule (due_date, due_time), set priority, move (project_id, null for Inbox) or set labels. tasks is a list of {task_id, version} from your last read, up to 100. Each task is changed on its own and reported in results; on a 409 for one, reread it and retry only that one."""
+    """Apply the same change to several tasks, as selecting tasks in the apps does: complete or reopen (completed), reschedule (due_date, due_time), set priority, move (project_id, null for Inbox), move to the 'work' or 'personal' space (space alone takes tasks out of their projects) or set labels. tasks is a list of {task_id, version} from your last read, up to 100. Each task is changed on its own and reported in results; on a 409 for one, reread it and retry only that one."""
     if not changes or not set(changes).issubset(BULK_FIELDS):
         raise ValueError("Changes may include " + ", ".join(sorted(BULK_FIELDS)))
     targets = bulk_targets(tasks)
@@ -349,9 +356,9 @@ async def delete_tasks(ctx: Context, tasks: list[TaskVersion]) -> dict:
 
 
 @mcp.tool(annotations=write)
-async def create_project(ctx: Context, name: str, color: str = "#2563eb") -> dict:
-    """Create a project. Color must be a six-digit hexadecimal color including #."""
-    return await call(ctx, "/projects", "POST", {"name": name, "color": color})
+async def create_project(ctx: Context, name: str, color: str = "#2563eb", space: str = "personal") -> dict:
+    """Create a project in the 'work' or 'personal' space. Color must be a six-digit hexadecimal color including #."""
+    return await call(ctx, "/projects", "POST", {"name": name, "color": color, "space": space})
 
 
 @mcp.tool(annotations=destructive)

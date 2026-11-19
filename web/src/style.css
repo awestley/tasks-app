@@ -3316,3 +3316,36 @@ html.is-companion:has(.companion.is-floating) body {
     padding: 0 12px;
   }
 }
+/* Personal or Work: the sidebar, the phone's Browse screen and the project editor. */
+.space-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--background-modifier-hover);
+}
+.sidebar > .space-switch {
+  margin: 0 2px 12px;
+}
+.space-switch > button {
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.space-switch > button:hover {
+  color: var(--text-normal);
+}
+.space-switch > button.is-selected {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.field-label > .space-switch {
+  margin-top: 6px;
+  max-width: 260px;
+}

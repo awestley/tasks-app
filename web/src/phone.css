@@ -833,3 +833,10 @@
 .is-phone.has-toast .detail.is-overlay {
   padding-bottom: calc(var(--safe-b) + 76px);
 }
+.phone-head > .space-switch {
+  margin: 10px 16px 0;
+}
+.phone-head > .space-switch > button {
+  height: 32px;
+  font-size: 14px;
+}

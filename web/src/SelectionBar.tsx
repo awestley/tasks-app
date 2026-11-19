@@ -80,7 +80,12 @@ export function SelectionBar({ w }: { w: W }) {
           onClick={(e) =>
             openMenuAt(
               e,
-              projectChoices(w, shared(chosen, "project_id"), bulk.move),
+              projectChoices(
+                w,
+                shared(chosen, "project_id"),
+                bulk.move,
+                bulk.space,
+              ),
               "Move to",
             )
           }

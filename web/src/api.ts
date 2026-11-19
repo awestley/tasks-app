@@ -1,10 +1,21 @@
-export type Project = { id: string; name: string; color: string };
+/** Work and personal tasks are kept apart; the apps show one space at a time. */
+export type Space = "personal" | "work";
+export const spaceNames: Record<Space, string> = {
+  personal: "Personal",
+  work: "Work",
+};
+/** Copies saved before spaces existed have none: they are personal. */
+export const spaceOf = (item: { space?: Space }): Space =>
+  item.space ?? "personal";
+export type Project = { id: string; name: string; color: string; space: Space };
 export type ChecklistItem = { id: string; title: string; completed: boolean };
 export type Task = {
   id: string;
   title: string;
   description: string;
   project_id: string | null;
+  /** Always the project's space when the task is in a project. */
+  space: Space;
   due_date: string | null;
   due_time: string | null;
   time_zone: string;

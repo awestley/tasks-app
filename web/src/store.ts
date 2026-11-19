@@ -18,7 +18,9 @@ import {
   isTemporary,
   type ChecklistItem,
   type Profile,
+  spaceOf,
   type Project,
+  type Space,
   type Task,
 } from "./api";
 import { mergeChecklist } from "./checklist";
@@ -53,7 +55,7 @@ type Op = { op: string; at: number } & (
   | {
       kind: "project-patch";
       id: string;
-      changes: { name: string; color: string };
+      changes: ProjectChanges;
     }
   | { kind: "project-delete"; id: string }
 );
@@ -63,6 +65,7 @@ type Replica = {
   projects: Project[];
   saved: number;
 };
+export type ProjectChanges = Partial<Pick<Project, "name" | "color" | "space">>;
 export type Phase = "loading" | "signed-out" | "ready";
 export type State = {
   phase: Phase;
@@ -70,6 +73,8 @@ export type State = {
   config: Config;
   tasks: Task[];
   projects: Project[];
+  /** The space this browser shows: work and personal tasks are never listed together. */
+  space: Space;
   /** Writes not yet on the server. */
   pending: number;
   online: boolean;
@@ -86,6 +91,8 @@ const REPLICA = "tasks.replica.v1";
 const OUTBOX = "tasks.outbox.v1";
 /** Written when someone signs out, so other views of the app in this browser do too. */
 const SIGNED_OUT = "tasks.signed-out";
+/** The space this browser shows, shared by every view of the app in it. */
+const SPACE = "tasks.space";
 const read = <T>(key: string): T | null => {
   try {
     return JSON.parse(localStorage.getItem(key) || "null");
@@ -128,6 +135,7 @@ let state: State = {
   config: { apple_enabled: false, dev_login: false },
   tasks: [],
   projects: [],
+  space: read<Space>(SPACE) === "work" ? "work" : "personal",
   pending: queue.length,
   online: true,
   retrying: false,
@@ -193,6 +201,13 @@ function overlay() {
         ...changes,
         updated_at: new Date(op.at).toISOString().replace("Z", ""),
       };
+      // As the server does: a project decides the space, and a new space alone leaves the project.
+      const project = next.project_id ? projects.get(next.project_id) : null;
+      if (project && spaceOf(project) !== spaceOf(next)) {
+        if (changes.space && changes.project_id === undefined)
+          next.project_id = null;
+        else next.space = spaceOf(project);
+      }
       if (changes.completed === true && !t.completed) {
         next.completed_at = nowIso();
         next.checklist = next.checklist.map((i) => ({ ...i, completed: true }));
@@ -204,6 +219,11 @@ function overlay() {
     } else if (op.kind === "project-patch") {
       const p = projects.get(op.id);
       if (p) projects.set(op.id, { ...p, ...op.changes });
+      const space = op.changes.space;
+      if (p && space)
+        for (const [id, t] of tasks)
+          if (t.project_id === op.id && spaceOf(t) !== space)
+            tasks.set(id, { ...t, space });
     } else if (op.kind === "project-delete") {
       projects.delete(op.id);
       for (const [id, t] of tasks)
@@ -378,6 +398,12 @@ export async function signOut(action: () => Promise<void>) {
 }
 
 export const clearProblem = () => emit({ problem: "" });
+/** Show the other space in every view of the app in this browser. */
+export function setSpace(space: Space) {
+  if (space === state.space) return;
+  write(SPACE, space);
+  emit({ space });
+}
 
 /* ---------- live updates ---------- */
 
@@ -450,6 +476,8 @@ export function startLive() {
         server = { tasks: replica.tasks, projects: replica.projects };
         emit();
       }
+    } else if (e.key === SPACE) {
+      emit({ space: read<Space>(SPACE) === "work" ? "work" : "personal" });
     } else if (e.key === OUTBOX && !unsaved) {
       queue = read<Op[]>(OUTBOX) || [];
       emit();
@@ -599,6 +627,7 @@ async function send(op: Op) {
       title,
       description,
       project_id,
+      space,
       due_date,
       due_time,
       time_zone,
@@ -612,6 +641,7 @@ async function send(op: Op) {
       title,
       description,
       project_id,
+      space: space ?? "personal",
       due_date,
       due_time,
       time_zone,
@@ -669,6 +699,7 @@ export const blankTask = (): TaskFields => ({
   title: "",
   description: "",
   project_id: null,
+  space: state.space,
   due_date: null,
   due_time: null,
   time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -715,15 +746,16 @@ export function patchTask(
 export function deleteTask(id: string) {
   enqueue({ op: opId(), at: Date.now(), kind: "delete", id });
 }
-export function createProject(name: string, color: string): Project {
-  const project = { id: crypto.randomUUID(), name, color };
+export function createProject(
+  name: string,
+  color: string,
+  space: Space = state.space,
+): Project {
+  const project = { id: crypto.randomUUID(), name, color, space };
   enqueue({ op: opId(), at: Date.now(), kind: "project-create", project });
   return project;
 }
-export function patchProject(
-  id: string,
-  changes: { name: string; color: string },
-) {
+export function patchProject(id: string, changes: ProjectChanges) {
   enqueue({ op: opId(), at: Date.now(), kind: "project-patch", id, changes });
 }
 export function deleteProject(id: string) {

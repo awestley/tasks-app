@@ -165,6 +165,20 @@ def test_tools_act_only_for_the_caller(mcp):
     assert mcp.tool("get_task", {"task_id": task["id"]})["priority"] == 4
 
 
+def test_spaces_through_the_tools(mcp):
+    work = mcp.tool("create_project", {"name": "Quarterly report", "space": "work"})
+    assert [p["name"] for p in mcp.tool("list_projects", {"space": "work"})] == ["Quarterly report"]
+    filed = mcp.tool("create_task", {"title": "Draft numbers", "project_id": work["id"]})
+    loose = mcp.tool("create_task", {"title": "Book review"})
+    assert filed["space"] == "work" and loose["space"] == "personal"
+    batch = [{"task_id": filed["id"], "version": 1}, {"task_id": loose["id"], "version": 1}]
+    assert mcp.tool("update_tasks", {"tasks": batch, "changes": {"space": "personal"}})["changed"] == 2
+    moved = mcp.tool("get_task", {"task_id": filed["id"]})
+    # Changing only the space takes a task out of its project.
+    assert moved["space"] == "personal" and moved["project_id"] is None
+    assert {t["title"] for t in mcp.tool("list_tasks", {"space": "personal"})} == {"Draft numbers", "Book review"}
+
+
 def test_errors_carry_the_api_message(mcp):
     task = mcp.tool("create_task", {"title": "Check errors"})
     message = mcp.failure("update_task", {"task_id": task["id"], "version": 1, "changes": {"priority": 9}})

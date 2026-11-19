@@ -7,9 +7,10 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 ## Included
 
 - Responsive React web app with Inbox, Today, Upcoming, projects, labels, search, priorities, completed history, and keyboard shortcuts.
-- Create, edit, complete, restore, and delete tasks, with checklists inside each task. Select several tasks (Cmd/Ctrl-click, Shift-click or Cmd/Ctrl-A on the web and Mac, Select on iPhone) to complete, date, prioritise, move or delete them together. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
+- Create, edit, complete, restore, and delete tasks, with checklists inside each task. Select several tasks (Cmd/Ctrl-click, Shift-click or Cmd/Ctrl-A on the web and Mac, Select tasks in the More menu on iPhone) to complete, date, prioritise, move or delete them together. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
 - Native SwiftUI macOS and iOS applications using the same backend. Apple sign-in, Keychain sessions, projects, task editing, search, API tokens, and account deletion.
 - English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, Siri support, and alarm-style reminders on iPhone. Push delivery requires server configuration and device permission.
+- Work and Personal spaces. Every task and project belongs to one, and each app shows one space at a time: the switch is at the top of the sidebar (Browse on a phone). Lists, counts, labels, search and quick add stay inside the current space, and each device remembers its own. A task in a project is in the project's space; Move to sends a task to the other space's Inbox, and moving a project in its editor takes its tasks along. Existing tasks start in Personal. The API and MCP tools take `space` (`personal` or `work`).
 - Versioned REST API and generated OpenAPI contract.
 - MCP over stdio and authenticated Streamable HTTP, with nine task and project tools.
 - Sign in with Apple code exchange, signature/audience/issuer/expiry/nonce validation, one-time challenges, browser binding, and revocable sessions.
@@ -150,7 +151,7 @@ Keep actual tokens in your client's secret store or private configuration. Never
 
 - Finding: `search` (ranked, the same results as the app's search, matching checklist items and labels too), `list_tasks` (filters), `get_task`, `list_projects`, `get_project` (with its links).
 - Changing one task: `create_task`, `update_task` (with `undo` to reverse a completion you just made), `complete_task`, `snooze_task`, `delete_task`, `parse_task` (preview quick-entry text).
-- Changing several tasks, like selecting them in the apps: `update_tasks` (complete or reopen, date, priority, move, labels) and `delete_tasks`. Each task is changed on its own with its own version, and the result lists any that failed.
+- Changing several tasks, like selecting them in the apps: `update_tasks` (complete or reopen, date, priority, move to a project or space, labels) and `delete_tasks`. Each task is changed on its own with its own version, and the result lists any that failed.
 - Projects: `create_project`, `update_project`, `delete_project` (its tasks move to Inbox).
 - Links: `link_item`, `unlink_item`, `find_linked` (stored links and `[[note:<id>]]` mentions in descriptions).
 

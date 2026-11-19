@@ -34,7 +34,7 @@ struct TaskDetailView: View {
         _currentID = State(initialValue: taskID)
     }
 
-    var task: TodoTask? { store.tasks.first { $0.id == currentID } }
+    var task: TodoTask? { store.allTasks.first { $0.id == currentID } }
     var wide: Bool { width >= 640 }
 
     var body: some View {
@@ -424,7 +424,7 @@ struct TaskDetailView: View {
     /// Saves typed changes now, as when leaving a field or the task.
     func flush(_ id: String) {
         pendingSave?.cancel()
-        guard let saved = store.tasks.first(where: { $0.id == id }) else { return }
+        guard let saved = store.allTasks.first(where: { $0.id == id }) else { return }
         let fields = changes(for: saved)
         if !fields.isEmpty { patch(fields, id: id) }
     }
@@ -450,7 +450,7 @@ struct TaskDetailView: View {
         let id = id ?? currentID
         Task { await store.perform {
             @MainActor func send() async throws {
-                guard let latest = store.tasks.first(where: { $0.id == id }) else {
+                guard let latest = store.allTasks.first(where: { $0.id == id }) else {
                     throw APIError(message: "This task was deleted on another device.")
                 }
                 let _: TodoTask = try await store.api.request("/api/v1/tasks/\(id)", method: "PATCH", body: API.body(fields.merging(["version": latest.version]) { $1 }))
@@ -470,12 +470,16 @@ struct TaskDetailView: View {
         focus = nil
         currentID = list[index + by]
     }
-    func project(_ task: TodoTask) -> Project? { store.projects.first { $0.id == task.project_id } }
+    func project(_ task: TodoTask) -> Project? { store.allProjects.first { $0.id == task.project_id } }
     @ViewBuilder func projectChoices(_ task: TodoTask) -> some View {
         Picker("Project", selection: Binding(get: { task.project_id ?? "" }, set: { patch(["project_id": $0.isEmpty ? NSNull() : $0]) })) {
             Label("Inbox", systemImage: "tray").tag("")
             ForEach(store.projects) { project in Text("# " + project.name).tag(project.id) }
         }.pickerStyle(.inline)
+        // Into the other space's Inbox. The task leaves this space's lists.
+        Button { patch(["space": task.inSpace.other.rawValue, "project_id": NSNull()]) } label: {
+            Label(task.inSpace.other.name, systemImage: task.inSpace.other.symbol)
+        }
     }
     func copyLink(_ task: TodoTask) {
         let link = "\(store.server)/?task=\(task.id)"
