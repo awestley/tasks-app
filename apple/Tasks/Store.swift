@@ -1,3 +1,4 @@
+import AppIntents
 import Foundation
 import Combine
 
@@ -59,6 +60,7 @@ import Combine
     /// Keeps notification settings on purpose, so they resume after signing in again.
     private func endSession() {
         try? Keychain.save(nil, server: server)
+        Task { await Spotlight.clear() }
         profile = nil
         allTasks = []
         allProjects = []
@@ -102,8 +104,10 @@ import Combine
         allTasks = all
         unreachable = nil
         Notifications.shared.attach(self)
-        // Not awaited: system notification and alarm calls must never hold up the task list.
+        // Not awaited: system notification, alarm and Spotlight calls must never hold up the task list.
         Task { await Notifications.shared.didRefresh(all) }
+        Task.detached(priority: .utility) { await Spotlight.sync(all, projects: nextProjects) }
+        TaskShortcuts.updateAppShortcutParameters()
     }
     func signIn(code: String, challenge: String) async throws {
         let result: AccessToken = try await api.request("/auth/apple/native", method: "POST", body: API.body(["code": code, "challenge_id": challenge]))
@@ -123,6 +127,8 @@ import Combine
     func toggle(_ task: TodoTask) async {
         await perform {
             let _: TodoTask = try await self.api.request("/api/v1/tasks/\(task.id)", method: "PATCH", body: API.body(["version": task.version, "completed": !task.completed]))
+            // Tells Siri what was done by hand, so it can suggest it.
+            if !task.completed { Self.donate(CompleteTaskIntent(task: TaskEntity(task))) }
             try await self.refresh()
         }
     }
@@ -164,8 +170,14 @@ import Combine
         await perform {
             let body: [String: Any] = until.map { ["until": $0.formatted(.iso8601)] } ?? ["minutes": minutes ?? 15]
             let _: TodoTask = try await self.api.request("/api/v1/tasks/\(task.id)/snooze", method: "POST", body: API.body(body))
+            let entity = TaskEntity(task)
+            Self.donate(until.map { SnoozeTaskIntent(task: entity, until: $0) } ?? SnoozeTaskIntent(task: entity, minutes: minutes ?? 15))
             try await self.refresh()
         }
+    }
+    /// Not awaited, so a slow donation never holds up the next change.
+    nonisolated static func donate(_ intent: some AppIntent) {
+        Task.detached(priority: .utility) { _ = try? await IntentDonationManager.shared.donate(intent: intent) }
     }
     func duplicate(_ task: TodoTask) async {
         await perform {
@@ -188,6 +200,7 @@ import Combine
     }
     func forgetSession() throws {
         Notifications.shared.clearLocal()
+        Task { await Spotlight.clear() }
         try Keychain.save(nil, server: server)
         profile = nil
         allTasks = []

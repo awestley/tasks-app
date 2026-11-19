@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import AuthenticationServices
 #if os(iOS)
@@ -530,6 +531,8 @@ struct WorkspaceView: View {
                                     }
                                 }
                             }.padding(.vertical, 6)
+                            // Lets Siri act on a task you can see: "snooze this until tonight".
+                            .appEntityIdentifier(EntityIdentifier(for: TaskEntity.self, identifier: task.id))
                             .listRowBackground(isSelected ? Clean.accentSoft : Clean.surface)
                             .listRowSeparatorTint(Clean.border)
                             .contextMenu {
