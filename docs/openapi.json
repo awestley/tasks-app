@@ -1552,6 +1552,54 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Edit Tasks",
+        "description": "Apply one change to up to 100 tasks, as selecting several tasks in the apps does: complete or reopen,\ndate, priority, project, space or labels. Each task needs the version from your last read and is changed on\nits own, exactly like PATCH /tasks/{id}. The response lists each outcome; a 409 for one task leaves the\nothers changed.",
+        "operationId": "edit_tasks_api_v1_tasks_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskBulkUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/tasks/{task_id}": {
@@ -1833,6 +1881,56 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/tasks/delete": {
+      "post": {
+        "tags": [
+          "Workspace"
+        ],
+        "summary": "Delete Tasks",
+        "description": "Permanently delete up to 100 tasks, each with the version from your last read. Each is deleted on its own,\nexactly like DELETE /tasks/{id}, and the response lists each outcome.",
+        "operationId": "delete_tasks_api_v1_tasks_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskBulkDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "APIKeyCookie": []
+          }
+        ]
       }
     },
     "/api/v1/notifications/settings": {
@@ -2547,6 +2645,161 @@
           "alarms"
         ],
         "title": "ArmedAlarmsIn"
+      },
+      "BulkChanges": {
+        "properties": {
+          "completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "due_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Time"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Priority"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "space": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "work"
+            ],
+            "title": "Space"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Labels"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BulkChanges",
+        "description": "What selecting several tasks in the apps can change. Omit a field to keep it."
+      },
+      "BulkOut": {
+        "properties": {
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "changed",
+          "failed",
+          "results"
+        ],
+        "title": "BulkOut"
+      },
+      "BulkResult": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "ok"
+        ],
+        "title": "BulkResult"
       },
       "ChecklistItem": {
         "properties": {
@@ -3293,6 +3546,48 @@
         ],
         "title": "SubscriptionOut"
       },
+      "TaskBulkDelete": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskVersionIn"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Tasks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tasks"
+        ],
+        "title": "TaskBulkDelete"
+      },
+      "TaskBulkUpdate": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskVersionIn"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Tasks"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/BulkChanges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tasks",
+          "changes"
+        ],
+        "title": "TaskBulkUpdate"
+      },
       "TaskCreate": {
         "properties": {
           "title": {
@@ -4036,6 +4331,29 @@
           "revision"
         ],
         "title": "TaskRevision"
+      },
+      "TaskVersionIn": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task_id",
+          "version"
+        ],
+        "title": "TaskVersionIn",
+        "description": "One task to change, with the version from the last read of it."
       },
       "TokenIn": {
         "properties": {

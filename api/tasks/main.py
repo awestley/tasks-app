@@ -44,6 +44,7 @@ from .reminders import queue_sync
 from .reminders import run as background_work
 from .scheduling import recurrence_clock
 from .schemas import (
+    BulkOut,
     NotificationSettingsIn,
     NotificationSettingsOut,
     Profile,
@@ -53,6 +54,8 @@ from .schemas import (
     SessionOut,
     SnoozeIn,
     Space,
+    TaskBulkDelete,
+    TaskBulkUpdate,
     TaskCreate,
     TaskDetailOut,
     TaskIn,
@@ -536,8 +539,7 @@ def snooze_task(task_id: str, data: SnoozeIn, user=Depends(authenticate), db: Se
     return task
 
 
-@api.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authenticate), db: Session = Depends(get_db)):
+def remove_task(db, user, task_id, version):
     task = owned(db, Task, task_id, user)
     # Queued first: deleting the task removes the deliveries that show it was notified.
     queue_sync(db, user.id, task.id, alarm=task.alert_style == "alarm")
@@ -547,6 +549,44 @@ def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authentic
     remove_links(db, "task", task_id)
     db.commit()
     events.publish(user.id, task_ref(task_id), "deleted")
+
+
+@api.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: str, version: int = Query(ge=1), user=Depends(authenticate), db: Session = Depends(get_db)):
+    remove_task(db, user, task_id, version)
+
+
+def each_task(db, items, action):
+    """Run an action per task. Each commits on its own, so one stale version or missing task doesn't stop the rest."""
+    results = []
+    for item in items:
+        try:
+            changed = action(item)
+            results.append({"task_id": item.task_id, "ok": True, "version": getattr(changed, "version", None)})
+        except HTTPException as error:
+            db.rollback()
+            results.append({"task_id": item.task_id, "ok": False, "status": error.status_code, "error": error.detail})
+    done = sum(1 for result in results if result["ok"])
+    return {"changed": done, "failed": len(results) - done, "results": results}
+
+
+@api.patch("/tasks", response_model=BulkOut)
+def edit_tasks(data: TaskBulkUpdate, user=Depends(authenticate), db: Session = Depends(get_db)):
+    """Apply one change to up to 100 tasks, as selecting several tasks in the apps does: complete or reopen,
+    date, priority, project, space or labels. Each task needs the version from your last read and is changed on
+    its own, exactly like PATCH /tasks/{id}. The response lists each outcome; a 409 for one task leaves the
+    others changed."""
+    changes = data.changes.model_dump(exclude_unset=True)
+    return each_task(
+        db, data.tasks, lambda item: mutate(db, user, item.task_id, TaskPatch(version=item.version, **changes))
+    )
+
+
+@api.post("/tasks/delete", response_model=BulkOut)
+def delete_tasks(data: TaskBulkDelete, user=Depends(authenticate), db: Session = Depends(get_db)):
+    """Permanently delete up to 100 tasks, each with the version from your last read. Each is deleted on its own,
+    exactly like DELETE /tasks/{id}, and the response lists each outcome."""
+    return each_task(db, data.tasks, lambda item: remove_task(db, user, item.task_id, item.version))
 
 
 def notification_preferences(db, user):

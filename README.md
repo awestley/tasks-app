@@ -125,7 +125,7 @@ Run the iOS UI test with `bash scripts/test-ios.sh SIMULATOR_UDID` (find a devic
 
 ## API and MCP
 
-API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
+API base: `https://YOUR_DOMAIN/api/v1`. Generate a personal access token in **Settings & integrations** and send `Authorization: Bearer TOKEN`. Tokens are shown once, hashed in storage, expire in 90 days, and can be revoked at any time. They can manage tasks and projects but cannot mint credentials or delete the account. Lists take `space` (`personal` or `work`), and `PATCH /api/v1/tasks` and `POST /api/v1/tasks/delete` change or delete up to 100 tasks in one request. Sessions expire in 30 days; sign in again afterward. Settings lists your signed-in devices and can end another device's session.
 
 Browse the API reference at `https://YOUR_DOMAIN/docs`, also linked from **Settings & integrations**. Try it out uses your browser session, or a token entered under **Authorize**. The schema itself is at `/api/v1/openapi.json`. The authoritative schemas are in the server code. The generated snapshot is [docs/openapi.json](docs/openapi.json). [Contract semantics](docs/contract.md) explain pagination, conflicts, authorization, and recurrence.
 
