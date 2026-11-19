@@ -44,7 +44,8 @@ xcode_build() {
 }
 
 # Stop an earlier backend on this port, but never an unrelated program.
-if pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" && [ -n "$pids" ]; then
+# With --no-serve, leave a running backend alone: it keeps serving the new web build.
+if $serve && pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" && [ -n "$pids" ]; then
   for pid in $pids; do
     if ps -o command= -p "$pid" | grep -q 'tasks.main:app'; then
       step "Stopping the previous backend on port $port (process $pid)"
@@ -54,7 +55,7 @@ if pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" && [ -n "$pids" ]; the
         exit 1
       fi
       for _ in {1..20}; do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
-    elif $serve; then
+    else
       echo "Port $port is in use by another program: $(ps -o command= -p "$pid")" >&2
       echo "Stop it, or choose another port with --port." >&2
       exit 1
