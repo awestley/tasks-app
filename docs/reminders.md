@@ -39,7 +39,9 @@ The Apple apps require iOS 27 and macOS 27.
   - Add Task takes a title, and optionally a due date and time, a reminder, a project and a space. With only a title it reads dates, priority, labels and projects out of it, like quick add, so "Add a task" followed by "bring the dentist forms tomorrow at 3pm" sets the due time. A task without a project joins the space asked for, or the space the device shows. Each create sends a client-chosen ID, so a retried request returns the same task.
   - Snooze Task takes minutes or a time ("until tonight at 8").
   - Move Task to Space sends a task to Personal or Work; a task in a project goes to the other space's Inbox.
-  - Phrases include "Add a task in Tasks", "Add a work task in Tasks", "Add a task to <project> in Tasks" and "Move this to Work in Tasks".
+  - Phrases include "Add a task in Tasks", "Remind me in Tasks", "Create a reminder in Tasks", "Add a work task in Tasks", "Add a task to <project> in Tasks" and "Move this to Work in Tasks".
+  - A due time given to Add Task reminds at that time unless another reminder is set, as in quick entry.
+  - A request that names no app, such as "Remind me to take out the trash", goes to Reminders or to an app Siri offers from the reminders schema domain (`.reminders.createReminder`). The app does not adopt that schema yet, so it is not offered there.
 - Tasks are indexed in Spotlight as App Intents entities (`IndexedEntity`) with their notes, due date, project, space, labels, priority and done state, so Siri can find a task by what it says. Open tasks appear in Spotlight search; done ones stay in the index for Siri only. The app writes only tasks that changed since the last refresh, and clears the index when signing out or when the session ends.
 - Task rows and the open task are annotated with their entity (`appEntityIdentifier`), so Siri can act on the task on screen ("snooze this until tonight").
 - Completing or snoozing a task in the app is donated to Siri (`IntentDonationManager`), so it can suggest the same action later.

@@ -54,7 +54,9 @@ enum TaskActions {
             draft.due_date = DateOnly.string(day)
             draft.due_time = due.hour.map { String(format: "%02d:%02d", $0, due.minute ?? 0) }
         }
-        if let reminder, draft.due_time != nil { draft.reminder_minutes = reminder }
+        // As in quick add, a due time reminds at that time unless another reminder is asked for.
+        if let due, due.hour != nil { draft.reminder_minutes = reminder ?? 0 }
+        else if let reminder, draft.due_time != nil { draft.reminder_minutes = reminder }
         if let project { draft.project_id = project.id }
         // A project decides the space; the server enforces it.
         if draft.project_id == nil { draft.space = (space ?? Space.current).rawValue }
@@ -184,7 +186,10 @@ struct OpenTaskIntent: OpenIntent {
 struct TaskShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: AddTaskIntent(), phrases: ["Add a task in \(.applicationName)", "New task in \(.applicationName)",
-                                                       "Add a \(\.$space) task in \(.applicationName)", "Add a task to \(\.$project) in \(.applicationName)"],
+                                                       "Add a \(\.$space) task in \(.applicationName)", "Add a task to \(\.$project) in \(.applicationName)",
+                                                       "Remind me in \(.applicationName)", "Remind me with \(.applicationName)",
+                                                       "Add a reminder in \(.applicationName)", "Create a reminder in \(.applicationName)",
+                                                       "Set a reminder in \(.applicationName)", "Add a \(\.$space) reminder in \(.applicationName)"],
                     shortTitle: "Add Task", systemImageName: "plus.circle")
         AppShortcut(intent: CompleteTaskIntent(), phrases: ["Complete \(\.$task) in \(.applicationName)", "Mark \(\.$task) done in \(.applicationName)"],
                     shortTitle: "Complete Task", systemImageName: "checkmark.circle")

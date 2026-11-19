@@ -48,12 +48,18 @@ extension WorkspaceTests {
         try await waitForSaved(id) { $0["space"] as? String == "work" }
         XCTAssertFalse(app.staticTexts[title].waitForExistence(timeout: 1), "The moved task is still listed in Personal")
 
-        // A new task joins the space asked for.
+        // A new task joins the space asked for, and a due time given on its own reminds at that time.
         let plain = "\(taskTitle) renew the passport"
-        try await intents.intents["AddTaskIntent"].makeIntent(title: plain, space: AnyAppEnum(typeIdentifier: "Space", rawValue: "work")).run()
+        var due = Calendar.current.dateComponents([.year, .month, .day], from: tomorrow)
+        due.hour = 9
+        due.minute = 30
+        try await intents.intents["AddTaskIntent"].makeIntent(title: plain, due: due,
+                                                              space: AnyAppEnum(typeIdentifier: "Space", rawValue: "work")).run()
         let created = try await task(titled: plain)
         let second = try XCTUnwrap(created)
         XCTAssertEqual(second["title"] as? String, plain)
         XCTAssertEqual(second["space"] as? String, "work")
+        XCTAssertEqual(second["due_time"] as? String, "09:30")
+        XCTAssertEqual(second["reminder_minutes"] as? Int, 0)
     }
 }
