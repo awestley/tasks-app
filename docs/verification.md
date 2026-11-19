@@ -165,3 +165,13 @@ Results after merging dev at ca79875:
 - iPad Pro 13-inch, before the merge: the task view test passed in two columns. `testQuickEntryAndPersistence` failed at "Use details and edit" in the add form, which this change does not touch; it passes on iPhone.
 - macOS Debug build passed. The Mac app was not run, because a test build shares the installed app's settings and sign-in.
 - `scripts/test-ios.sh` takes `TASKS_TEST_PORT` when another worktree's run holds port 8002.
+
+## Siri, Spotlight and on-screen tasks, November 19, 2026
+
+Added the Add Task and Move Task to Space intents, Snooze Task until a time, a project entity, Spotlight indexing of tasks as App Intents entities, on-screen task annotations, and Siri donations for completing and snoozing in the app. See [reminders](reminders.md).
+
+- iOS Simulator and macOS Debug builds passed with the iOS 27.2 SDK (Xcode 27.2).
+- `testSiriAddsFindsAndMovesATask` (AppIntentsTesting) passed on its own in 30 seconds. It ran Add Task with "tomorrow at 3pm" in the title and got the right date, time and space. A Spotlight query for "dentist forms" found the task, the Upcoming row was reported as an on-screen entity, Move Task sent it to Work, and a second Add Task joined the Work space.
+- In the full UI suite, five tests passed. Three tests, including the Siri test on a second run, finished their steps without an assertion failure and then went over the 3-minute limit in `tearDown`, which cleans up through the test backend. The Mac's load average was between 14 and 79 at the time, with XProtect and the Spotlight indexer using most of the CPU.
+
+Not verified: the full UI suite on an idle machine, Siri AI's natural language requests (they need the iOS 27.3 Developer Preview and an Apple Intelligence device), Spotlight search results on a device, and donations showing up as Siri suggestions.

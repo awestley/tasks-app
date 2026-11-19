@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 #if os(iOS)
 import UIKit
@@ -53,6 +54,13 @@ struct TaskDetailView: View {
         .frame(minWidth: 720, idealWidth: 920, minHeight: 520, idealHeight: 680)
         #endif
         .tasksErrorAlert()
+        // The task on screen, for Siri: "move this to Work", "remind me about this tomorrow".
+        .appEntityIdentifier(task.map { EntityIdentifier(for: TaskEntity.self, identifier: $0.id) })
+        .userActivity("com.example.tasks.task", isActive: task != nil) { activity in
+            guard let task else { return }
+            activity.title = task.title
+            activity.appEntityIdentifier = EntityIdentifier(for: TaskEntity.self, identifier: task.id)
+        }
         .confirmationDialog("Permanently delete this task?", isPresented: $confirmDelete) {
             Button("Delete task", role: .destructive) { deleteTask() }
         }

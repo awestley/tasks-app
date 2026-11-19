@@ -1,7 +1,7 @@
 import Foundation
 
 /// Work and personal tasks are kept apart: the apps show one space at a time.
-enum Space: String, CaseIterable, Identifiable {
+enum Space: String, CaseIterable, Identifiable, Sendable {
     case personal, work
     var id: String { rawValue }
     var name: String { self == .work ? "Work" : "Personal" }
@@ -119,7 +119,9 @@ struct TaskDraft: Encodable {
     var version: Int?
     /// Set for a new task; a project decides it otherwise.
     var space: String?
-    enum CodingKeys: String, CodingKey { case title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes, alert_style, space }
+    /// Set by a client that wants a retried create to return the same task.
+    var id: String?
+    enum CodingKeys: String, CodingKey { case id, title, description, project_id, due_date, priority, labels, checklist, recurrence, version, due_time, time_zone, reminder_minutes, alert_style, space }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(title, forKey: .title)
@@ -136,6 +138,7 @@ struct TaskDraft: Encodable {
         try container.encode(alert_style, forKey: .alert_style)
         try container.encodeIfPresent(version, forKey: .version)
         try container.encodeIfPresent(space, forKey: .space)
+        try container.encodeIfPresent(id, forKey: .id)
     }
 }
 enum DateOnly {

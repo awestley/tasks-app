@@ -35,7 +35,16 @@ Settings for the summary, follow-ups and Time Sensitive apply to every device an
 The Apple apps require iOS 27 and macOS 27.
 
 - A notification service extension tags each pushed task notification with the task's App Intents entity (`appEntityIdentifiers`, new in iOS 27). Siri can then act on the task the notification is about, for example when it announces the notification.
-- **Complete Task**, **Snooze Task** and **Open Task** are App Intents, available in Siri and Shortcuts.
+- **Add Task**, **Complete Task**, **Snooze Task**, **Move Task to Space** and **Open Task** are App Intents, available in Siri and Shortcuts.
+  - Add Task takes a title, and optionally a due date and time, a reminder, a project and a space. With only a title it reads dates, priority, labels and projects out of it, like quick add, so "Add a task" followed by "bring the dentist forms tomorrow at 3pm" sets the due time. A task without a project joins the space asked for, or the space the device shows. Each create sends a client-chosen ID, so a retried request returns the same task.
+  - Snooze Task takes minutes or a time ("until tonight at 8").
+  - Move Task to Space sends a task to Personal or Work; a task in a project goes to the other space's Inbox.
+  - Phrases include "Add a task in Tasks", "Add a work task in Tasks", "Add a task to <project> in Tasks" and "Move this to Work in Tasks".
+- Tasks are indexed in Spotlight as App Intents entities (`IndexedEntity`) with their notes, due date, project, space, labels, priority and done state, so Siri can find a task by what it says. Open tasks appear in Spotlight search; done ones stay in the index for Siri only. The app writes only tasks that changed since the last refresh, and clears the index when signing out or when the session ends.
+- Task rows and the open task are annotated with their entity (`appEntityIdentifier`), so Siri can act on the task on screen ("snooze this until tonight").
+- Completing or snoozing a task in the app is donated to Siri (`IntentDonationManager`), so it can suggest the same action later.
+- Siri AI's natural language requests for third-party apps need the iOS 27.3 Developer Preview and an Apple Intelligence device. The intents also work with Siri phrases and Shortcuts on any iOS 27 device.
+- `TasksUITests/SiriTests.swift` runs Add Task and Move Task with `AppIntentsTesting`, finds the task through a Spotlight query, and checks the on-screen annotation, against the isolated test backend (`scripts/test-ios.sh`).
 - A task with a reminder can use **Alert: Alarm on iPhone**. On iPhone and iPad the reminder then rings with AlarmKit, through silent mode and Focus, with a Snooze button (10 minutes) and the task's entity attached so Siri can act on the ringing alarm. The app schedules alarms for the next 7 days after each refresh and reports them to the server (`PUT /api/v1/push/subscriptions/{id}/alarms`), which then skips that device's notification for the same reminder. Other devices, including Macs and browsers, get a normal notification. The app asks for alarm permission the first time a task is set to Alarm; without it, the device gets a notification. Alarms are scheduled on the device, so a change made elsewhere reaches it on the next refresh or background push.
 
 ## Browser push
