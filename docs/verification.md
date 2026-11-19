@@ -176,3 +176,14 @@ Added the Add Task and Move Task to Space intents, Snooze Task until a time, a p
 - Rerun an hour later, those three passed: quick entry in 66 seconds, select several in 55, and the Siri test in 30, each with `tearDown` under a second. All eight UI tests have now passed.
 
 Not verified: all eight UI tests in a single run, Siri AI's natural language requests (they need the iOS 27.3 Developer Preview and an Apple Intelligence device), Spotlight search results on a device, and donations showing up as Siri suggestions.
+
+## Reminders schema for Siri, November 19, 2026
+
+Tasks now follow Apple's reminders schema domain, so Siri can offer the app for requests that name no app, such as "Remind me to take out the trash". Tasks are reminder entities, projects and both Inboxes are list entities, and the app has Create Reminder, Update Reminder, Delete Reminders and Create List intents. Add Task also gained "Remind me in Tasks" phrases. See [reminders](reminders.md).
+
+- iOS Simulator and macOS Debug builds passed with the iOS 27.2 SDK, with no warnings. The built metadata lists every schema intent and entity under the `reminders` domain.
+- `testReminderSchemaCreatesChangesAndDeletesTasks` (AppIntentsTesting) passed in 24 seconds. Create Reminder saved the title, Work Inbox, note, tag, flag (priority 1), link, due time with a reminder at that time, and a weekly repeat. Create List made a project, and a reminder created in it landed there. Update Reminder renamed the task, cleared the flag, moved it to the Personal Inbox and completed it. Delete Reminders deleted a task.
+- `testSiriAddsFindsAndMovesATask` also passed, now including a task added with a separate due time that reminds at that time.
+- The full iOS UI suite passed in a single run: all ten tests.
+
+Not verified: Siri offering the app in its list for "Remind me to..." (it needs a device with Siri AI), Siri filling the schema parameters from speech, and the Shortcuts app showing the schema intents.

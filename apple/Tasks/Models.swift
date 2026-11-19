@@ -39,6 +39,8 @@ struct TodoTask: Codable, Identifiable, Hashable {
     var snoozed_until: String?
     var completed: Bool
     var version: Int
+    var created_at: String?
+    var completed_at: String?
     var isAlarm: Bool { alert_style == "alarm" }
     var inSpace: Space { Space(rawValue: space ?? "") ?? .personal }
     /// The due time as an instant, read in the task's own time zone.

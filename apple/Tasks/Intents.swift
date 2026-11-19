@@ -33,7 +33,8 @@ enum TaskActions {
     }
     /// Creates a task. With only a title, reads dates, priority, labels and projects out of it, as quick add does;
     /// with a date or project given separately, takes the title as it is.
-    static func add(title: String, due: DateComponents?, reminder: Int?, project: ProjectEntity?, space: Space?) async throws -> TodoTask {
+    static func add(title: String, due: DateComponents?, reminder: Int?, project: ProjectEntity?, space: Space?, note: String? = nil,
+                    labels: Set<String>? = nil, flagged: Bool? = nil, recurrence: String? = nil, urls: [URL] = []) async throws -> TodoTask {
         let api = try SavedSession.require()
         let zone = TimeZone.current.identifier
         var draft = TaskDraft(title: title.trimmingCharacters(in: .whitespacesAndNewlines), time_zone: zone)
@@ -50,22 +51,59 @@ enum TaskActions {
             draft.labels = parsed.labels
             draft.project_id = parsed.project_id
         }
-        if let due, let day = Calendar.current.date(from: DateComponents(year: due.year, month: due.month, day: due.day)) {
-            draft.due_date = DateOnly.string(day)
-            draft.due_time = due.hour.map { String(format: "%02d:%02d", $0, due.minute ?? 0) }
+        if let due {
+            let schedule = try schedule(due)
+            draft.due_date = schedule.date
+            draft.due_time = schedule.time
+            draft.time_zone = schedule.zone
         }
         // As in quick add, a due time reminds at that time unless another reminder is asked for.
         if let due, due.hour != nil { draft.reminder_minutes = reminder ?? 0 }
         else if let reminder, draft.due_time != nil { draft.reminder_minutes = reminder }
-        if let project { draft.project_id = project.id }
-        // A project decides the space; the server enforces it.
-        if draft.project_id == nil { draft.space = (space ?? Space.current).rawValue }
+        if let project { draft.project_id = project.projectID }
+        // A project decides the space; the server enforces it. An Inbox is a space's.
+        if draft.project_id == nil { draft.space = (project.flatMap { $0.isInbox ? $0.space : nil } ?? space ?? Space.current).rawValue }
+        if let note, !note.isEmpty { draft.description = note }
+        if let labels { draft.labels = Array(Set(draft.labels).union(labels)).sorted().prefix(20).map { $0 } }
+        if flagged == true { draft.priority = 1 }
+        if let recurrence { draft.recurrence = recurrence }
         // A fixed ID makes a repeated request (Siri retrying, say) return the same task instead of a second one.
         draft.id = UUID().uuidString.lowercased()
         let task: TodoTask = try await api.request("/api/v1/tasks", method: "POST", body: JSONEncoder().encode(draft))
+        try await addLinks(urls, to: task.id, api: api)
         await Spotlight.index([task], api: api)
         await refreshApp()
         return task
+    }
+    /// A due date and optional time, as the server stores them, in the components' time zone or this device's.
+    static func schedule(_ due: DateComponents) throws -> (date: String, time: String?, zone: String) {
+        guard let year = due.year, let month = due.month, let day = due.day else {
+            throw APIError(message: "Give a day for the task to be due.")
+        }
+        let date = String(format: "%04d-%02d-%02d", year, month, day)
+        let time = due.hour.map { String(format: "%02d:%02d", $0, due.minute ?? 0) }
+        return (date, time, (due.timeZone ?? .current).identifier)
+    }
+    /// Applies changes to a task at its current version, retrying once if another device changed it meanwhile.
+    static func edit(_ id: String, _ changes: [String: Any]) async throws -> TodoTask {
+        let api = try SavedSession.require()
+        for attempt in 0..<2 {
+            let task: TodoTask = try await api.request("/api/v1/tasks/\(id)")
+            do {
+                let edited: TodoTask = try await api.request("/api/v1/tasks/\(id)", method: "PATCH",
+                                                             body: API.body(changes.merging(["version": task.version]) { $1 }))
+                await Spotlight.index([edited], api: api)
+                await refreshApp()
+                return edited
+            } catch let error as APIError where error.status == 409 && attempt == 0 { continue }
+        }
+        throw APIError(message: "The task changed on another device. Try again.")
+    }
+    /// Attaches web addresses to a task as links.
+    static func addLinks(_ urls: [URL], to id: String, api: API) async throws {
+        for url in urls {
+            try await api.send("/api/v1/tasks/\(id)/links", method: "POST", body: API.body(["url": url.absoluteString, "title": url.host() ?? ""]))
+        }
     }
     /// Moves a task to the other space. Without a project there, it leaves its project for that space's Inbox.
     static func move(_ id: String, to space: Space) async throws -> TodoTask {
@@ -109,7 +147,7 @@ struct AddTaskIntent: AppIntent {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw $title.needsValueError("What's the task?") }
         let task = try await TaskActions.add(title: name, due: due, reminder: reminder, project: project, space: space)
-        let entity = TaskEntity(task, project: project?.name)
+        let entity = await TaskEntity.load([task], api: try SavedSession.require())[0]
         let when = entity.dueText.map { ", due \($0)" } ?? ""
         return .result(value: entity, dialog: "Added \(task.title) to \(task.inSpace.name)\(when).")
     }
