@@ -36,7 +36,7 @@ GET /agent reports whether the agent is configured and which other MCP servers i
 
 ## MCP transport
 
-`/mcp/` accepts Streamable HTTP using a bearer credential. Cookie-only requests are rejected. The endpoint implements the official MCP SDK protocol and exposes tools rather than a hand-written JSON-RPC approximation. Stdio runs the same tools with `TASKS_API_URL` and `TASKS_TOKEN`. HTTP MCP currently requires client-configured tokens; OAuth authorization discovery is not implemented.
+`/mcp/` accepts Streamable HTTP using a bearer credential. Cookie-only requests are rejected. The endpoint implements the official MCP SDK protocol and exposes tools rather than a hand-written JSON-RPC approximation. Its tools call the API in process with the caller's credential, so every call passes the same authentication, validation and middleware as any client, and needs no address. Stdio runs the same tools against `TASKS_API_URL` with `TASKS_TOKEN`. Errors report the API's own message: FastAPI's `detail` (or the first validation error) or the search contract's `error` code. `update_tasks` and `delete_tasks` apply one change to up to 100 tasks, each with its own version, and report each outcome, so one stale version doesn't stop the rest. HTTP MCP currently requires client-configured tokens; OAuth authorization discovery is not implemented.
 
 ## Task checklists
 

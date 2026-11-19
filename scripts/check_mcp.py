@@ -15,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = os.environ.get("TASKS_API_URL", "http://127.0.0.1:8000")
 
 
+def payload(result):
+    """A tool's JSON result, whether the server sent it as structured content or as text."""
+    return result.structuredContent or json.loads(result.content[0].text)
+
+
 async def exercise(session):
     await session.initialize()
     tools = await session.list_tools()
@@ -29,7 +34,11 @@ async def exercise(session):
         "parse_task",
         "get_task",
         "update_project",
-        "list_project_links",
+        "get_project",
+        "delete_project",
+        "search",
+        "update_tasks",
+        "delete_tasks",
         "link_item",
         "unlink_item",
         "find_linked",
@@ -92,8 +101,17 @@ async def exercise(session):
     assert not detail.isError, detail
     unlinked = await session.call_tool("unlink_item", {"task_id": task["id"], "link_id": link["id"]})
     assert not unlinked.isError, unlinked
-    deleted = await session.call_tool("delete_task", {"task_id": task["id"], "version": 3})
+    searched = await session.call_tool("search", {"query": "MCP verified", "types": "task"})
+    assert not searched.isError, searched
+    assert task["ref"] in {item["ref"] for item in payload(searched)["items"]}
+    batch = await session.call_tool(
+        "update_tasks", {"tasks": [{"task_id": task["id"], "version": 3}], "changes": {"priority": 2}}
+    )
+    assert not batch.isError, batch
+    assert payload(batch)["changed"] == 1, batch
+    deleted = await session.call_tool("delete_tasks", {"tasks": [{"task_id": task["id"], "version": 4}]})
     assert not deleted.isError, deleted
+    assert payload(deleted)["changed"] == 1, deleted
 
 
 async def main():
@@ -127,7 +145,7 @@ async def main():
                 async with ClientSession(read, write) as session:
                     await exercise(session)
             print(
-                "PASS: stdio and HTTP MCP discovery, prompts, parse, create, update, conflict, checklist, reminders, links, complete, delete"
+                "PASS: stdio and HTTP MCP discovery, prompts, parse, create, update, conflict, checklist, reminders, links, search, bulk update, complete, delete"
             )
         finally:
             await client.delete(
