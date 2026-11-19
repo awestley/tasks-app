@@ -251,6 +251,11 @@ private struct ProjectEditorSelection: Identifiable {
     let project: Project?
     var id: String { project?.id ?? "new" }
 }
+extension View {
+    @ViewBuilder func searchable(when enabled: Bool, text: Binding<String>, prompt: LocalizedStringKey) -> some View {
+        if enabled { searchable(text: text, prompt: Text(prompt)) } else { self }
+    }
+}
 struct WorkspaceView: View {
     @ObservedObject private var notifications = Notifications.shared
     @EnvironmentObject var store: Store
@@ -263,7 +268,11 @@ struct WorkspaceView: View {
     @State private var pendingProjectDelete: Project?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Lists opened from the Browse tab on iPhone.
+    @State private var browsePath: [String] = []
     #endif
+    /// Lists that get their own tab on iPhone.
+    static let tabLists = ["inbox", "today", "upcoming"]
     // Multi-select. Only tasks in the current list stay selected.
     @State private var selecting = false
     @State private var selectedIDs = Set<String>()
@@ -278,7 +287,7 @@ struct WorkspaceView: View {
     var title: String {
         if let project = store.projects.first(where: { $0.id == selection }) { return project.name }
         if let selection, selection.hasPrefix("label:") { return String(selection.dropFirst(6)) }
-        return ["today":"Today", "inbox":"Inbox", "upcoming":"Upcoming", "all":"All tasks", "completed":"Completed"][selection ?? "today"] ?? "Today"
+        return ["today":"Today", "inbox":"Inbox", "upcoming":"Upcoming", "all":"All tasks", "completed":"Completed", "search":"Search"][selection ?? "today"] ?? "Today"
     }
     var filtered: [TodoTask] {
         let today = today
@@ -433,8 +442,8 @@ struct WorkspaceView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Selected tasks")
     }
-    var body: some View {
-        NavigationSplitView {
+    /// Lists, projects and labels. The Browse tab on iPhone leaves out the lists that have tabs.
+    func sidebar(includeTabLists: Bool) -> some View {
             List(selection: $selection) {
                 #if os(iOS)
                 // On iPhone the sidebar is the first screen, so the banner has to be here as well.
@@ -443,7 +452,7 @@ struct WorkspaceView: View {
                 }
                 #endif
                 Section {
-                    ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")], id: \.0) { tag, name, symbol in
+                    ForEach([("inbox", "Inbox", "tray"), ("today", "Today", "sun.max"), ("upcoming", "Upcoming", "calendar"), ("all", "All tasks", "square.stack")].filter { includeTabLists || !Self.tabLists.contains($0.0) }, id: \.0) { tag, name, symbol in
                         Label(name, systemImage: symbol).tag(tag)
                             .contextMenu { Button { addTask(in: tag) } label: { Label("Add task", systemImage: "plus") } }
                     }
@@ -467,21 +476,22 @@ struct WorkspaceView: View {
                         Label(label, systemImage: "tag").tag("label:" + label)
                     }
                 }
-            }.navigationTitle("")
+            }
                 .toolbar {
                     ToolbarItem { Button { showSettings = true } label: { Image(systemName: "gearshape") }.help("Settings").accessibilityLabel("Settings") }
                 }
-        } detail: {
+    }
+    /// iPhone lists leave search to the search tab.
+    func detail(searchable: Bool = true) -> some View {
             VStack(alignment: .leading, spacing: 0) {
                 UnreachableBanner()
-                if selection == "today", search.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(Date(), format: .dateTime.weekday(.wide).month(.wide).day()).font(.subheadline).foregroundStyle(Clean.textMuted)
-                    }.padding(24)
-                }
                 if selecting { selectionBar }
                 if filtered.isEmpty {
-                    ContentUnavailableView(search.isEmpty ? "No tasks" : "Nothing found", systemImage: "checkmark.circle", description: Text(search.isEmpty ? "Use the add button to create a task." : "Try another word."))
+                    if selection == "search" && search.isEmpty {
+                        ContentUnavailableView("Search tasks", systemImage: "magnifyingglass", description: Text("Titles, descriptions and labels."))
+                    } else {
+                        ContentUnavailableView(search.isEmpty ? "No tasks" : "Nothing found", systemImage: "checkmark.circle", description: Text(search.isEmpty ? "Use the add button to create a task." : "Try another word."))
+                    }
                 } else {
                     List {
                         ForEach(filtered) { task in
@@ -541,17 +551,70 @@ struct WorkspaceView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(Clean.surface)
                 .navigationTitle(search.isEmpty ? title : "Search results")
-                .searchable(text: $search, prompt: "Search tasks")
+                .navigationSubtitle(selection == "today" && search.isEmpty ? Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) : "")
+                .searchable(when: searchable, text: $search, prompt: "Search tasks")
                 .toolbar {
-                    #if os(iOS)
-                    // Phones have no modifier keys, so selecting starts here or from a task's menu.
-                    if !selecting && !filtered.isEmpty { Button("Select") { startSelection() } }
-                    #endif
-                    Button { Task { await store.perform { try await store.refresh() } } } label: { Image(systemName: "arrow.clockwise") }.disabled(store.busy).help("Refresh")
                     Button { editor = TaskEditorSelection(task: nil) } label: { Label("Add task", systemImage: "plus") }.keyboardShortcut("n", modifiers: .command)
+                    #if os(iOS)
+                    // Phones have no modifier keys, so selecting starts here or from a task's menu. Lists pull to refresh.
+                    Menu {
+                        Button { startSelection() } label: { Label("Select tasks", systemImage: "checkmark.circle") }.disabled(selecting || filtered.isEmpty)
+                        Button { Task { await store.perform { try await store.refresh() } } } label: { Label("Refresh", systemImage: "arrow.clockwise") }.disabled(store.busy)
+                    } label: { Label("More", systemImage: "ellipsis") }
+                    #else
+                    Button { Task { await store.perform { try await store.refresh() } } } label: { Image(systemName: "arrow.clockwise") }.disabled(store.busy).help("Refresh")
+                    #endif
                 }
+    }
+    #if os(iOS)
+    /// iPhone: Inbox, Today and Upcoming as tabs, everything else under Browse.
+    var tabs: some View {
+        TabView(selection: Binding(get: { Self.tabLists.contains(selection ?? "") || selection == "search" ? selection ?? "today" : "browse" },
+                                   set: { tab in
+                                       if selection == "search" && tab != "search" { search = "" }
+                                       selection = tab == "browse" ? browsePath.last ?? "browse" : tab
+                                   })) {
+            Tab("Inbox", systemImage: "tray", value: "inbox") { NavigationStack { detail(searchable: false) } }
+            Tab("Today", systemImage: "sun.max", value: "today") { NavigationStack { detail(searchable: false) } }
+            Tab("Upcoming", systemImage: "calendar", value: "upcoming") { NavigationStack { detail(searchable: false) } }
+            Tab("Browse", systemImage: "list.bullet", value: "browse") {
+                NavigationStack(path: $browsePath) {
+                    sidebar(includeTabLists: false).navigationTitle("Browse")
+                        .navigationDestination(for: String.self) { _ in detail(searchable: false) }
+                }
+            }
+            Tab(value: "search", role: .search) { NavigationStack { detail() } }
         }
-        .onChange(of: selection) { endSelection() }
+    }
+    #endif
+    @ViewBuilder var layout: some View {
+        #if os(iOS)
+        if sizeClass == .compact {
+            tabs
+        } else {
+            NavigationSplitView { sidebar(includeTabLists: true).navigationTitle("").navigationBarTitleDisplayMode(.inline) } detail: { detail() }
+        }
+        #else
+        NavigationSplitView { sidebar(includeTabLists: true).navigationTitle("") } detail: { detail() }
+        #endif
+    }
+    var body: some View {
+        layout
+        .onChange(of: selection) { _, list in
+            endSelection()
+            #if os(iOS)
+            // Lists without a tab open inside Browse, including Go to project from another tab.
+            if sizeClass == .compact, let list, !Self.tabLists.contains(list), !["browse", "search"].contains(list), browsePath != [list] { browsePath = [list] }
+            #endif
+        }
+        #if os(iOS)
+        .onChange(of: browsePath) { _, path in
+            if path.isEmpty, !Self.tabLists.contains(selection ?? ""), selection != "search" { selection = "browse" }
+        }
+        .onChange(of: sizeClass) { _, size in
+            if size != .compact, ["browse", "search"].contains(selection) { selection = "today" }
+        }
+        #endif
         // Drop tasks that left the list: completed, deleted, moved or filtered out.
         .onChange(of: filtered.map(\.id)) { _, ids in
             let kept = selectedIDs.intersection(ids)

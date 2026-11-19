@@ -7,7 +7,7 @@ A self-hosted task manager for the web, macOS, iPhone, and AI tools. Built for D
 ## Included
 
 - Responsive React web app with Inbox, Today, Upcoming, projects, labels, search, priorities, completed history, and keyboard shortcuts.
-- Create, edit, complete, restore, and delete tasks, with checklists inside each task. Select several tasks (Cmd/Ctrl-click, Shift-click or Cmd/Ctrl-A on the web and Mac, Select on iPhone) to complete, date, prioritise, move or delete them together. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
+- Create, edit, complete, restore, and delete tasks, with checklists inside each task. Select several tasks (Cmd/Ctrl-click, Shift-click or Cmd/Ctrl-A on the web and Mac, Select tasks in the More menu on iPhone) to complete, date, prioritise, move or delete them together. Daily, weekly, and monthly recurrence. Project deletion keeps tasks in Inbox.
 - Native SwiftUI macOS and iOS applications using the same backend. Apple sign-in, Keychain sessions, projects, task editing, search, API tokens, and account deletion.
 - English quick task entry with a preview, due times and time zones, reminders, Web Push, and native Apple push integration. Notifications have Complete and Snooze actions, project grouping, Time Sensitive urgency, badges, an optional morning summary and overdue follow-up, Siri support, and alarm-style reminders on iPhone. Push delivery requires server configuration and device permission.
 - Versioned REST API and generated OpenAPI contract.
