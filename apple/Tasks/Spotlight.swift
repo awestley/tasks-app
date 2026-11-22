@@ -13,13 +13,13 @@ enum Spotlight {
 
     /// Indexes new and changed tasks and removes deleted ones.
     static func sync(_ tasks: [TodoTask], projects: [Project]) async {
-        let names = Dictionary(projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let byID = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let stored = UserDefaults.standard.dictionary(forKey: storageKey) as? [String: String] ?? [:]
         var next: [String: String] = [:]
         var changed: [TaskEntity] = []
         for task in tasks {
-            let project = task.project_id.flatMap { names[$0] }
-            let value = signature(task, project: project)
+            let project = task.project_id.flatMap { byID[$0] }
+            let value = signature(task, project: project?.name)
             next[task.id] = value
             if stored[task.id] != value { changed.append(TaskEntity(task, project: project)) }
         }
@@ -38,7 +38,15 @@ enum Spotlight {
         let entities = await TaskEntity.load(tasks, api: api)
         guard (try? await index.indexAppEntities(entities)) != nil else { return }
         var stored = UserDefaults.standard.dictionary(forKey: storageKey) as? [String: String] ?? [:]
-        for (task, entity) in zip(tasks, entities) { stored[task.id] = signature(task, project: entity.project) }
+        for (task, entity) in zip(tasks, entities) { stored[task.id] = signature(task, project: entity.list.isInbox ? nil : entity.list.name) }
+        UserDefaults.standard.set(stored, forKey: storageKey)
+    }
+
+    /// Removes deleted tasks without waiting for the next refresh.
+    static func remove(_ ids: [String]) async {
+        try? await index.deleteAppEntities(identifiedBy: ids, ofType: TaskEntity.self)
+        var stored = UserDefaults.standard.dictionary(forKey: storageKey) as? [String: String] ?? [:]
+        for id in ids { stored[id] = nil }
         UserDefaults.standard.set(stored, forKey: storageKey)
     }
 
