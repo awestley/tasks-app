@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree list:*)",
+      "Bash(git cherry:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(uv sync:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(.venv/bin/ruff:*)",
+      "Bash(.venv/bin/alembic check:*)",
+      "Bash(api/.venv/bin/pytest:*)",
+      "Bash(api/.venv/bin/ruff:*)",
+      "Bash(api/.venv/bin/python scripts/check_mcp.py:*)",
+      "Bash(api/.venv/bin/python scripts/export_openapi.py:*)",
+      "Bash(npm --prefix web ci:*)",
+      "Bash(npm --prefix web run build:*)",
+      "Bash(npm --prefix web run test:unit:*)",
+      "Bash(xcodegen generate:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun simctl list:*)",
+      "Bash(bash scripts/test-ios.sh:*)",
+      "Bash(./scripts/start.sh --no-serve:*)",
+      "Bash(./scripts/start.sh --skip-apple --no-serve:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./api/.env)",
+      "Read(~/.todoist_token)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git stash)",
+      "Bash(git stash pop:*)",
+      "Bash(git clean:*)",
+      "Bash(rm api/tasks.db:*)",
+      "Bash(rm -f api/tasks.db:*)"
+    ]
+  }
+}
