@@ -49,7 +49,12 @@ export function ContextMenu({
   const [previous] = useState(
     () => document.activeElement as HTMLElement | null,
   );
+  // The caller passes a new close function on every render. Reading it through a ref keeps a redraw
+  // under the open menu, such as a live update, from rerunning the effects below.
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
+    const close = () => closeRef.current();
     const outside = (e: Event) => {
       if (!inMenu(e.target)) close();
     };
@@ -73,13 +78,17 @@ export function ContextMenu({
       document.removeEventListener("pointerdown", outside, true);
       document.removeEventListener("scroll", scrolled, true);
       window.removeEventListener("resize", close);
-      // Return focus without drawing a keyboard focus ring after a pointer menu.
+    };
+  }, [request]);
+  // Only when the menu closes: return focus without drawing a keyboard focus ring after a pointer menu.
+  useEffect(
+    () => () =>
       previous?.focus?.({
         preventScroll: true,
         focusVisible: false,
-      } as FocusOptions);
-    };
-  }, [request, close, previous]);
+      } as FocusOptions),
+    [previous],
+  );
   if (request.sheet) return <MenuSheet request={request} close={close} />;
   return (
     <MenuPanel

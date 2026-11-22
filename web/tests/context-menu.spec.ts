@@ -113,3 +113,49 @@ test("the menu stays open when the search text overflows its field", async ({
         { headers: { Origin: new URL(page.url()).origin } },
       );
 });
+
+test("an update arriving while a menu is open leaves keyboard focus in the menu", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Open local workspace/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Today", exact: true }),
+  ).toBeVisible();
+  const origin = { Origin: new URL(page.url()).origin };
+  const name = `Focus check ${Date.now()}`;
+  const created = await page.request.post("api/v1/tasks", {
+    headers: origin,
+    data: { title: name },
+  });
+  expect(created.status()).toBe(201);
+  await page.reload();
+  await page.getByLabel("Search tasks").fill(name);
+  const rows = page.locator(".task-row");
+  await expect(rows).toHaveCount(1);
+  await rows.first().click({ button: "right" });
+  const menu = page.getByRole("menu", { name });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("v");
+  const move = page.getByRole("menu", { name: "Move to" });
+  await expect(move).toBeVisible();
+  // Another device adds a task; the live update redraws the list under the open menu.
+  const other = await page.request.post("api/v1/tasks", {
+    headers: origin,
+    data: { title: `${name} from elsewhere` },
+  });
+  expect(other.status()).toBe(201);
+  await expect(rows).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(move).toBeHidden();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  const response = await page.request.get("api/v1/tasks?limit=200");
+  for (const task of await response.json())
+    if (task.title.startsWith(name))
+      await page.request.delete(
+        `api/v1/tasks/${task.id}?version=${task.version}`,
+        { headers: origin },
+      );
+});
